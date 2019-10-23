@@ -1,17 +1,57 @@
 from coffea import hist
 from coffea.analysis_objects import JaggedCandidateArray
 from coffea.analysis_objects import JaggedTLorentzVectorArray
-from coffea.util import awkward
-from coffea.util import numpy
+from coffea.util import awkward, numpy
 from coffea.util import numpy as np
+from awkward import JaggedArray
 import coffea.processor as processor
+import uproot
 import matplotlib
 import matplotlib.pyplot as plt
-from AdUtils import concatenate, LVwhere
+from AdUtils import concatenate, LVwhere, Pairswhere
 from uproot_methods.classes.TLorentzVector import PtEtaPhiMassLorentzVector as LV
 from KinRecoSonnenschein import KinReco
 
 matplotlib.interactive(True)
+
+def nestedcross(self, other):
+        outs = super(JaggedCandidateMethods, self).cross(other, nested)
+        # currently JaggedArray.cross() has some funny behavior when it encounters the
+        # p4 column and makes some wierd new column... for now I just delete it and reorder
+        # everything looks ok after that
+        keys = outs.columns
+        reorder = False
+        for key in keys:
+            if not isinstance(outs[key].content, awkward.Table):
+                del outs[key]
+                reorder = True
+        if reorder:
+            keys = outs.columns
+            realkey = {}
+            for i in range(len(keys)):
+                realkey[keys[i]] = str(i)
+            for key in keys:
+                if realkey[key] != key:
+                    outs[realkey[key]] = outs[key]
+                    del outs[key]
+        keys = outs.columns
+        outs['p4'] = outs.i0['p4'] + outs.i1['p4']
+        '''for key in keys:
+            print(key)
+            if 'p4' not in outs.columns:
+                outs['p4'] = outs[key]['p4']
+                print("blargh", outs[key]['p4'])
+            else:
+                outs['p4'] = outs['p4'] + outs[key]['p4']
+                print(outs['p4'])'''
+        thep4 = outs['p4']
+        outs['__fast_pt'] = awkward.JaggedArray.fromoffsets(outs.offsets, _fast_pt(thep4.content))
+        outs['__fast_eta'] = awkward.JaggedArray.fromoffsets(outs.offsets, _fast_eta(thep4.content))
+        outs['__fast_phi'] = awkward.JaggedArray.fromoffsets(outs.offsets, _fast_phi(thep4.content))
+        outs['__fast_mass'] = awkward.JaggedArray.fromoffsets(outs.offsets, _fast_mass(thep4.content))
+        return self.fromjagged(outs)
+
+setattr(JaggedCandidateArray, 'nestedcross', nestedcross)
 
 class ttbarProcessor(processor.ProcessorABC):
   def __init__(self):
@@ -169,7 +209,7 @@ class ttbarProcessor(processor.ProcessorABC):
     
     #Require at least 1 b tag
     btags=jets[jets.btag>0.4184]#Deep CSV medium working point
-    jetsnob=jets[jets.btag<0.4184]
+    jetsnob=jets[jets.btag<=0.4184]
     Btagcut=btags.counts>0
     output['cutflow']['At least 1 btag']+=Btagcut.sum()
     leadlep=leadlep[Btagcut]
@@ -189,24 +229,36 @@ class ttbarProcessor(processor.ProcessorABC):
     btags=btags[METnotalignedwithjets]
     
     bjet1=btags[:,0]
-    twobtags=btags[btags.counts>1]
-    jetsnob=jetsnob[btags.counts<2]
-    bjet2=LVwhere(btags.counts>1, twobtags[:,1]['p4'], jetsnob[:,0]['p4'])
     
-    neutrino, antineutrino=KinReco(leadlep['p4'], leadantilep['p4'], bjet1['p4'], bjet2['p4'], MET)
+    b0, b1=Pairswhere(btags.counts>1, btags.distincts(), btags.cross(jetsnob))
+    
+    bs=concatenate([b0, b1])
+    bbars=concatenate([b1, b0])
+    
+    GenHistFile=uproot.open("GenHists.root")
+    HistMlb=GenHistFile["Mlbbar"]
+    alb=bs.cross(leadantilep)
+    lbbar=bbars.cross(leadantilep)
+    PMalb=JaggedArray.fromcounts(bs.counts, HistMlb.allvalues[np.searchsorted(HistMlb.alledges, alb.mass.content)-1])
+    PMlbbar=JaggedArray.fromcounts(bs.counts, HistMlb.allvalues[np.searchsorted(HistMlb.alledges, lbbar.mass.content)-1])
+    best=(PMalb*PMlbbar).argmax()
+    b=bs[best]
+    bbar=bbars[best]
+    
+    
+    neutrino, antineutrino=KinReco(leadlep['p4'], leadantilep['p4'], b['p4'], bbar['p4'], MET)
     Reco=neutrino.counts>1
     output['cutflow']['Reconstruction']+=Reco.sum()
     neutrino=neutrino[Reco]
     antineutrino=antineutrino[Reco]
     leadlep=leadlep[Reco]
     leadantilep=leadantilep[Reco]
-    bjet1=bjet1[Reco]
-    bjet2=bjet2[Reco]
+    b=b[Reco]
+    bbar=bbar[Reco]
     Wminus=antineutrino.cross(leadlep)
     Wplus=neutrino.cross(leadantilep)
-    b=JaggedCandidateArray.candidatesfromcounts(np.ones(len(bjet1)), pt=bjet1['p4'].pt,eta=bjet1['p4'].eta,phi=bjet1['p4'].phi,mass=bjet1['p4'].mass)
     top=Wplus.cross(b)
-    antitop=Wminus.cross(bjet2)
+    antitop=Wminus.cross(bbar)
     ttbar=top['p4']+antitop['p4']
     best=ttbar.mass.argmin()
     Mttbar=ttbar[best].mass.content
@@ -217,9 +269,11 @@ class ttbarProcessor(processor.ProcessorABC):
     output['Mt'].fill(dataset="Reco", Mt=Mtop)
     output['MWplus'].fill(dataset="Reco", MW=MWplus)
     
-    genlep=genpart[((genpart.pdgId==11)|(genpart.pdgId==13))&(genpart[genpart.motherIdx].pdgId==-24)&(genpart[genpart[genpart.motherIdx].motherIdx].pdgId==-6)&(genpart.statusFlags>>12&1==1)]
-    genantilep=genpart[((genpart.pdgId==-11)|(genpart.pdgId==-13))&(genpart[genpart.motherIdx].pdgId==24)&(genpart[genpart[genpart.motherIdx].motherIdx].pdgId==6)&(genpart.statusFlags>>12&1==1)]
+    genlep=genpart[((genpart.pdgId==11)|(genpart.pdgId==13))&(genpart[genpart.motherIdx].pdgId==-24)&(genpart[genpart[genpart.motherIdx].motherIdx].pdgId==-6)]#&(genpart.statusFlags>>12&1==1)]
+    genantilep=genpart[((genpart.pdgId==-11)|(genpart.pdgId==-13))&(genpart[genpart.motherIdx].pdgId==24)&(genpart[genpart[genpart.motherIdx].motherIdx].pdgId==6)]#&(genpart.statusFlags>>12&1==1)]
+    print("no. gen leptons:", genlep.counts.sum())
     genb=genpart[(genpart.pdgId==5)&(genpart[genpart.motherIdx].pdgId==6)&(genpart.statusFlags>>12&1==1)]
+    print("no. gen bs:", genb.counts.sum())
     genantib=genpart[(genpart.pdgId==-5)&(genpart[genpart.motherIdx].pdgId==-6)&(genpart.statusFlags>>12&1==1)&(genpart.statusFlags>>7&1==1)]
     twogenleps=(genlep.counts>0)&(genantilep.counts>0)
     genlep=genlep[twogenleps]
@@ -243,7 +297,6 @@ class ttbarProcessor(processor.ProcessorABC):
     Mtop=top[best].mass.content
     reconu=reconu[best]
     hassoln=(ttbar.counts>0)
-    gennuforsols=gennu[hassoln, 0]
     
     output['Mttbar'].fill(dataset="Gen Reco", Mttbar=Mttbar)
     output['Mt'].fill(dataset="Gen Reco", Mt=Mtop)
@@ -294,7 +347,7 @@ ax.set_ylabel('Efficiency')
 
 plt.show(block=True)
 
-plot=hist.plot1d(output['Mttbar'], overlay='dataset', density=1)
+plot=hist.plot1d(output['Mttbar'], overlay='dataset', density=1)#, error_opts={xerr:None, yerr:None})
 
 plt.show(block=True)
 

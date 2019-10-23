@@ -12,3 +12,5 @@ File Structure:
 -KinRecoSonnenschein.py: Sonnenschein's kinematic reconstruction algoritm: https://arxiv.org/pdf/hep-ph/0603011v3.pdf
 
 -betchartkinreco.py: Betchart's kinematic reconstruction algoritm: https://arxiv.org/pdf/1305.1878.pdf Not yet fully implemented
+
+-GenHists.py Produces hists of Gen Level information (currently just the Mlb distribution) to be used for selecting the correct jets, etc.

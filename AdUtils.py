@@ -87,3 +87,48 @@ def LVwhere(condition, x, y):
   mass[~condition]=y.mass
   out=JaggedCandidateArray.candidatesfromcounts(np.ones_like(condition), pt=pt,eta=eta,phi=phi,mass=mass)
   return out
+
+def Pairswhere(condition, x, y):
+  counts=np.where(condition, x.counts, y.counts)
+  pt0=np.empty(counts.sum(), dtype=float)
+  eta0=np.empty(counts.sum(), dtype=float)
+  phi0=np.empty(counts.sum(), dtype=float)
+  mass0=np.empty(counts.sum(), dtype=float)
+  
+  pt1=np.empty(counts.sum(), dtype=float)
+  eta1=np.empty(counts.sum(), dtype=float)
+  phi1=np.empty(counts.sum(), dtype=float)
+  mass1=np.empty(counts.sum(), dtype=float)
+  
+  offsets = awkward.JaggedArray.counts2offsets(counts)
+  starts, stops = offsets[:-1], offsets[1:]
+  
+  working_array = np.zeros(counts.sum()+1, dtype=awkward.JaggedArray.INDEXTYPE)
+  xstarts=starts[condition]
+  xstops=stops[condition]
+  not_empty = xstarts != xstops
+  working_array[xstarts[not_empty]] += 1
+  working_array[xstops[not_empty]] -= 1
+  mask = np.array(np.cumsum(working_array)[:-1], dtype=awkward.JaggedArray.MASKTYPE)
+  
+  pt0[mask]=x[condition].i0.pt.flatten()
+  pt0[~mask]=y[~condition].i0.pt.flatten()
+  eta0[mask]=x[condition].i0.eta.flatten()
+  eta0[~mask]=y[~condition].i0.eta.flatten()
+  phi0[mask]=x[condition].i0.phi.flatten()
+  phi0[~mask]=y[~condition].i0.phi.flatten()
+  mass0[mask]=x[condition].i0.mass.flatten()
+  mass0[~mask]=y[~condition].i0.mass.flatten()
+  out0=JaggedCandidateArray.candidatesfromcounts(counts, pt=pt0,eta=eta0,phi=phi0,mass=mass0)
+  
+  pt1[mask]=x[condition].i1.pt.flatten()
+  pt1[~mask]=y[~condition].i1.pt.flatten()
+  eta1[mask]=x[condition].i1.eta.flatten()
+  eta1[~mask]=y[~condition].i1.eta.flatten()
+  phi1[mask]=x[condition].i1.phi.flatten()
+  phi1[~mask]=y[~condition].i1.phi.flatten()
+  mass1[mask]=x[condition].i1.mass.flatten()
+  mass1[~mask]=y[~condition].i1.mass.flatten()
+  out1=JaggedCandidateArray.candidatesfromcounts(counts, pt=pt1,eta=eta1,phi=phi1,mass=mass1)
+  return out0, out1
+  
