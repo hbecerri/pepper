@@ -11,47 +11,9 @@ import matplotlib.pyplot as plt
 from AdUtils import concatenate, LVwhere, Pairswhere
 from uproot_methods.classes.TLorentzVector import PtEtaPhiMassLorentzVector as LV
 from KinRecoSonnenschein import KinReco
+from betchartkinreco import BetchartKinReco, BetchartAllBcandidates
 
 matplotlib.interactive(True)
-
-def nestedcross(self, other):
-        outs = super(JaggedCandidateMethods, self).cross(other, nested)
-        # currently JaggedArray.cross() has some funny behavior when it encounters the
-        # p4 column and makes some wierd new column... for now I just delete it and reorder
-        # everything looks ok after that
-        keys = outs.columns
-        reorder = False
-        for key in keys:
-            if not isinstance(outs[key].content, awkward.Table):
-                del outs[key]
-                reorder = True
-        if reorder:
-            keys = outs.columns
-            realkey = {}
-            for i in range(len(keys)):
-                realkey[keys[i]] = str(i)
-            for key in keys:
-                if realkey[key] != key:
-                    outs[realkey[key]] = outs[key]
-                    del outs[key]
-        keys = outs.columns
-        outs['p4'] = outs.i0['p4'] + outs.i1['p4']
-        '''for key in keys:
-            print(key)
-            if 'p4' not in outs.columns:
-                outs['p4'] = outs[key]['p4']
-                print("blargh", outs[key]['p4'])
-            else:
-                outs['p4'] = outs['p4'] + outs[key]['p4']
-                print(outs['p4'])'''
-        thep4 = outs['p4']
-        outs['__fast_pt'] = awkward.JaggedArray.fromoffsets(outs.offsets, _fast_pt(thep4.content))
-        outs['__fast_eta'] = awkward.JaggedArray.fromoffsets(outs.offsets, _fast_eta(thep4.content))
-        outs['__fast_phi'] = awkward.JaggedArray.fromoffsets(outs.offsets, _fast_phi(thep4.content))
-        outs['__fast_mass'] = awkward.JaggedArray.fromoffsets(outs.offsets, _fast_mass(thep4.content))
-        return self.fromjagged(outs)
-
-setattr(JaggedCandidateArray, 'nestedcross', nestedcross)
 
 class ttbarProcessor(processor.ProcessorABC):
   def __init__(self):
@@ -241,24 +203,25 @@ class ttbarProcessor(processor.ProcessorABC):
     lbbar=bbars.cross(leadantilep)
     PMalb=JaggedArray.fromcounts(bs.counts, HistMlb.allvalues[np.searchsorted(HistMlb.alledges, alb.mass.content)-1])
     PMlbbar=JaggedArray.fromcounts(bs.counts, HistMlb.allvalues[np.searchsorted(HistMlb.alledges, lbbar.mass.content)-1])
-    best=(PMalb*PMlbbar).argmax()
-    b=bs[best]
-    bbar=bbars[best]
+    bestbpairMlb=(PMalb*PMlbbar).argmax()
+    b=bs[bestbpairMlb]
+    bbar=bbars[bestbpairMlb]
     
-    
-    neutrino, antineutrino=KinReco(leadlep['p4'], leadantilep['p4'], b['p4'], bbar['p4'], MET)
-    Reco=neutrino.counts>1
+    #print("Events pre reco:", len(leadlep))
+    neutrino, antineutrino=BetchartKinReco(leadlep['p4'], leadantilep['p4'], b['p4'], bbar['p4'], MET)
+    Reco=neutrino.counts>0
     output['cutflow']['Reconstruction']+=Reco.sum()
-    neutrino=neutrino[Reco]
-    antineutrino=antineutrino[Reco]
-    leadlep=leadlep[Reco]
-    leadantilep=leadantilep[Reco]
-    b=b[Reco]
-    bbar=bbar[Reco]
-    Wminus=antineutrino.cross(leadlep)
-    Wplus=neutrino.cross(leadantilep)
-    top=Wplus.cross(b)
-    antitop=Wminus.cross(bbar)
+    #print("Reco events", Reco.sum())
+    rneutrino=neutrino[Reco]
+    rantineutrino=antineutrino[Reco]
+    rleadlep=leadlep[Reco]
+    rleadantilep=leadantilep[Reco]
+    rb=b[Reco]
+    rbbar=bbar[Reco]
+    Wminus=rantineutrino.cross(rleadlep)
+    Wplus=rneutrino.cross(rleadantilep)
+    top=Wplus.cross(rb)
+    antitop=Wminus.cross(rbbar)
     ttbar=top['p4']+antitop['p4']
     best=ttbar.mass.argmin()
     Mttbar=ttbar[best].mass.content
@@ -269,22 +232,24 @@ class ttbarProcessor(processor.ProcessorABC):
     output['Mt'].fill(dataset="Reco", Mt=Mtop)
     output['MWplus'].fill(dataset="Reco", MW=MWplus)
     
-    genlep=genpart[((genpart.pdgId==11)|(genpart.pdgId==13))&(genpart[genpart.motherIdx].pdgId==-24)&(genpart[genpart[genpart.motherIdx].motherIdx].pdgId==-6)]#&(genpart.statusFlags>>12&1==1)]
-    genantilep=genpart[((genpart.pdgId==-11)|(genpart.pdgId==-13))&(genpart[genpart.motherIdx].pdgId==24)&(genpart[genpart[genpart.motherIdx].motherIdx].pdgId==6)]#&(genpart.statusFlags>>12&1==1)]
-    print("no. gen leptons:", genlep.counts.sum())
+    genlep=genpart[((genpart.pdgId==11)|(genpart.pdgId==13))&(genpart[genpart.motherIdx].pdgId==-24)]#&(genpart[genpart[genpart.motherIdx].motherIdx].pdgId==-6)]&(genpart.statusFlags>>12&1==1)]
+    genantilep=genpart[((genpart.pdgId==-11)|(genpart.pdgId==-13))&(genpart[genpart.motherIdx].pdgId==24)]#&(genpart[genpart[genpart.motherIdx].motherIdx].pdgId==6)]#&(genpart.statusFlags>>12&1==1)]
+    toomanyleps=genlep[genlep.counts>1]
+    print(toomanyleps.motherIdx)
+    print("no. gen leptons:", (genlep.counts>1).sum())
     genb=genpart[(genpart.pdgId==5)&(genpart[genpart.motherIdx].pdgId==6)&(genpart.statusFlags>>12&1==1)]
     print("no. gen bs:", genb.counts.sum())
     genantib=genpart[(genpart.pdgId==-5)&(genpart[genpart.motherIdx].pdgId==-6)&(genpart.statusFlags>>12&1==1)&(genpart.statusFlags>>7&1==1)]
-    twogenleps=(genlep.counts>0)&(genantilep.counts>0)
+    twogenleps=(genlep.counts==1)&(genantilep.counts==1)
     genlep=genlep[twogenleps]
     genantilep=genantilep[twogenleps]
     genb=genb[twogenleps]
     genantib=genantib[twogenleps]
-    gennu=genpart[((genpart.pdgId==12)|(genpart.pdgId==14))&(genpart[genpart.motherIdx].pdgId==24)&(genpart[genpart[genpart.motherIdx].motherIdx].pdgId==6)]
-    genantinu=genpart[((genpart.pdgId==-12)|(genpart.pdgId==-14))&(genpart[genpart.motherIdx].pdgId==-24)&(genpart[genpart[genpart.motherIdx].motherIdx].pdgId==-6)]
+    gennu=genpart[((genpart.pdgId==12)|(genpart.pdgId==14))&(genpart[genpart.motherIdx].pdgId==24)]
+    genantinu=genpart[((genpart.pdgId==-12)|(genpart.pdgId==-14))&(genpart[genpart.motherIdx].pdgId==-24)]
     gennu=gennu[twogenleps]
     genantinu=genantinu[twogenleps]
-    reconu, recoantinu=KinReco(genlep['p4'], genantilep['p4'], genb['p4'], genantib['p4'], genMET[twogenleps])
+    reconu, recoantinu=BetchartKinReco(genlep['p4'], genantilep['p4'], genb['p4'], genantib['p4'], genMET[twogenleps])
     Wplus=reconu.cross(genantilep)
     Wminus=recoantinu.cross(genlep)
     top=Wplus.cross(genb)
@@ -297,6 +262,7 @@ class ttbarProcessor(processor.ProcessorABC):
     Mtop=top[best].mass.content
     reconu=reconu[best]
     hassoln=(ttbar.counts>0)
+    print("genreco eff:", hassoln.sum()/len(genb))
     
     output['Mttbar'].fill(dataset="Gen Reco", Mttbar=Mttbar)
     output['Mt'].fill(dataset="Gen Reco", Mt=Mtop)
@@ -316,10 +282,16 @@ class ttbarProcessor(processor.ProcessorABC):
     output['Mttbar'].fill(dataset="Gen", Mttbar=Mttbar)
     output['Mt'].fill(dataset="Gen", Mt=Mtop)
     output['MWplus'].fill(dataset="Gen", MW=MWplus)
-    '''print(len(gennu.content))
-    print(len(reconu.content))
-    output['neutrinopz'].fill(dataset="gen", neup=(gennu.content)['p4'].x)
-    output['neutrinopz'].fill(dataset="reco", neup=(reconu.content)['p4'].x)'''
+    
+    t=genpart[(genpart.pdgId==6)&(genpart.statusFlags>>12&1==1)]
+    tbar=genpart[(genpart.pdgId==-6)&(genpart.statusFlags>>12&1==1)]
+    print("nt", (t.counts).sum(), (tbar.counts).sum())
+    ttbar=t['p4']+tbar['p4']
+    output['Mttbar'].fill(dataset="Top", Mttbar=ttbar.mass.content)
+    output['Mt'].fill(dataset="Top", Mt=t.mass.content)
+    
+    #genl=genpart[((genpart.pdgId==11)|(genpart.pdgId==13))]
+    #output['lep_parents']=
     
     return output
 
@@ -347,7 +319,7 @@ ax.set_ylabel('Efficiency')
 
 plt.show(block=True)
 
-plot=hist.plot1d(output['Mttbar'], overlay='dataset', density=1)#, error_opts={xerr:None, yerr:None})
+plot=hist.plot1d(output['Mttbar'], overlay='dataset', density=1)#, error_opts={"yerr":None})
 
 plt.show(block=True)
 
@@ -357,4 +329,3 @@ plt.show(block=True)
 
 plot=hist.plot1d(output['Mt'], overlay='dataset', density=1)
 plt.show(block=True)
-

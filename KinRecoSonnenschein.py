@@ -127,4 +127,4 @@ if __name__ == '__main__':
   antinu=JaggedCandidateArray.candidatesfromcounts([1], energy=np.array([13.760989]), px=np.array([11.179965]), py=np.array([-3.844941]), pz=np.array([7.0419898]))
   MET= awkward.Table(pt=(nu['p4']+antinu['p4']).pt[0], phi=(nu['p4']+antinu['p4']).phi[0])
   neutrino, antineutrino=KinReco(lep['p4'], antilep['p4'], b['p4'], antib['p4'], MET)
-  print(neutrino['p4'].x)
+  print(neutrino['p4'])
