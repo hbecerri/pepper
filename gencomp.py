@@ -96,7 +96,6 @@ class ttbarProcessor(processor.ProcessorABC):
       pfIsoId=df['Muon_pfIsoId'],
       highPtId=df['Muon_highPtId'],
       )
-    if df['nJet'].sum()==0:  return output #Occasionally parsl can create empty chunks, which cause problems: skip these
     jets = JaggedCandidateArray.candidatesfromcounts(
       df['nJet'],
       pt=df['Jet_pt'],
@@ -120,6 +119,7 @@ class ttbarProcessor(processor.ProcessorABC):
     genMET= awkward.Table(pt=df['GenMET_pt'], phi=df['GenMET_phi'])
     
     leptons = concatenate([electrons, muons]) #(Could instead use unionarray, but this causes problems with e.g. acessing the lorentz vectors-see https://github.com/scikit-hep/awkward-array/issues/149)
+    if len(leptons)==0: return output #Occasionally parsl can create empty chunks, which cause problems: skip these
     leps=leptons[leptons.pdgId>0]
     antileps=leptons[leptons.pdgId<0]
     
@@ -207,7 +207,7 @@ class ttbarProcessor(processor.ProcessorABC):
     bbars=concatenate([b1, b0])
     
     GenHistFile=uproot.open("/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/GenHists.root")
-    HistMlb=GenHistFile["Mlb"]
+    HistMlb=GenHistFile["Mlbbar"]
     alb=bs.cross(leadantilep)
     lbbar=bbars.cross(leadantilep)
     PMalb=JaggedArray.fromcounts(bs.counts, HistMlb.allvalues[np.searchsorted(HistMlb.alledges, alb.mass.content)-1])
@@ -221,25 +221,84 @@ class ttbarProcessor(processor.ProcessorABC):
     Reco=neutrino.counts>0
     output['cutflow']['Reconstruction']+=Reco.sum()
     #print("Reco events", Reco.sum())
-    neutrino=neutrino[Reco]
-    antineutrino=antineutrino[Reco]
-    leadlep=leadlep[Reco]
-    leadantilep=leadantilep[Reco]
-    b=b[Reco]
-    bbar=bbar[Reco]
-    Wminus=antineutrino.cross(leadlep)
-    Wplus=neutrino.cross(leadantilep)
-    top=Wplus.cross(b)
-    antitop=Wminus.cross(bbar)
+    rneutrino=neutrino[Reco]
+    rantineutrino=antineutrino[Reco]
+    rleadlep=leadlep[Reco]
+    rleadantilep=leadantilep[Reco]
+    rb=b[Reco]
+    rbbar=bbar[Reco]
+    Wminus=rantineutrino.cross(rleadlep)
+    Wplus=rneutrino.cross(rleadantilep)
+    top=Wplus.cross(rb)
+    antitop=Wminus.cross(rbbar)
     ttbar=top['p4']+antitop['p4']
     best=ttbar.mass.argmin()
     Mttbar=ttbar[best].mass.content
     MWplus=Wplus[best].mass.content
     Mtop=top[best].mass.content
     
-    output['Mttbar'].fill(dataset=, Mttbar=Mttbar)
+    output['Mttbar'].fill(dataset="Reco", Mttbar=Mttbar)
     output['Mt'].fill(dataset="Reco", Mt=Mtop)
     output['MWplus'].fill(dataset="Reco", MW=MWplus)
+    
+    genlep=genpart[((genpart.pdgId==11)|(genpart.pdgId==13))&(genpart[genpart.motherIdx].pdgId==-24)]#&(genpart[genpart[genpart.motherIdx].motherIdx].pdgId==-6)]&(genpart.statusFlags>>12&1==1)]
+    genantilep=genpart[((genpart.pdgId==-11)|(genpart.pdgId==-13))&(genpart[genpart.motherIdx].pdgId==24)]#&(genpart[genpart[genpart.motherIdx].motherIdx].pdgId==6)]#&(genpart.statusFlags>>12&1==1)]
+    toomanyleps=genlep[genlep.counts>1]
+    genb=genpart[(genpart.pdgId==5)&(genpart[genpart.motherIdx].pdgId==6)&(genpart.statusFlags>>12&1==1)&(genpart.statusFlags>>7&1==1)]
+    print("no. gen bs:", genb.counts.sum())
+    genantib=genpart[(genpart.pdgId==-5)&(genpart[genpart.motherIdx].pdgId==-6)&(genpart.statusFlags>>12&1==1)&(genpart.statusFlags>>7&1==1)]
+    twogenleps=(genlep.counts==1)&(genantilep.counts==1)&(genb.counts==1)&(genantib.counts==1)
+    genlep=genlep[twogenleps]
+    genantilep=genantilep[twogenleps]
+    genb=genb[twogenleps]
+    genantib=genantib[twogenleps]
+    gennu=genpart[((genpart.pdgId==12)|(genpart.pdgId==14))&(genpart[genpart.motherIdx].pdgId==24)]
+    genantinu=genpart[((genpart.pdgId==-12)|(genpart.pdgId==-14))&(genpart[genpart.motherIdx].pdgId==-24)]
+    gennu=gennu[twogenleps]
+    genantinu=genantinu[twogenleps]
+    reconu, recoantinu=BetchartKinReco(genlep['p4'], genantilep['p4'], genb['p4'], genantib['p4'], genMET[twogenleps])
+    Wplus=reconu.cross(genantilep)
+    Wminus=recoantinu.cross(genlep)
+    top=Wplus.cross(genb)
+    antitop=Wminus.cross(genantib)
+    ttbar=top['p4']+antitop['p4']
+    print((ttbar.counts>0).sum())
+    best=ttbar.mass.argmin()
+    Mttbar=ttbar[best].mass.content
+    MWplus=Wplus[best].mass.content
+    Mtop=top[best].mass.content
+    reconu=reconu[best]
+    hassoln=(ttbar.counts>0)
+    print("genreco eff:", hassoln.sum()/len(genb))
+    
+    output['Mttbar'].fill(dataset="Gen Reco", Mttbar=Mttbar)
+    output['Mt'].fill(dataset="Gen Reco", Mt=Mtop)
+    output['MWplus'].fill(dataset="Gen Reco", MW=MWplus)
+    Wplus=gennu.cross(genantilep)
+    Wminus=genantinu.cross(genlep)
+    top=Wplus.cross(genb)
+    antitop=Wminus.cross(genantib)
+    ttbar=top.cross(antitop)
+    print((ttbar.counts>0).sum())
+    best=ttbar.mass.argmin()
+    Mttbar=ttbar[best].mass.content
+    MWplus=Wplus[best].mass.content
+    Mtop=top[best].mass.content
+    gennu=gennu[best]
+    
+    output['Mttbar'].fill(dataset="Gen", Mttbar=Mttbar)
+    output['Mt'].fill(dataset="Gen", Mt=Mtop)
+    output['MWplus'].fill(dataset="Gen", MW=MWplus)
+    
+    t=genpart[(genpart.pdgId==6)&(genpart.statusFlags>>12&1==1)]
+    tbar=genpart[(genpart.pdgId==-6)&(genpart.statusFlags>>12&1==1)]
+    print("nt", (t.counts).sum(), (tbar.counts).sum())
+    ttbar=t['p4']+tbar['p4']
+    output['Mttbar'].fill(dataset="Top", Mttbar=ttbar.mass.content)
+    output['Mt'].fill(dataset="Top", Mt=t.mass.content)
+    
+    #genl=genpart[((genpart.pdgId==11)|(genpart.pdgId==13))]
+    #output['lep_parents']=
     
     return output
 
@@ -272,9 +331,8 @@ config = Config(
 )
 dfk=load(config)
 
-ttbar=glob.glob("/pnfs/desy.de/cms/tier2/store/mc/RunIIAutumn18NanoAODv5/TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/Nano1June2019_102X_upgrade2018_realistic_v19-v1/250000/*.root")+glob.glob("/pnfs/desy.de/cms/tier2/store/mc/RunIIAutumn18NanoAODv5/TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/Nano1June2019_102X_upgrade2018_realistic_v19-v1/60000/*.root")
-
-
+ttbar=glob.glob("/pnfs/desy.de/cms/tier2/store/mc/RunIIAutumn18NanoAODv5/TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/Nano1June2019_102X_upgrade2018_realistic_v19-v1/250000/*.root")
+ttbar.append(glob.glob("/pnfs/desy.de/cms/tier2/store/mc/RunIIAutumn18NanoAODv5/TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/Nano1June2019_102X_upgrade2018_realistic_v19-v1/60000/*.root"))
 fileset = {'TTbar': ttbar}
 
 '''output = processor.run_uproot_job(fileset,

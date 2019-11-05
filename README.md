@@ -13,4 +13,6 @@ File Structure:
 
 -betchartkinreco.py: Betchart's kinematic reconstruction algoritm: https://arxiv.org/pdf/1305.1878.pdf Not yet fully implemented
 
--GenHists.py Produces hists of Gen Level information (currently just the Mlb distribution) to be used for selecting the correct jets, etc.
+-genHists.py Produces hists of Gen Level information (currently just the Mlb distribution) to be used for selecting the correct jets, etc.
+
+-gencomp.py: Old version of main.py, designed to run on ttbar samples and compare Mttbar for Gen and Reco
