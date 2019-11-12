@@ -8,8 +8,8 @@ import awkward
 
 try: from scipy.optimize import leastsq
 except: 
-      leastsq=None
-      print("NO least squares")
+    leastsq=None
+    print("NO least squares")
 
 def UnitCircle():
     '''Unit circle in extended representation.'''
@@ -93,8 +93,8 @@ class nuSolutionSet(object):
         self.pmu=pmu
         self.c = (b.x*mu.x+b.y*mu.y+b.z*mu.z)/(pb*pmu)
         if self.c>1:
-          print("cos exceeds allowed values, set to 1-calculated val:",self.c)
-          self.c=1
+            print("cos exceeds allowed values, set to 1-calculated val:",self.c)
+            self.c=1
         self.s = math.sqrt(1-self.c**2)
         self.x0 = -0.5 * Wm2 / pmu
         self.y0 = - ( self.x0*self.c + self.D2 / pb ) / self.s
@@ -244,96 +244,96 @@ class doubleNeutrinoSolutions(object):
     #return [(K.dot(s), K_.dot(s_)) for s,s_ in zip(self.perp,self.perp_)]
 
 def BetchartKinReco(lep, antilep, b, antib, MET, verbosity=0):
-  METx=MET.pt*np.cos(MET.phi)
-  METy=MET.pt*np.sin(MET.phi)
-  vpx=[]
-  vpy=[]
-  vpz=[]
-  vbpx=[]
-  vbpy=[]
-  vbpz=[]
-  fails=0
-  nsols=np.zeros(len(b), dtype=int)
-  for eventi in range(len(lep)):
-    dns = doubleNeutrinoSolutions((b[eventi][0], antib[eventi][0]), (antilep[eventi][0], lep[eventi][0]), (METx[eventi], METy[eventi]))
-    if dns.failed==0:
-      solutions = awkward.fromiter(dns.nunu_s)
-      vpx.append(solutions[0,:,0])
-      vpy.append(solutions[0,:,1])
-      vpz.append(solutions[0,:,2])
-      vbpx.append(solutions[1,:,0])
-      vbpy.append(solutions[1,:,1])
-      vbpz.append(solutions[1,:,2])
-      nsols[eventi]=len(solutions[0])
-    else: fails+=1
-  vpx=awkward.fromiter(vpx)
-  vpy=awkward.fromiter(vpy)
-  vpz=awkward.fromiter(vpz)
-  vbpx=awkward.fromiter(vbpx)
-  vbpy=awkward.fromiter(vbpy)
-  vbpz=awkward.fromiter(vbpz)
-  neutrino=JaggedCandidateArray.candidatesfromcounts(nsols, px=vpx.content, py=vpy.content, pz=vpz.content, mass=0)
-  antineutrino=JaggedCandidateArray.candidatesfromcounts(nsols, px=vbpx.content, py=vbpy.content, pz=vbpz.content, mass=0)
-  print("fails:", fails)
-  return neutrino, antineutrino
+    METx=MET.pt*np.cos(MET.phi)
+    METy=MET.pt*np.sin(MET.phi)
+    vpx=[]
+    vpy=[]
+    vpz=[]
+    vbpx=[]
+    vbpy=[]
+    vbpz=[]
+    fails=0
+    nsols=np.zeros(len(b), dtype=int)
+    for eventi in range(len(lep)):
+        dns = doubleNeutrinoSolutions((b[eventi][0], antib[eventi][0]), (antilep[eventi][0], lep[eventi][0]), (METx[eventi], METy[eventi]))
+        if dns.failed==0:
+            solutions = awkward.fromiter(dns.nunu_s)
+            vpx.append(solutions[0,:,0])
+            vpy.append(solutions[0,:,1])
+            vpz.append(solutions[0,:,2])
+            vbpx.append(solutions[1,:,0])
+            vbpy.append(solutions[1,:,1])
+            vbpz.append(solutions[1,:,2])
+            nsols[eventi]=len(solutions[0])
+        else: fails+=1
+    vpx=awkward.fromiter(vpx)
+    vpy=awkward.fromiter(vpy)
+    vpz=awkward.fromiter(vpz)
+    vbpx=awkward.fromiter(vbpx)
+    vbpy=awkward.fromiter(vbpy)
+    vbpz=awkward.fromiter(vbpz)
+    neutrino=JaggedCandidateArray.candidatesfromcounts(nsols, px=vpx.content, py=vpy.content, pz=vpz.content, mass=0)
+    antineutrino=JaggedCandidateArray.candidatesfromcounts(nsols, px=vbpx.content, py=vbpy.content, pz=vbpz.content, mass=0)
+    print("fails:", fails)
+    return neutrino, antineutrino
 
 def BetchartAllBcandidates(lep, antilep, b, antib, MET, verbosity=0):
-  METx=MET.pt*np.cos(MET.phi)
-  METy=MET.pt*np.sin(MET.phi)
-  vpx=[]
-  vpy=[]
-  vpz=[]
-  vbpx=[]
-  vbpy=[]
-  vbpz=[]
-  fails=0
-  nsols=JaggedArray.fromcounts(b.counts, np.zeros(len(b.content), dtype=int))
-  for eventi in range(len(b)):
-    eventvpx=[]
-    eventvpy=[]
-    eventvpz=[]
-    eventvbpx=[]
-    eventvbpy=[]
-    eventvbpz=[]
-    for bi in range(len(b[eventi])):
-      dns = doubleNeutrinoSolutions((b[eventi][bi], antib[eventi][bi]), (antilep[eventi][0], lep[eventi][0]), (METx[eventi], METy[eventi]))
-      if dns.failed==0:
-        solutions = awkward.fromiter(dns.nunu_s)
-        eventvpx.append(solutions[0,:,0])
-        eventvpy.append(solutions[0,:,1])
-        eventvpz.append(solutions[0,:,2])
-        eventvbpx.append(solutions[1,:,0])
-        eventvbpy.append(solutions[1,:,1])
-        eventvbpz.append(solutions[1,:,2])
-        nsols[eventi][bi]=len(solutions[0])
-      else:
-        fails+=1
-    vpx.append(eventvpx)
-    vpy.append(eventvpy)
-    vpz.append(eventvpz)
-    vbpx.append(eventvbpx)
-    vbpy.append(eventvbpy)
-    vbpz.append(eventvbpz)
-  vpx=awkward.fromiter(vpx)
-  vpy=awkward.fromiter(vpy)
-  vpz=awkward.fromiter(vpz)
-  vbpx=awkward.fromiter(vbpx)
-  vbpy=awkward.fromiter(vbpy)
-  vbpz=awkward.fromiter(vbpz)
-  return [vpx, vpy, vpz, vbpx, vbpy, vbpz], nsols
+    METx=MET.pt*np.cos(MET.phi)
+    METy=MET.pt*np.sin(MET.phi)
+    vpx=[]
+    vpy=[]
+    vpz=[]
+    vbpx=[]
+    vbpy=[]
+    vbpz=[]
+    fails=0
+    nsols=JaggedArray.fromcounts(b.counts, np.zeros(len(b.content), dtype=int))
+    for eventi in range(len(b)):
+        eventvpx=[]
+        eventvpy=[]
+        eventvpz=[]
+        eventvbpx=[]
+        eventvbpy=[]
+        eventvbpz=[]
+        for bi in range(len(b[eventi])):
+            dns = doubleNeutrinoSolutions((b[eventi][bi], antib[eventi][bi]), (antilep[eventi][0], lep[eventi][0]), (METx[eventi], METy[eventi]))
+            if dns.failed==0:
+                solutions = awkward.fromiter(dns.nunu_s)
+                eventvpx.append(solutions[0,:,0])
+                eventvpy.append(solutions[0,:,1])
+                eventvpz.append(solutions[0,:,2])
+                eventvbpx.append(solutions[1,:,0])
+                eventvbpy.append(solutions[1,:,1])
+                eventvbpz.append(solutions[1,:,2])
+                nsols[eventi][bi]=len(solutions[0])
+            else:
+                fails+=1
+        vpx.append(eventvpx)
+        vpy.append(eventvpy)
+        vpz.append(eventvpz)
+        vbpx.append(eventvbpx)
+        vbpy.append(eventvbpy)
+        vbpz.append(eventvbpz)
+    vpx=awkward.fromiter(vpx)
+    vpy=awkward.fromiter(vpy)
+    vpz=awkward.fromiter(vpz)
+    vbpx=awkward.fromiter(vbpx)
+    vbpy=awkward.fromiter(vbpy)
+    vbpz=awkward.fromiter(vbpz)
+    return [vpx, vpy, vpz, vbpx, vbpy, vbpz], nsols
 
 if __name__ == '__main__':
-  lep=lv(26.923591, 16.170616, -162.3227, 165.33320)
-  antilep=lv(-34.58441, -13.27824, -32.51431, 49.290821)
-  b=lv(99.415420, -78.89404, -161.6102, 205.54469)
-  antib=lv(-49.87086, 91.930526, -347.3868, 362.82086)
-  nu=lv(34.521587, -51.23474, -6.555319, 70.848953)
-  antinu=lv(11.179965, -3.844941, 7.0419898, 13.760989)
-  metx=nu.x+antinu.x
-  mety=nu.y+antinu.y
-  dns = doubleNeutrinoSolutions((b, antib), (antilep, lep), (metx, mety))
-  solutions = dns.nunu_s
-  nSolB = len(solutions)
-  verbose=1
-  if verbose : print("found %d solutions"%len(solutions))
-  print(solutions[0][0], solutions[0][1], solutions[1][0], solutions[1][1])
+    lep=lv(26.923591, 16.170616, -162.3227, 165.33320)
+    antilep=lv(-34.58441, -13.27824, -32.51431, 49.290821)
+    b=lv(99.415420, -78.89404, -161.6102, 205.54469)
+    antib=lv(-49.87086, 91.930526, -347.3868, 362.82086)
+    nu=lv(34.521587, -51.23474, -6.555319, 70.848953)
+    antinu=lv(11.179965, -3.844941, 7.0419898, 13.760989)
+    metx=nu.x+antinu.x
+    mety=nu.y+antinu.y
+    dns = doubleNeutrinoSolutions((b, antib), (antilep, lep), (metx, mety))
+    solutions = dns.nunu_s
+    nSolB = len(solutions)
+    verbose=1
+    if verbose : print("found %d solutions"%len(solutions))
+    print(solutions[0][0], solutions[0][1], solutions[1][0], solutions[1][1])
