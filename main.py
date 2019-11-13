@@ -23,8 +23,8 @@ from collections import defaultdict
 import logging
 
 from AdUtils import concatenate, LVwhere, Pairswhere
-from betchartkinreco import BetchartKinReco, BetchartAllBcandidates
-from KinRecoSonnenschein import KinReco
+from reconstructionUtils.betchartkinreco import BetchartKinReco, BetchartAllBcandidates
+from reconstructionUtils.KinRecoSonnenschein import KinReco
 from infiles import *
 #from ttbarplushad_in import *
 
@@ -64,7 +64,7 @@ class ttbarProcessor(processor.ProcessorABC):
         electrons = JaggedCandidateArray.candidatesfromcounts(
             df['nElectron'],
             pt=df['Electron_pt'],
-            eta=df['Electron_eta'],
+            eta=df['Electron_eta']+df['Electron_deltaEtaSC'],
             phi=df['Electron_phi'],
             mass=df['Electron_mass'],
             pdgId=df['Electron_pdgId'],
@@ -132,8 +132,24 @@ class ttbarProcessor(processor.ProcessorABC):
         MET= awkward.Table(pt=df['MET_pt'], phi=df['MET_phi'])
         genMET= awkward.Table(pt=df['GenMET_pt'], phi=df['GenMET_phi'])
         weights=df['Generator_weight']  #or genWeight? Not sure what the difference between them is...
+        triggers=awkward.fromiter({trigger:df[trigger] for trigger in HLTriggers})
+        triggered=np.any(np.array([df[trigger] for trigger in HLTriggers]), axis=0)
         
         output['cutflow'][dataset]['Events preselection'] += weights.sum()
+        
+        weights=weights[triggered]
+        output['cutflow'][dataset]['Trigger']+=weights.sum()
+        electrons=electrons[triggered]
+        muons=muons[triggered]
+        jets=jets[triggered]
+        MET=MET[triggered]
+        
+        etacut=(np.abs(electrons.eta)<2.4)&((np.abs(electrons.eta)<1.4442)|(np.abs(electrons.eta)>1.5660))
+        electrons=electrons[etacut]
+        electrons=electrons[electrons.ID_MVA_Iso_90]
+        
+        muons=muons[np.abs(muons.eta)<2.4]
+        muons=muons[(muons.mediumId)&(muons.pfIsoId>1)]
         
         leptons = concatenate([electrons, muons]) #(Could instead use unionarray, but this causes problems with e.g. acessing the lorentz vectors-see https://github.com/scikit-hep/awkward-array/issues/149)
         leps=leptons[leptons.pdgId>0]
@@ -226,7 +242,7 @@ class ttbarProcessor(processor.ProcessorABC):
             bs=concatenate([b0, b1])
             bbars=concatenate([b1, b0])
         
-            GenHistFile=uproot.open("/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/GenHists.root")
+            GenHistFile=uproot.open("/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/reconstructionUtils/GenHists.root")
             HistMlb=GenHistFile["Mlb"]
             alb=bs.cross(leadantilep)
             lbbar=bbars.cross(leadantilep)
@@ -269,7 +285,6 @@ class ttbarProcessor(processor.ProcessorABC):
     def postprocess(self, accumulator):
         return accumulator
 
-
 #source /nfs/dust/cms/user/stafford/coffea/cmssetup.sh
 wrk_init='''
 export PATH=/afs/desy.de/user/s/stafford/.local/bin:$PATH
@@ -277,27 +292,33 @@ export PYTHONPATH=/afs/desy.de/user/s/stafford/.local/lib/python3.6/site-package
 export PYTHONPATH=/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea:$PYTHONPATH
 '''
 
+nproc=1
+condor_cfg='''
+Requirements = OpSysAndVer == "CentOS7"
+RequestMemory=%d
+RequestCores=%d
+'''%(2048*nproc, nproc)
+
 config = Config(
         executors=[HighThroughputExecutor(label="HTCondor",
                     address=address_by_hostname(),
                     prefetch_capacity=0,
                     cores_per_worker=1,
-                    max_workers=10,
+                    max_workers=nproc,
                     provider=CondorProvider(channel=LocalChannel(),
                         init_blocks=800,
                         min_blocks=5,
                         max_blocks=1000,
                         nodes_per_block=1,
                         parallelism=1,
-                        scheduler_options='''Requirements = OpSysAndVer == "CentOS7"''', 
+                        scheduler_options=condor_cfg, 
                         worker_init=wrk_init))],
         lazy_errors=False
 )
 dfk=load(config)
 
 try:
-    '''
-    output = processor.run_uproot_job(smallfileset,
+    '''output = processor.run_uproot_job(smallfileset,
                                       treename='Events',
                                       processor_instance=ttbarProcessor(),
                                       executor=processor.iterative_executor,
@@ -319,10 +340,12 @@ for dataset in fileset.keys():
     
     if len(cutvals)==0:
         eff=0
+        lumifactors[dataset]=0
     else:
         eff =cutvals[-1]/cutvals[0]
+        lumifactors[dataset]=0.05*xsecs[dataset]/cutvals[0]
     print (dataset, "efficiency:", eff*100)
-    lumifactors[dataset]=xsecs[dataset]/cutvals[0]
+    
 
     if len(cutvals>0):
         cutvalues[labels[dataset]]+=cutvals
@@ -346,10 +369,14 @@ for i, h in enumerate(handles):
         leglabs.append(labs[i])
 ax.legend(leghandles, leglabs)
 
+print(output['cutflow'].keys())
 output['Mttbar'].scale(lumifactors, axis='dataset')
 labelmap=defaultdict(list)
 for key, val in labels.items():
-    labelmap[val].append(key)
+    cutvals=np.array(list(output['cutflow'][key].values()))
+    if len(cutvals)>0 and cutvals[-1]>0:
+        labelmap[val].append(key)
+
 
 sortedlabels=sorted(labelsset, key=(lambda x : sum([(output['Mttbar'].integrate('Mttbar')).values()[(y,)] for y in labelmap[x]])))
 for key in sortedlabels:

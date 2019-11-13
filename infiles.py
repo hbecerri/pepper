@@ -76,3 +76,10 @@ xsecs={"DY10to50": 18610000.0,
        "WW": 75800,
        "WZ": 27600,
        "ZZ": 12140}
+
+HLTriggers={"HLT_Mu8_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ",
+            "HLT_Mu12_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ",
+            "HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL",
+            "HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL_DZ",
+            "HLT_Mu27_Ele37_CaloIdL_MW",
+            "HLT_Mu37_Ele27_CaloIdL_MW"}

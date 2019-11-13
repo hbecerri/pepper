@@ -10,7 +10,7 @@ from uproot_methods.classes.TLorentzVector import PtEtaPhiMassLorentzVector as L
 #Additional functions which should probably exist in coffea
 
 def concatenate(arrays):
-    flatarrays = [a._content for a in arrays]
+    flatarrays = [a.flatten() for a in arrays]
     n_arrays = len(arrays)
 
     # the first step is to get the starts and stops for the stacked structure
