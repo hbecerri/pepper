@@ -1,0 +1,125 @@
+{
+    "store": "/pnfs/desy.de/cms/tier2/store",
+    "lumimask": "/afs/cern.ch/cms/CAF/CMSCOMM/COMM_DQM/certification/Collisions18/13TeV/PromptReco/Cert_314472-325175_13TeV_PromptReco_Collisions18_JSON.txt",
+    "electron_sf": [
+        ["/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root", "EGamma_SF2D"],
+        ["/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/2018_ElectronTight.root", "EGamma_SF2D"]
+    ],
+    "muon_sf": [
+        ["/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/Muon2018_RunABCD_SF_ID.root", "NUM_TightID_DEN_TrackerMuons_pt_abseta"],
+        ["/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/Muon2018_RunABCD_SF_ISO.root", "NUM_LooseRelIso_DEN_TightIDandIPCut_pt_abseta"]
+    ],
+    "datasets": {
+        "MuonEG": [
+            "/MuonEG/Run2018A-Nano1June2019-v1/NANOAOD",
+            "/MuonEG/Run2018B-Nano1June2019-v1/NANOAOD",
+            "/MuonEG/Run2018C-Nano1June2019-v1/NANOAOD",
+            "/MuonEG/Run2018D-Nano1June2019_ver2-v1/NANOAOD"
+        ],
+        "SingleMuon": [
+            "/SingleMuon/Run2018A-Nano1June2019-v1/NANOAOD",
+            "/SingleMuon/Run2018C-Nano1June2019-v1/NANOAOD",
+            "/SingleMuon/Run2018B-Nano1June2019-v1/NANOAOD",
+            "/SingleMuon/Run2018D-Nano1June2019-v1/NANOAOD"
+        ],
+        "DoubleMuon": [
+            "/DoubleMuon/Run2018A-Nano1June2019-v1/NANOAOD",
+            "/DoubleMuon/Run2018B-Nano1June2019-v1/NANOAOD",
+            "/DoubleMuon/Run2018C-Nano1June2019-v1/NANOAOD",
+            "/DoubleMuon/Run2018D-Nano1June2019_ver2-v1/NANOAOD"
+        ],
+        "EGamma": [
+            "/EGamma/Run2018A-Nano1June2019-v1/NANOAOD",
+            "/EGamma/Run2018C-Nano1June2019-v1/NANOAOD",
+            "/EGamma/Run2018B-Nano1June2019-v1/NANOAOD",
+            "/EGamma/Run2018D-Nano1June2019-v1/NANOAOD"
+        ],
+        "MC": [
+            "/DYJetsToLL_M-10to50_TuneCP5_13TeV-madgraphMLM-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM",
+            "/DYJetsToLL_M-10to50_TuneCP5_13TeV-madgraphMLM-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19_ext1-v1/NANOAODSIM",
+            "/DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM",
+            "/ST_t-channel_top_4f_InclusiveDecays_TuneCP5_13TeV-powheg-madspin-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM",
+            "/ST_t-channel_antitop_4f_InclusiveDecays_TuneCP5_13TeV-powheg-madspin-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM",
+            "/ST_s-channel_4f_leptonDecays_TuneCP5_13TeV-madgraph-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19_ext1-v1/NANOAODSIM",
+            "/ST_tW_top_5f_inclusiveDecays_TuneCP5_13TeV-powheg-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19_ext1-v1/NANOAODSIM",
+            "/ST_tW_antitop_5f_inclusiveDecays_TuneCP5_13TeV-powheg-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19_ext1-v1/NANOAODSIM",
+            "/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM",
+            "/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19_ext3-v1/NANOAODSIM",
+            "/TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM",
+            "/TTWJetsToQQ_TuneCP5_13TeV-amcatnloFXFX-madspin-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM",
+            "/TTWJetsToLNu_TuneCP5_13TeV-amcatnloFXFX-madspin-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19_ext1-v1/NANOAODSIM",
+            "/TTZToQQ_TuneCP5_13TeV-amcatnlo-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM",
+            "/TTZToQQ_TuneCP5_13TeV-amcatnlo-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19_ext1-v1/NANOAODSIM",
+            "/TTZToLLNuNu_M-10_TuneCP5_13TeV-amcatnlo-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19_ext1-v1/NANOAODSIM",
+            "/WJetsToLNu_TuneCP5_13TeV-madgraphMLM-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM",
+            "/WW_TuneCP5_13TeV-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM",
+            "/WZ_TuneCP5_13TeV-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM",
+            "/ZZ_TuneCP5_13TeV-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM"
+        ]
+    },
+    "triggers": {
+        "MuonEG": [
+            "HLT_Mu8_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ",
+            "HLT_Mu12_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ",
+            "HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL",
+            "HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL_DZ",
+            "HLT_Mu27_Ele37_CaloIdL_MW",
+            "HLT_Mu37_Ele27_CaloIdL_MW"
+        ],
+        "SingleMuon": [
+            "HLT_IsoMu24"
+        ],
+        "DoubleMuon": [
+            "HLT_Mu17_TrkIsoVVL_Mu8_TrkIsoVVL_DZ_Mass3p8"
+        ],
+        "EGamma": [
+            "HLT_Ele32_WPTight_Gsf",
+            "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL",
+            "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL_DZ"
+        ]
+    },
+    "trigger_order": [
+        "MuonEG",
+        "DoubleMuon",
+        "EGamma",
+        "SingleMuon"
+    ],
+    "filter_year": "2018",
+    "mc_lumifactors": "/nfs/dust/cms/user/ruebenaj/analysis/mc_lumifactors.json",
+    
+    "good_ele_cut_hem": true,
+    "good_ele_cut_transreg": true,
+    "good_ele_id": "cut:tight",
+    "good_ele_eta_min": -2.4,
+    "good_ele_eta_max": 2.4,
+    "good_ele_pt_min": 20.0,
+    "good_ele_pt_max": Infinity,
+
+    "good_muon_cut_hem": true,
+    "good_muon_cut_transreg": false,
+    "good_muon_id": "cut:tight",
+    "good_muon_iso": 0.25,
+    "good_muon_eta_min": -2.4,
+    "good_muon_eta_max": 2.4,
+    "good_muon_pt_min": 20.0,
+    "good_muon_pt_max": Infinity,
+
+    "good_jet_id": "cut:tight",
+    "good_jet_lepton_distance": 0.4,
+    "good_jet_eta_min": -Infinity,
+    "good_jet_eta_max": Infinity,
+    "good_jet_pt_min": -Infinity,
+    "good_jet_pt_max": Infinity,
+    
+    "mll_min": 20.0,
+    "lep_pt_min": [25, 20],
+    "lep_pt_num_satisfied": 2,
+    "z_boson_window_start": 76,
+    "z_boson_window_end": 106,
+    "num_jets_atleast": 2,
+    "jet_pt_min": [30, 30, 20],
+    "jet_pt_num_satisfied": 2,
+    "btag": "deepjet:medium",
+    "num_atleast_btagged": 1,
+    "ee/mm_min_met": 40
+}
