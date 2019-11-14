@@ -86,7 +86,7 @@
     ],
     "filter_year": "2018",
     "mc_lumifactors": "/nfs/dust/cms/user/ruebenaj/analysis/mc_lumifactors.json",
-    
+
     "good_ele_cut_hem": true,
     "good_ele_cut_transreg": true,
     "good_ele_id": "cut:tight",
@@ -110,7 +110,11 @@
     "good_jet_eta_max": Infinity,
     "good_jet_pt_min": -Infinity,
     "good_jet_pt_max": Infinity,
-    
+
+    "additional_ele_id": "cut:tight",
+    "additional_muon_id": "cut:tight",
+    "additional_muon_iso": 0.25,
+
     "mll_min": 20.0,
     "lep_pt_min": [25, 20],
     "lep_pt_num_satisfied": 2,

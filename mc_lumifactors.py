@@ -47,7 +47,7 @@ parser = ArgumentParser(description="Compute factors from luminosity and "
                                     "cross sections to scale MC")
 parser.add_argument("lumi", type=float, help="The luminosity in 1/fb")
 parser.add_argument("crosssections", help="Path to the JSON file containing "
-                                           "cross section in fb")
+                                          "cross section in fb")
 parser.add_argument("config", help="Path to the JSON config file containing "
                                    "the MC dataset names")
 parser.add_argument("out", help="Path to the output file")
