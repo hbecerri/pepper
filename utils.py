@@ -12,6 +12,15 @@ import awkward
 
 
 def dataset_to_paths(dataset, store, ext=".root"):
+    """Get the paths of the files belonging to a dataset
+    
+    Parameters:
+    dataset -- name of the dataset
+    store -- Path to the store directory, e.g. /pnfs/desy.de/cms/tier2/store/
+    ext -- File extension the files have
+    
+    Returns a list of paths as strings
+    """
     t, cv, tier = dataset.split("/")[1:]
     campaign, version = cv.split("-", 1)
     isMc = "SIM" in tier
@@ -21,6 +30,17 @@ def dataset_to_paths(dataset, store, ext=".root"):
 
 
 def read_paths(source, store, ext=".root"):
+    """Get all paths to files of a dataset, which can be interpreted from a
+    source
+
+    Parameters:
+    source -- A glob pattern, dataset name or a path to a text file containing
+              any of the afore mentioned (one per line)
+    store -- Path to the store directory, e.g. /pnfs/desy.de/cms/tier2/store/
+    ext -- File extension the files have
+
+    Returns a list of paths as strings
+    """
     paths = []
     if source.endswith(ext):
         paths = glob(source)
@@ -48,6 +68,21 @@ def read_paths(source, store, ext=".root"):
 
 
 def expand_datasetdict(datasets, store, ignore_path=None, ext=".root"):
+    """Interpred a dict of dataset names or paths
+    
+    Parameters:
+    datasets -- A dict whose values are lists of glob patterns, dataset names
+                or files containing any of the afore mentioned
+    store -- Path to the store directory, e.g. /pnfs/desy.de/cms/tier2/store/
+    ignore_path -- Callable of the form file path -> bool. If it evaluates to
+                   not True, the file path is skipped for the output. If None,
+                   no files are skipped
+    ext -- File extension the files have
+    
+    Returns a tuple of two dicts. The first one is a dict mapping the keys of
+    `datasets` to lists of paths for the corresponding files. The second one is
+    the inverse mapping.
+    """
     paths2dsname = {}
     datasetpaths = {}
     for key in datasets.keys():
