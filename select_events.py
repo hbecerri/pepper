@@ -520,17 +520,19 @@ class Processor(object):
             raise utils.ConfigError("Invalid good_jet_id: {}".format(j_id))
 
         lep_dist = self.config["good_jet_lepton_distance"]
-        j_eta = data["Jet_eta"].flatten()
-        j_phi = data["Jet_phi"].flatten()
-        l_eta = np.concatenate([data["Electron_eta"].flatten(),
-                                data["Muon_eta"].flatten()])
-        l_phi = np.concatenate([data["Electron_phi"].flatten(),
-                                data["Muon_phi"].flatten()])
-        delta_eta = j_eta[..., None] - l_eta
-        delta_phi = j_phi[..., None] - l_phi
-        delta_r = np.hypot(delta_eta, delta_phi)
-        has_lepton_close = awkward.JaggedArray.fromcounts(
-            data["Jet_eta"].counts, (delta_r < lep_dist).any(axis=-1))
+        
+        j_eta = data["Jet_eta"]
+        j_phi = data["Jet_phi"]
+        l_eta = awkward.concatenate(
+            [data["Electron_eta"], data["Muon_eta"]], axis=1)
+        l_phi = awkward.concatenate(
+            [data["Electron_phi"], data["Muon_phi"]], axis=1)
+        j_eta, l_eta = j_eta.cross(l_eta, nested=True).unzip()
+        j_phi, l_phi = j_phi.cross(l_phi, nested=True).unzip()
+        delta_eta = j_eta - l_eta
+        delta_phi = j_phi - l_phi
+        delta_R = np.hypot(delta_eta, delta_phi)
+        has_lepton_close = (delta_R < lep_dist).any()
 
         return (has_id
                 & (~has_lepton_close)
