@@ -57,7 +57,7 @@
             "/ZZ_TuneCP5_13TeV-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM"
         ]
     },
-    "triggers": {
+    "dataset_trigger_map": {
         "MuonEG": [
             "HLT_Mu8_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ",
             "HLT_Mu12_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ",
@@ -78,11 +78,34 @@
             "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL_DZ"
         ]
     },
-    "trigger_order": [
+    "dataset_trigger_order": [
         "MuonEG",
         "DoubleMuon",
         "EGamma",
         "SingleMuon"
+    ],
+    "channel_trigger_map": [
+        "ee": [
+            "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL",
+            "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL_DZ"
+        ],
+        "emu": [
+            "HLT_Mu8_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ",
+            "HLT_Mu12_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ",
+            "HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL",
+            "HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL_DZ",
+            "HLT_Mu27_Ele37_CaloIdL_MW",
+            "HLT_Mu37_Ele27_CaloIdL_MW"
+        ],
+        "mumu": [
+            "HLT_Mu17_TrkIsoVVL_Mu8_TrkIsoVVL_DZ_Mass3p8"
+        ],
+        "e": [
+            "HLT_Ele32_WPTight_Gsf"
+        ],
+        "mu": [
+            "HLT_IsoMu24"
+        ]
     ],
     "filter_year": "2018",
     "mc_lumifactors": "/nfs/dust/cms/user/ruebenaj/analysis/mc_lumifactors.json",
