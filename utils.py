@@ -8,6 +8,7 @@ import numpy as np
 import uproot
 import coffea.lumi_tools
 import json
+import awkward
 
 
 def dataset_to_paths(dataset, store, ext=".root"):

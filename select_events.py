@@ -82,10 +82,10 @@ class Selector(object):
         """
         if name in self._cutflow:
             raise ValueError("A cut with name {} exists already".format(name))
+        accepted = accept(self.masked)
         if not self._recording:
-            self.mask[self.mask] &= accept(self.masked)
+            self.mask[self.mask] &= accepted
         else:
-            accepted = accept(self.masked)
             flag = accepted.astype(int) << self._cutbitpos
             self.table["cutflags"][self.mask] = self.masked["cutflags"] | flag
             self._cutbitpos += 1
@@ -239,6 +239,7 @@ class Processor(object):
 
             selector.start_recording()
 
+            selector.add_cut(self.channel_trigger_matching, "Chn. trig. match")
             selector.add_cut(self.lep_pt_requirement, "Req lep pT")
             selector.add_cut(self.good_mll, "M_ll")
             selector.add_cut(self.no_additional_leptons, "No add. leps")
@@ -270,6 +271,31 @@ class Processor(object):
                                      path,
                                      now - self.starttime))
             self.starttime = now
+
+    def branches_for_e_id(self, e_id):
+        if e_id.startswith("cut:"):
+            return "Electron_cutBased"
+        elif e_id == "mva:wp80":
+            return "Electron_WP80"
+        elif e_id == "mva:wp90":
+            return "Electron_WP90"
+        return None
+
+    def branches_for_m_id(self, m_id):
+        if m_id == "cut:loose":
+            return "Muon_looseId"
+        elif m_id == "cut:medium":
+            return "Muon_mediumId"
+        elif m_id == "cut:tight":
+            return "Muon_tightId"
+        elif m_id.startswith("mva:"):
+            return "Muon_mvaId"
+        return None
+
+    def branches_for_j_id(self, j_id):
+        if j_id.startswith("cut:"):
+            return "Jet_jetId"
+        return None
 
     def branches(self, branch):
         # Read branches if they exist. The less branches are read,
@@ -307,24 +333,11 @@ class Processor(object):
                         "Flag_BadPFMuonFilter",
                         "Flag_eeBadScFilter"])
 
-        if self.config["good_ele_id"].startswith("cut:"):
-            req.append("Electron_cutBased")
-        elif self.config["good_ele_id"] == "mva:wp80":
-            req.append("Electron_WP80")
-        elif self.config["good_ele_id"] == "mva:wp90":
-            req.append("Electron_WP90")
-
-        if self.config["good_muon_id"] == "cut:loose":
-            req.append("Muon_looseId")
-        elif self.config["good_muon_id"] == "cut:medium":
-            req.append("Muon_mediumId")
-        elif self.config["good_muon_id"] == "cut:tight":
-            req.append("Muon_tightId")
-        elif self.config["good_muon_id"].startswith("mva:"):
-            req.append("Muon_mvaId")
-
-        if self.config["good_jet_id"].startswith("cut:"):
-            req.append("Jet_jetId")
+        req.append(self.branches_for_e_id(self.config["good_ele_id"]))
+        req.append(self.branches_for_e_id(self.config["additional_ele_id"]))
+        req.append(self.branches_for_m_id(self.config["good_muon_id"]))
+        req.append(self.branches_for_m_id(self.config["additional_muon_id"]))
+        req.append(self.branches_for_j_id(self.config["good_jet_id"]))
 
         if self.config["btag"].startswith("deepcvs"):
             req.append("Jet_btagDeepB")
@@ -350,6 +363,11 @@ class Processor(object):
         )
         return trigger
 
+    def mpv_quality(self, data):
+        # TODO: Is this cut really needed? How to check for fake PV?
+        R = np.hypot(data["PV_x"], data["PV_z"])
+        return ((data["PV_ndof"] > 4) & (abs(data["PV_z"]) <= 24) & (R <= 2))
+
     def met_filters(self, is_mc, data):
         filter_year = str(self.config["filter_year"]).lower()
         if filter_year == "none":
@@ -367,12 +385,30 @@ class Processor(object):
             raise utils.ConfigError("Invalid filter year: {}".format(
                 filter_year))
         # TODO: For 2017 and 2018 ecalBadCalib is recommended. Which to take?
+        return passing_filters
 
     def in_hem1516(self, phi, eta):
         return ((-2.4 < eta) & (eta < -1.6) & (-1.4 < phi) & (phi < -1.0))
 
     def in_transreg(self, abs_eta):
         return (1.4442 < abs_eta) & (abs_eta < 1.566)
+
+    def electron_id(self, e_id, data):
+        if e_id == "skip":
+            has_id = True
+        if e_id == "cut:loose":
+            has_id = data["Electron_cutBased"] >= 2
+        elif e_id == "cut:medium":
+            has_id = data["Electron_cutBased"] >= 3
+        elif e_id == "cut:tight":
+            has_id = data["Electron_cutBased"] >= 4
+        elif e_id == "mva:wp80":
+            has_id = data["Electron_WP80"]
+        elif e_id == "mva:wp90":
+            has_id = data["Electron_WP90"]
+        else:
+            raise ValueError("Invalid electron id string")
+        return has_id
 
     def good_electron(self, data):
         if self.config["good_ele_cut_hem"]:
@@ -389,21 +425,7 @@ class Processor(object):
         e_id, eta_min, eta_max, pt_min, pt_max = self.config[[
             "good_ele_id", "good_ele_eta_min", "good_ele_eta_max",
             "good_ele_pt_min", "good_ele_pt_max"]]
-        if e_id == "skip":
-            has_id = True
-        if e_id == "cut:loose":
-            has_id = data["Electron_cutBased"] >= 2
-        elif e_id == "cut:medium":
-            has_id = data["Electron_cutBased"] >= 3
-        elif e_id == "cut:tight":
-            has_id = data["Electron_cutBased"] >= 4
-        elif e_id == "mva:wp80":
-            has_id = data["Electron_WP80"]
-        elif e_id == "mva:wp90":
-            has_id = data["Electron_WP90"]
-        else:
-            raise utils.ConfigError("Invalid good_ele_id: {}".format(e_id))
-        return (has_id
+        return (self.electron_id(e_id, data)
                 & (~is_in_hem1516)
                 & (~is_in_transreg)
                 & (eta_min < data["Electron_eta"])
@@ -411,18 +433,7 @@ class Processor(object):
                 & (pt_min < data["Electron_pt"])
                 & (data["Electron_pt"] < pt_max))
 
-    def good_muon(self, data):
-        if self.config["good_muon_cut_hem"]:
-            is_in_hem1516 = self.in_hem1516(data["Muon_phi"], data["Muon_eta"])
-        else:
-            is_in_hem1516 = np.array(False)
-        if self.config["good_muon_cut_transreg"]:
-            is_in_transreg = self.in_transreg(abs(data["Muon_eta"]))
-        else:
-            is_in_transreg = np.array(False)
-        m_id, eta_min, eta_max, pt_min, pt_max, iso = self.config[[
-            "good_muon_id", "good_muon_eta_min", "good_muon_eta_max",
-            "good_muon_pt_min", "good_muon_pt_max", "good_muon_iso"]]
+    def muon_id(self, m_id, data):
         if m_id == "skip":
             has_id = True
         elif m_id == "cut:loose":
@@ -438,8 +449,22 @@ class Processor(object):
         elif m_id == "mva:tight":
             has_id = data["Muon_mvaId"] >= 3
         else:
-            raise utils.ConfigError("Invalid good_ele_id: {}".format(e_id))
-        return (has_id
+            raise ValueError("Invalid muon id string")
+        return has_id
+
+    def good_muon(self, data):
+        if self.config["good_muon_cut_hem"]:
+            is_in_hem1516 = self.in_hem1516(data["Muon_phi"], data["Muon_eta"])
+        else:
+            is_in_hem1516 = np.array(False)
+        if self.config["good_muon_cut_transreg"]:
+            is_in_transreg = self.in_transreg(abs(data["Muon_eta"]))
+        else:
+            is_in_transreg = np.array(False)
+        m_id, eta_min, eta_max, pt_min, pt_max, iso = self.config[[
+            "good_muon_id", "good_muon_eta_min", "good_muon_eta_max",
+            "good_muon_pt_min", "good_muon_pt_max", "good_muon_iso"]]
+        return (self.muon_id(m_id, data)
                 & (data["Muon_pfRelIso04_all"] < iso)
                 & (~is_in_hem1516)
                 & (~is_in_transreg)
@@ -504,9 +529,8 @@ class Processor(object):
         delta_eta = j_eta[..., None] - l_eta
         delta_phi = j_phi[..., None] - l_phi
         delta_r = np.hypot(delta_eta, delta_phi)
-        has_lepton_close = awkward.JaggedArray(
-            data["Jet_eta"].starts, data["Jet_eta"].stops,
-            (delta_r < lep_dist).any(axis=-1))
+        has_lepton_close = awkward.JaggedArray.fromcounts(
+            data["Jet_eta"].counts, (delta_r < lep_dist).any(axis=-1))
 
         return (has_id
                 & (~has_lepton_close)
@@ -530,10 +554,21 @@ class Processor(object):
 
         return jets
 
+    def channel_trigger_matching(self, data):
+        # TODO
+        return np.full(data.shape, True)
+        p0 = abs(data["Lepton"].pdgId[:, 0])
+        p1 = abs(data["Lepton"].pdgId[:, 1])
+        triggers = self.config["triggers"]
+        is_ee = (p0 == 11) & (p1 == 11)
+        is_mm = (p0 == 13) & (p1 == 13)
+        is_em = (~is_ee) & (~is_mm)
+
     def lep_pt_requirement(self, data):
         n = np.zeros(data.shape)
         for i, pt_min in enumerate(self.config["lep_pt_min"]):
-            n += (pt_min < data["Lep"][:, i].pt).astype(int)
+            mask = data["Lepton"].counts > i
+            n[mask] += (pt_min < data["Lepton"].pt[mask, i]).astype(int)
         return n >= self.config["lep_pt_num_satisfied"]
 
     def good_mll(self, data):
@@ -541,14 +576,22 @@ class Processor(object):
                 > self.config["mll_min"])
 
     def no_additional_leptons(self, data):
-        return ~(data[~data["is_good_electron"]].any())
+        e_sel = ~data["is_good_electron"]
+        add_ele = self.electron_id(config["additional_ele_id"], data) & e_sel
+
+        m_iso = config["additional_muon_iso"]
+        m_sel = ~data["is_good_muon"]
+        add_muon = (self.muon_id(config["additional_muon_id"], data)
+                    & (data["Muon_pfRelIso04_all"] < m_iso)
+                    & m_sel)
+        return (~add_ele.any()) & (~add_muon.any())
 
     def z_window(self, data):
         m_min = self.config["z_boson_window_start"]
         m_max = self.config["z_boson_window_end"]
-        sfleps = data[data["is_same_flavor"]]["Lepton"]
-        invmass = (sfleps[:, 0].p4 + sfleps[:, 1].p4).mass
-        return not (m_min < invmass < m_max)
+        is_sf = data["is_same_flavor"]
+        invmass = (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
+        return ~is_sf | ((invmass <= m_min) & (m_max <= invmass))
 
     def has_jets(self, data):
         return self.config["num_jets_atleast"] <= data["Jet"].counts
@@ -556,7 +599,8 @@ class Processor(object):
     def jet_pt_requirement(self, data):
         n = np.zeros(data.shape)
         for i, pt_min in enumerate(self.config["jet_pt_min"]):
-            n += (pt_min < data["Jet"][:, i].pt).astype(int)
+            mask = data["Jet"].counts > i
+            n[mask] += (pt_min < data["Jet"].pt[mask, i]).astype(int)
         return n >= self.config["jet_pt_num_satisfied"]
 
     def btag(self, data):
@@ -566,21 +610,22 @@ class Processor(object):
             wps = {"loose": 0.1241, "medium": 0.4184, "tight": 0.7527}
             if wp not in wps:
                 raise utils.ConfigError("Invalid DeepCSV working point: {}"
-                                         .format(wp))
+                                        .format(wp))
         elif tagger == "deepjet":
             disc = data["Jet_btagDeepFlavB"]
             wps = {"loose": 0.0494, "medium": 0.2770, "tight": 0.7264}
             if wp not in wps:
                 raise utils.ConfigError("Invalid DeepJet working point: {}"
-                                         .format(wp))
+                                        .format(wp))
         else:
             raise utils.ConfigError("Invalid tagger name: {}".format(tagger))
         btagged = disc > wps[wp]
         return btagged.sum() >= self.config["num_atleast_btagged"]
 
     def met_requirement(self, data):
-        return (data[data["is_same_flavor"]]["MET_sumEt"]
-                > self.config["ee/mm_min_met"])
+        is_sf = data["is_same_flavor"]
+        met = data["MET_sumEt"]
+        return ~is_sf | (met > self.config["ee/mm_min_met"])
 
     def compute_weight(self, is_mc, data):
         weight = np.ones(data.shape)
@@ -679,9 +724,9 @@ if __name__ == "__main__":
             if args.skip_existing:
                 arguments.append("--skip_existing")
             htc_cmssw = os.path.join(
-                os.path.basename(__file__), "condor_cmssw.sh")
+                os.path.dirname(__file__), "condor_cmssw.sh")
             utils.condor_submit(
-                os.path.realpath(htc_cmssw)), arguments, os.getcwd())
+                os.path.realpath(htc_cmssw), arguments, os.getcwd())
         print("Submitted {} jobs".format(len(path_batches)))
         sys.exit(0)
 
