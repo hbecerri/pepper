@@ -77,18 +77,21 @@ class Selector(object):
         accept -- A function that will be called with a table of the currently
                   selected events. The function should return a numpy array of
                   the same length as the table holding bools, indicating if an
-                  event is not cut (True).
+                  event is not cut (True). Does not get called if num_selected
+                  is 0 already.
         name -- A label to assoiate within the cutflow
         """
         if name in self._cutflow:
             raise ValueError("A cut with name {} exists already".format(name))
-        accepted = accept(self.masked)
-        if not self._recording:
-            self.mask[self.mask] &= accepted
-        else:
-            flag = accepted.astype(int) << self._cutbitpos
-            self.table["cutflags"][self.mask] = self.masked["cutflags"] | flag
-            self._cutbitpos += 1
+        if self.mask.any():
+            accepted = accept(self.masked)
+            if not self._recording:
+                self.mask[self.mask] &= accepted
+            else:
+                flag = accepted.astype(int) << self._cutbitpos
+                self.table["cutflags"][self.mask] = (self.masked["cutflags"]
+                                                     | flag)
+                self._cutbitpos += 1
         self._cutflow[name] = self.num_after_all_cuts
 
     def set_column(self, column, column_name):
@@ -98,12 +101,16 @@ class Selector(object):
         column -- A function that will be called with a table of the currently
                   selected events. It should return a numpy array or an
                   awkward.JaggedArray with the same length as the table.
+                  Does not get called if num_selected is 0 already.
         column_name -- The name of the column to set
 
         """
         if not isinstance(column_name, str):
             raise ValueError("column_name needs to be string")
-        data = column(self.masked)
+        if not self.mask.any():
+            data = np.array([])
+        else:
+            data = column(self.masked)
         if isinstance(data, np.ndarray):
             unmasked_data = np.empty_like(self.mask, dtype=data.dtype)
             unmasked_data[self.mask] = data
@@ -206,6 +213,15 @@ class Processor(object):
             print("No muon scale factors specified")
             self.muon_sf = []
 
+        self.trigger_paths = config["dataset_trigger_map"]
+        self.trigger_order = config["dataset_trigger_order"]
+        missing_triggers = (set(datasets.keys())
+                            - set(self.trigger_paths.keys())
+                            - set(["MC"]))
+        if len(missing_triggers) > 0:
+            raise utils.ConfigError("Missing triggers for: {}"
+                                    .format(", ".join(missing_triggers)))
+
         self.starttime = 0
 
     def process(self, paths2dsname):
@@ -222,9 +238,8 @@ class Processor(object):
             is_mc = dsname == "MC"
             selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
-            pos_triggers, neg_triggers = get_trigger_paths_for(dsname,
-                                                               trigger_paths,
-                                                               trigger_order)
+            pos_triggers, neg_triggers = get_trigger_paths_for(
+                dsname, self.trigger_paths, self.trigger_order)
             selector.add_cut(partial(
                 self.passing_trigger, pos_triggers, neg_triggers), "Trigger")
 
@@ -254,10 +269,24 @@ class Processor(object):
 
             selector.set_column(partial(self.compute_weight, is_mc), "weight")
 
+            for key in ["pt", "eta", "phi", "mass"]:
+                selector.set_column(lambda d: getattr(d["Lepton"], key),
+                                    "Lepton_" + key)
+                selector.set_column(lambda d: getattr(d["Jet"], key),
+                                    "Jet_" + key)
+            selector.set_column(lambda d: d["Lepton"].pdgId, "Lepton_pdgId")
+
             outpath = get_outpath(path, args.dest)
             os.makedirs(os.path.dirname(outpath), exist_ok=True)
-            selector.save_columns(["Lepton",
-                                   "Jet",
+            selector.save_columns(["Lepton_pt",
+                                   "Lepton_eta",
+                                   "Lepton_phi",
+                                   "Lepton_mass",
+                                   "Lepton_pdgId",
+                                   "Jet_pt",
+                                   "Jet_eta",
+                                   "Jet_phi",
+                                   "Jet_mass",
                                    "MET_sumEt",
                                    "weight",
                                    "cutflags"], outpath)
@@ -331,7 +360,8 @@ class Processor(object):
                         "Flag_HBHENoiseIsoFilter",
                         "Flag_EcalDeadCellTriggerPrimitiveFilter",
                         "Flag_BadPFMuonFilter",
-                        "Flag_eeBadScFilter"])
+                        "Flag_eeBadScFilter",
+                        "Flag_ecalBadCalibFilterV2"])
 
         req.append(self.branches_for_e_id(self.config["good_ele_id"]))
         req.append(self.branches_for_e_id(self.config["additional_ele_id"]))
@@ -344,7 +374,7 @@ class Processor(object):
         elif self.config["btag"].startswith("deepjet"):
             req.append("Jet_btagDeepFlavB")
 
-        req.extend(get_trigger_paths_for("all", trigger_paths)[0])
+        req.extend(get_trigger_paths_for("all", self.trigger_paths)[0])
 
         return branch.name.decode("utf-8") in req
 
@@ -364,9 +394,12 @@ class Processor(object):
         return trigger
 
     def mpv_quality(self, data):
-        # TODO: Is this cut really needed? How to check for fake PV?
-        R = np.hypot(data["PV_x"], data["PV_z"])
-        return ((data["PV_ndof"] > 4) & (abs(data["PV_z"]) <= 24) & (R <= 2))
+        # Does not include check for fake. Is this even needed?
+        R = np.hypot(data["PV_x"], data["PV_y"])
+        return ((data["PV_chi2"] != 0)
+                & (data["PV_ndof"] > 4)
+                & (abs(data["PV_z"]) <= 24)
+                & (R <= 2))
 
     def met_filters(self, is_mc, data):
         filter_year = str(self.config["filter_year"]).lower()
@@ -384,7 +417,9 @@ class Processor(object):
         else:
             raise utils.ConfigError("Invalid filter year: {}".format(
                 filter_year))
-        # TODO: For 2017 and 2018 ecalBadCalib is recommended. Which to take?
+        if filter_year in ("2018", "2017"):
+            passing_filters &= data["Flag_ecalBadCalibFilterV2"]
+
         return passing_filters
 
     def in_hem1516(self, phi, eta):
@@ -511,16 +546,17 @@ class Processor(object):
         if j_id == "skip":
             has_id = True
         elif j_id == "cut:loose":
-            has_id = data["Jet_jetId"] & 0b1  # Always false in 2017 and 2018
+            has_id = (data["Jet_jetId"] & 0b1).astype(bool)
+            # Always False in 2017 and 2018
         elif j_id == "cut:tight":
-            has_id = data["Jet_jetId"] & 0b10
+            has_id = (data["Jet_jetId"] & 0b10).astype(bool)
         elif j_id == "cut:tightlepveto":
-            has_id = data["Jet_jetId"] & 0b100
+            has_id = (data["Jet_jetId"] & 0b100).astype(bool)
         else:
             raise utils.ConfigError("Invalid good_jet_id: {}".format(j_id))
 
         lep_dist = self.config["good_jet_lepton_distance"]
-        
+
         j_eta = data["Jet_eta"]
         j_phi = data["Jet_phi"]
         l_eta = awkward.concatenate(
@@ -557,14 +593,28 @@ class Processor(object):
         return jets
 
     def channel_trigger_matching(self, data):
-        # TODO
-        return np.full(data.shape, True)
         p0 = abs(data["Lepton"].pdgId[:, 0])
         p1 = abs(data["Lepton"].pdgId[:, 1])
-        triggers = self.config["triggers"]
         is_ee = (p0 == 11) & (p1 == 11)
         is_mm = (p0 == 13) & (p1 == 13)
         is_em = (~is_ee) & (~is_mm)
+        triggers = self.config["channel_trigger_map"]
+
+        ret = np.full(data.shape, False)
+        if "ee" in triggers:
+            ret |= is_ee & self.passing_trigger(triggers["ee"], [], data)
+        if "mumu" in triggers:
+            ret |= is_mm & self.passing_trigger(triggers["mumu"], [], data)
+        if "emu" in triggers:
+            ret |= is_em & self.passing_trigger(triggers["emu"], [], data)
+        if "e" in triggers:
+            ret |= is_ee & self.passing_trigger(triggers["e"], [], data)
+            ret |= is_em & self.passing_trigger(triggers["e"], [], data)
+        if "mu" in triggers:
+            ret |= is_mm & self.passing_trigger(triggers["mu"], [], data)
+            ret |= is_em & self.passing_trigger(triggers["mu"], [], data)
+
+        return ret
 
     def lep_pt_requirement(self, data):
         n = np.zeros(data.shape)
@@ -696,16 +746,6 @@ if __name__ == "__main__":
 
     print("Got a total of {} files of which {} are MC".format(num_files,
                                                               num_mc_files))
-    if "lumimask" not in config:
-        print("No lumimask specified")
-
-    trigger_paths, trigger_order = config[["triggers", "trigger_order"]]
-    missing_triggers = (set(datasets.keys())
-                        - set(trigger_paths.keys())
-                        - set(["MC"]))
-    if len(missing_triggers) > 0:
-        print("Missing triggers for: {}".format(", ".join(missing_triggers)))
-        sys.exit(1)
 
     if args.condor is not None:
         print("Submitting to condor")
