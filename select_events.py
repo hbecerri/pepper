@@ -267,11 +267,25 @@ class Processor(object):
             selector.add_cut(self.met_requirement, "Req MET")
 
             selector.set_column(partial(self.compute_weight, is_mc), "weight")
+            
+            for key in ["pt", "eta", "phi", "mass"]:
+                selector.set_column(lambda d: getattr(d["Lepton"], key),
+                                    "Lepton_" + key)
+                selector.set_column(lambda d: getattr(d["Jet"], key),
+                                    "Jet_" + key)
+            selector.set_column(lambda d: d["Lepton"].pdgId, "Lepton_pdgId")
 
             outpath = get_outpath(path, args.dest)
             os.makedirs(os.path.dirname(outpath), exist_ok=True)
-            selector.save_columns(["Lepton",
-                                   "Jet",
+            selector.save_columns(["Lepton_pt",
+                                   "Lepton_eta",
+                                   "Lepton_phi",
+                                   "Lepton_mass",
+                                   "Lepton_pdgId",
+                                   "Jet_pt",
+                                   "Jet_eta",
+                                   "Jet_phi",
+                                   "Jet_mass",
                                    "MET_sumEt",
                                    "weight",
                                    "cutflags"], outpath)
