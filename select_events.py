@@ -89,7 +89,8 @@ class Selector(object):
                 self.mask[self.mask] &= accepted
             else:
                 flag = accepted.astype(int) << self._cutbitpos
-                self.table["cutflags"][self.mask] = self.masked["cutflags"] | flag
+                self.table["cutflags"][self.mask] = (self.masked["cutflags"]
+                                                     | flag)
                 self._cutbitpos += 1
         self._cutflow[name] = self.num_after_all_cuts
 
@@ -267,7 +268,7 @@ class Processor(object):
             selector.add_cut(self.met_requirement, "Req MET")
 
             selector.set_column(partial(self.compute_weight, is_mc), "weight")
-            
+
             for key in ["pt", "eta", "phi", "mass"]:
                 selector.set_column(lambda d: getattr(d["Lepton"], key),
                                     "Lepton_" + key)
@@ -545,16 +546,17 @@ class Processor(object):
         if j_id == "skip":
             has_id = True
         elif j_id == "cut:loose":
-            has_id = data["Jet_jetId"] & 0b1  # Always false in 2017 and 2018
+            has_id = (data["Jet_jetId"] & 0b1).astype(bool)
+            # Always False in 2017 and 2018
         elif j_id == "cut:tight":
-            has_id = data["Jet_jetId"] & 0b10
+            has_id = (data["Jet_jetId"] & 0b10).astype(bool)
         elif j_id == "cut:tightlepveto":
-            has_id = data["Jet_jetId"] & 0b100
+            has_id = (data["Jet_jetId"] & 0b100).astype(bool)
         else:
             raise utils.ConfigError("Invalid good_jet_id: {}".format(j_id))
 
         lep_dist = self.config["good_jet_lepton_distance"]
-        
+
         j_eta = data["Jet_eta"]
         j_phi = data["Jet_phi"]
         l_eta = awkward.concatenate(
