@@ -84,7 +84,7 @@
         "EGamma",
         "SingleMuon"
     ],
-    "channel_trigger_map": [
+    "channel_trigger_map": {
         "ee": [
             "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL",
             "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL_DZ"
@@ -106,7 +106,7 @@
         "mu": [
             "HLT_IsoMu24"
         ]
-    ],
+    },
     "filter_year": "2018",
     "mc_lumifactors": "/nfs/dust/cms/user/ruebenaj/analysis/mc_lumifactors.json",
 

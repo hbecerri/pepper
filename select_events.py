@@ -77,18 +77,20 @@ class Selector(object):
         accept -- A function that will be called with a table of the currently
                   selected events. The function should return a numpy array of
                   the same length as the table holding bools, indicating if an
-                  event is not cut (True).
+                  event is not cut (True). Does not get called if num_selected
+                  is 0 already.
         name -- A label to assoiate within the cutflow
         """
         if name in self._cutflow:
             raise ValueError("A cut with name {} exists already".format(name))
-        accepted = accept(self.masked)
-        if not self._recording:
-            self.mask[self.mask] &= accepted
-        else:
-            flag = accepted.astype(int) << self._cutbitpos
-            self.table["cutflags"][self.mask] = self.masked["cutflags"] | flag
-            self._cutbitpos += 1
+        if self.mask.any():
+            accepted = accept(self.masked)
+            if not self._recording:
+                self.mask[self.mask] &= accepted
+            else:
+                flag = accepted.astype(int) << self._cutbitpos
+                self.table["cutflags"][self.mask] = self.masked["cutflags"] | flag
+                self._cutbitpos += 1
         self._cutflow[name] = self.num_after_all_cuts
 
     def set_column(self, column, column_name):
@@ -98,12 +100,16 @@ class Selector(object):
         column -- A function that will be called with a table of the currently
                   selected events. It should return a numpy array or an
                   awkward.JaggedArray with the same length as the table.
+                  Does not get called if num_selected is 0 already.
         column_name -- The name of the column to set
 
         """
         if not isinstance(column_name, str):
             raise ValueError("column_name needs to be string")
-        data = column(self.masked)
+        if not self.mask.any():
+            data = np.array([])
+        else:
+            data = column(self.masked)
         if isinstance(data, np.ndarray):
             unmasked_data = np.empty_like(self.mask, dtype=data.dtype)
             unmasked_data[self.mask] = data
@@ -213,7 +219,7 @@ class Processor(object):
                             - set(["MC"]))
         if len(missing_triggers) > 0:
             raise utils.ConfigError("Missing triggers for: {}"
-                                    .format(", ".join(missing_triggers))")
+                                    .format(", ".join(missing_triggers)))
 
         self.starttime = 0
 
@@ -237,7 +243,6 @@ class Processor(object):
                 self.passing_trigger, pos_triggers, neg_triggers), "Trigger")
 
             selector.add_cut(partial(self.met_filters, is_mc), "MET filters")
-            selector.add_cut(self.mpv_quality, "Main PV quality")
 
             selector.set_column(self.good_electron, "is_good_electron")
             selector.set_column(self.good_muon, "is_good_muon")
@@ -340,7 +345,8 @@ class Processor(object):
                         "Flag_HBHENoiseIsoFilter",
                         "Flag_EcalDeadCellTriggerPrimitiveFilter",
                         "Flag_BadPFMuonFilter",
-                        "Flag_eeBadScFilter"])
+                        "Flag_eeBadScFilter",
+                        "Flag_ecalBadCalibFilterV2"])
 
         req.append(self.branches_for_e_id(self.config["good_ele_id"]))
         req.append(self.branches_for_e_id(self.config["additional_ele_id"]))
@@ -353,7 +359,7 @@ class Processor(object):
         elif self.config["btag"].startswith("deepjet"):
             req.append("Jet_btagDeepFlavB")
 
-        req.extend(get_trigger_paths_for("all", trigger_paths)[0])
+        req.extend(get_trigger_paths_for("all", self.trigger_paths)[0])
 
         return branch.name.decode("utf-8") in req
 
@@ -396,7 +402,7 @@ class Processor(object):
         else:
             raise utils.ConfigError("Invalid filter year: {}".format(
                 filter_year))
-        if filyer_year in ("2018", "2017"):
+        if filter_year in ("2018", "2017"):
             passing_filters &= data["Flag_ecalBadCalibFilterV2"]
 
         return passing_filters
@@ -573,7 +579,6 @@ class Processor(object):
     def channel_trigger_matching(self, data):
         p0 = abs(data["Lepton"].pdgId[:, 0])
         p1 = abs(data["Lepton"].pdgId[:, 1])
-        triggers = self.config["triggers"]
         is_ee = (p0 == 11) & (p1 == 11)
         is_mm = (p0 == 13) & (p1 == 13)
         is_em = (~is_ee) & (~is_mm)
