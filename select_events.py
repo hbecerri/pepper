@@ -375,6 +375,8 @@ class Processor(object):
             req.append("Jet_btagDeepFlavB")
 
         req.extend(get_trigger_paths_for("all", self.trigger_paths)[0])
+        for paths in self.config["channel_trigger_map"].values():
+            req.extend(paths)
 
         return branch.name.decode("utf-8") in req
 
