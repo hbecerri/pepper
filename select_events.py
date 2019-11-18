@@ -119,7 +119,7 @@ class Selector(object):
             counts[self.mask] = data.counts
             cls = awkward.array.objects.Methods.maybemixin(type(data),
                                                            awkward.JaggedArray)
-            unmasked_data = cls.fromcounts(counts, data.content)
+            unmasked_data = cls.fromcounts(counts, data.flatten())
         else:
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
@@ -375,6 +375,8 @@ class Processor(object):
             req.append("Jet_btagDeepFlavB")
 
         req.extend(get_trigger_paths_for("all", self.trigger_paths)[0])
+        for paths in self.config["channel_trigger_map"].values():
+            req.extend(paths)
 
         return branch.name.decode("utf-8") in req
 
