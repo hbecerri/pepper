@@ -119,7 +119,7 @@ class Selector(object):
             counts[self.mask] = data.counts
             cls = awkward.array.objects.Methods.maybemixin(type(data),
                                                            awkward.JaggedArray)
-            unmasked_data = cls.fromcounts(counts, data.content)
+            unmasked_data = cls.fromcounts(counts, data.flatten())
         else:
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
