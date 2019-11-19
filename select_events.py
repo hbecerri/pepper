@@ -725,7 +725,13 @@ if __name__ == "__main__":
 
     datasets = {}
     if args.dataset is None:
-        datasets = config["datasets"]
+        datasets = config["exp_datasets"]
+        if "MC" in datasets:
+            raise utils.ConfigError(
+                "MC must not be specified in config exp_datasets")
+        datasets["MC"] = []
+        for mc_datasets in config["mc_datasets"].values():
+            datasets["MC"].extend(mc_datasets)
     else:
         datasets = {}
         for dataset in args.dataset:
