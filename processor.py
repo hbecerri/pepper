@@ -12,6 +12,7 @@ from time import time
 import random
 from functools import partial
 from collections import OrderedDict
+import coffea.processor as processor
 
 import utils
 import AdUtils
@@ -193,7 +194,7 @@ def get_trigger_paths_for(dataset, trigger_paths, trigger_order=None):
     return list(dict.fromkeys(pos_triggers)), list(dict.fromkeys(neg_triggers))
 
 
-class Processor(ProcessorABC):
+class Processor(processor.ProcessorABC):
     def __init__(self, config):
         self.config = config
 

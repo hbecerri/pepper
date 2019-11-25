@@ -6,6 +6,7 @@ from coffea.util import awkward
 from coffea.util import numpy as np
 import uproot_methods
 from uproot_methods.classes.TLorentzVector import PtEtaPhiMassLorentzVector as LV
+from coffea.processor import AccumulatorABC
 
 class JaggedArrayAccumulator(AccumulatorABC):
     def __init__(self, value):
