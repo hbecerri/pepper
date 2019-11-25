@@ -27,11 +27,11 @@ class Selector(object):
         table -- An awkward.Table holding the events' data
         """
         self.table = table
-        self.mask = np.full(self.table.shape, True)
+        self.mask = np.full(self.table.size, True)
         self._recording = False
         self._cutbitpos = 0
         self._cutflow = processor.defaultdict_accumulator(int)
-        self._cutflow["Events preselection"] += self.num_after_all_cuts()
+        self._cutflow["Events preselection"] += self.num_after_all_cuts
 
     @property
     def masked(self):
@@ -132,7 +132,7 @@ class Selector(object):
         This changes the behavior of add_cut.
         """
         self._recording = True
-        self.table["cutflags"] = np.zeros(self.table.shape, dtype=int)
+        self.table["cutflags"] = np.zeros(self.table.size, dtype=int)
 
     def save_columns(self, columns, path, savecutflow=True):
         """Save the currently selected events
@@ -217,12 +217,6 @@ class Processor(processor.ProcessorABC):
 
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
-        missing_triggers = (set(datasets.keys())
-                            - set(self.trigger_paths.keys())
-                            - set(["MC"]))
-        if len(missing_triggers) > 0:
-            raise utils.ConfigError("Missing triggers for: {}"
-                                    .format(", ".join(missing_triggers)))
 
     @property
     def accumulator(self):
@@ -238,72 +232,69 @@ class Processor(processor.ProcessorABC):
         })
         return self._accumulator
 
+    def postprocess(self, accumulator):
+        return accumulator
+
+
     def process(self, df):
         self.output = self.accumulator.identity()
-        for i, (path, data) in enumerate(uproot.iterate(paths2dsname.keys(),
-                                                        "Events",
-                                                        self.branches,
-                                                        namedecode="utf-8",
-                                                        reportpath=True)):
-            data = awkward.Table(data)
-            selector = Selector(data)
-            dsname = paths2dsname[path]
+        selector = Selector(df)
 
-            is_mc = dsname == "MC"
-            selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
+        is_mc = df["dataset"] == "MC"
+        selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
-            pos_triggers, neg_triggers = get_trigger_paths_for(
-                dsname, self.trigger_paths, self.trigger_order)
-            selector.add_cut(partial(
-                self.passing_trigger, pos_triggers, neg_triggers), "Trigger")
+        pos_triggers, neg_triggers = get_trigger_paths_for(
+            df["dataset"], self.trigger_paths, self.trigger_order)
+        selector.add_cut(partial(
+            self.passing_trigger, pos_triggers, neg_triggers), "Trigger")
 
-            selector.add_cut(partial(self.met_filters, is_mc), "MET filters")
+        selector.add_cut(partial(self.met_filters, is_mc), "MET filters")
 
-            selector.set_column(self.good_electron, "is_good_electron")
-            selector.set_column(self.good_muon, "is_good_muon")
-            selector.set_column(self.build_lepton_column, "Lepton")
-            selector.add_cut(self.exactly_lepton_pair, "#Lep = 2")
-            selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
-            selector.set_column(self.same_flavor, "is_same_flavor")
+        selector.set_column(self.good_electron, "is_good_electron")
+        selector.set_column(self.good_muon, "is_good_muon")
+        selector.set_column(self.build_lepton_column, "Lepton")
+        selector.add_cut(self.exactly_lepton_pair, "#Lep = 2")
+        selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
+        selector.set_column(self.same_flavor, "is_same_flavor")
 
-            selector.start_recording()
+        selector.start_recording()
 
-            selector.add_cut(self.channel_trigger_matching, "Chn. trig. match")
-            selector.add_cut(self.lep_pt_requirement, "Req lep pT")
-            selector.add_cut(self.good_mll, "M_ll")
-            selector.add_cut(self.no_additional_leptons, "No add. leps")
-            selector.add_cut(self.z_window, "Z window")
+        selector.add_cut(self.channel_trigger_matching, "Chn. trig. match")
+        selector.add_cut(self.lep_pt_requirement, "Req lep pT")
+        selector.add_cut(self.good_mll, "M_ll")
+        selector.add_cut(self.no_additional_leptons, "No add. leps")
+        selector.add_cut(self.z_window, "Z window")
 
-            selector.set_column(self.good_jet, "is_good_jet")
-            selector.set_column(self.build_jet_column, "Jet")
-            selector.add_cut(self.has_jets, "#Jets >= n")
-            selector.add_cut(self.jet_pt_requirement, "Req jet pT")
-            selector.add_cut(self.btag, "B-tag")
-            selector.add_cut(self.met_requirement, "Req MET")
+        selector.set_column(self.good_jet, "is_good_jet")
+        selector.set_column(self.build_jet_column, "Jet")
+        selector.add_cut(self.has_jets, "#Jets >= n")
+        selector.add_cut(self.jet_pt_requirement, "Req jet pT")
+        selector.add_cut(self.btag, "B-tag")
+        selector.add_cut(self.met_requirement, "Req MET")
 
-            selector.set_column(partial(self.compute_weight, is_mc), "weight")
+        selector.set_column(partial(self.compute_weight, is_mc), "weight")
 
-            for key in ["pt", "eta", "phi", "mass"]:
-                selector.set_column(lambda d: getattr(d["Lepton"], key),
-                                    "Lepton_" + key)
-                selector.set_column(lambda d: getattr(d["Jet"], key),
-                                    "Jet_" + key)
-            selector.set_column(lambda d: d["Lepton"].pdgId, "Lepton_pdgId")
+        for key in ["pt", "eta", "phi", "mass"]:
+            selector.set_column(lambda d: getattr(d["Lepton"], key),
+                                "Lepton_" + key)
+            selector.set_column(lambda d: getattr(d["Jet"], key),
+                                "Jet_" + key)
+        selector.set_column(lambda d: d["Lepton"].pdgId, "Lepton_pdgId")
 
-            outpath = get_outpath(path, args.dest)
-            os.makedirs(os.path.dirname(outpath), exist_ok=True)
-            selector.save_columns(["Lepton_pt",
-                                   "Lepton_eta",
-                                   "Lepton_phi",
-                                   "Lepton_mass",
-                                   "Lepton_pdgId",
-                                   "Jet_pt",
-                                   "Jet_eta",
-                                   "Jet_phi",
-                                   "Jet_mass",
-                                   "MET_sumEt",
-                                   "weight",
-                                   "cutflags"], outpath)
+        outpath = get_outpath(path, args.dest)
+        os.makedirs(os.path.dirname(outpath), exist_ok=True)
+        selector.save_columns(["Lepton_pt",
+                               "Lepton_eta",
+                               "Lepton_phi",
+                               "Lepton_mass",
+                               "Lepton_pdgId",
+                               "Jet_pt",
+                               "Jet_eta",
+                               "Jet_phi",
+                               "Jet_mass",
+                               "MET_sumEt",
+                               "weight",
+                               "cutflags"], outpath)
 
         self.output["cutflow"][dataset]=selector.cutflow
         return output
@@ -609,7 +600,7 @@ class Processor(processor.ProcessorABC):
         is_em = (~is_ee) & (~is_mm)
         triggers = self.config["channel_trigger_map"]
 
-        ret = np.full(data.shape, False)
+        ret = np.full(data.size, False)
         if "ee" in triggers:
             ret |= is_ee & self.passing_trigger(triggers["ee"], [], data)
         if "mumu" in triggers:
@@ -626,7 +617,7 @@ class Processor(processor.ProcessorABC):
         return ret
 
     def lep_pt_requirement(self, data):
-        n = np.zeros(data.shape)
+        n = np.zeros(data.size)
         for i, pt_min in enumerate(self.config["lep_pt_min"]):
             mask = data["Lepton"].counts > i
             n[mask] += (pt_min < data["Lepton"].pt[mask, i]).astype(int)
@@ -658,7 +649,7 @@ class Processor(processor.ProcessorABC):
         return self.config["num_jets_atleast"] <= data["Jet"].counts
 
     def jet_pt_requirement(self, data):
-        n = np.zeros(data.shape)
+        n = np.zeros(data.size)
         for i, pt_min in enumerate(self.config["jet_pt_min"]):
             mask = data["Jet"].counts > i
             n[mask] += (pt_min < data["Jet"].pt[mask, i]).astype(int)
@@ -689,7 +680,7 @@ class Processor(processor.ProcessorABC):
         return ~is_sf | (met > self.config["ee/mm_min_met"])
 
     def compute_weight(self, is_mc, data):
-        weight = np.ones(data.shape)
+        weight = np.ones(data.size)
         if is_mc:
             weight *= data["genWeight"]
             electrons = data["Lepton"][abs(data["Lepton"].pdgId) == 11]

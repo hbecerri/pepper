@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import numpy as np
+import awkward
+import h5py
+import uproot
+import coffea
+from coffea.analysis_objects import JaggedCandidateArray as CandArray
+from time import time
+import random
+from functools import partial
+from collections import OrderedDict
+
+import utils
+from processor import Processor
+
+if __name__ == "__main__":
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser(description="Select events from nanoAODs")
+    parser.add_argument("config", help="Path to a configuration file")
+    parser.add_argument("dest", help="Path to destination output directory")
+    parser.add_argument(
+        "--dataset", nargs=2, action="append", metavar=("name", "path"),
+        help="Can be specified multiple times. Ignore datasets given in "
+        "config and instead process these")
+    parser.add_argument(
+        "--condor", type=int, const=10, nargs="?", metavar="files_per_job",
+        help="Split and submit to HTCondor. By default for every 10 files a "
+        "job is created. The number can be changed by supplying it to this "
+        "option")
+    parser.add_argument(
+        "--skip_existing", action="store_true", help="Skip already existing "
+        "files")
+    parser.add_argument(
+        "--mc", action="store_true", help="Only process MC files")
+    args = parser.parse_args()
+
+    config = utils.Config(args.config)
+    store = config["store"]
+
+    datasets = {}
+    if args.dataset is None:
+        datasets = config["exp_datasets"]
+        if "MC" in datasets:
+            raise utils.ConfigError(
+                "MC must not be specified in config exp_datasets")
+        datasets["MC"] = []
+        for mc_datasets in config["mc_datasets"].values():
+            datasets["MC"].extend(mc_datasets)
+    else:
+        datasets = {}
+        for dataset in args.dataset:
+            if dataset[0] in datasets:
+                datasets[dataset[0]].append(dataset[1])
+            else:
+                datasets[dataset[0]] = [dataset[1]]
+
+    if args.skip_existing:
+        datasets, paths2dsname = utils.expand_datasetdict(
+            datasets, store, partial(skip_existing, args.dest))
+    else:
+        datasets, paths2dsname = utils.expand_datasetdict(datasets, store)
+    if args.mc:
+        paths2dsname = {path: dsname for path, dsname in paths2dsname.items()
+                        if dsname == "MC"}
+        datasets = {"MC": datasets["MC"]}
+    num_files = len(paths2dsname)
+    num_mc_files = len(datasets["MC"]) if "MC" in datasets else 0
+
+    print("Got a total of {} files of which {} are MC".format(num_files,
+                                                              num_mc_files))
+    
+    key = next(iter(datasets.keys()))
+    datasets_debug = {key: datasets[key]}
+    proc = Processor(config)
+    output = coffea.processor.run_uproot_job(
+        datasets_debug, treename="Events",
+        processor_instance=Processor(config),
+        executor=coffea.processor.iterative_executor,
+        executor_args={"workers": 4, "flatten": True, "processor_compression": None}, chunksize=100000)
