@@ -223,8 +223,6 @@ class Processor(ProcessorABC):
             raise utils.ConfigError("Missing triggers for: {}"
                                     .format(", ".join(missing_triggers)))
 
-        self.starttime = 0
-
     @property
     def accumulator(self):
         self._accumulator = processor.dict_accumulator({
@@ -240,7 +238,6 @@ class Processor(ProcessorABC):
         return self._accumulator
 
     def process(self, df):
-        self.starttime = time()
         self.output = self.accumulator.identity()
         for i, (path, data) in enumerate(uproot.iterate(paths2dsname.keys(),
                                                         "Events",
@@ -307,17 +304,8 @@ class Processor(ProcessorABC):
                                    "weight",
                                    "cutflags"], outpath)
 
-            now = time()
-            print("[{}/{}] Saved {} of {} events from \"{}\". This took "
-                  "{:.1f} s.".format(i + 1,
-                                     num_files,
-                                     selector.num_selected,
-                                     data.shape[0],
-                                     path,
-                                     now - self.starttime))
-            self.starttime = now
-            self.output["cutflow"][dataset]=selector.cutflow
-            return output
+        self.output["cutflow"][dataset]=selector.cutflow
+        return output
 
     def branches_for_e_id(self, e_id):
         if e_id.startswith("cut:"):
