@@ -14,7 +14,7 @@ from functools import partial
 from collections import OrderedDict
 
 import utils
-
+import AdUtils
 
 class Selector(object):
     """Keeps track of the current event selection and data"""
@@ -29,7 +29,8 @@ class Selector(object):
         self.mask = np.full(self.table.shape, True)
         self._recording = False
         self._cutbitpos = 0
-        self._cutflow = OrderedDict({"Input": self.num_after_all_cuts})
+        self._cutflow = processor.defaultdict_accumulator(int)
+        self._cutflow["Events preselection"] += self.num_after_all_cuts()
 
     @property
     def masked(self):
@@ -224,8 +225,23 @@ class Processor(ProcessorABC):
 
         self.starttime = 0
 
+    @property
+    def accumulator(self):
+        self._accumulator = processor.dict_accumulator({
+            "cutflow": processor.defaultdict_accumulator(
+                partial(processor.defaultdict_accumulator, int)),
+            "flat cols": processor.defaultdict_accumulator(
+                partial(processor.defaultdict_accumulator, partial(
+                    processor.column_accumulator, np.array([])))),
+            "jagged cols": processor.defaultdict_accumulator(
+                partial(processor.defaultdict_accumulator, partial(
+                    AdUtils.JaggedArrayAccumulator, awkward.JaggedArray.fromcounts([], []))))
+        })
+        return self._accumulator
+
     def process(self, df):
         self.starttime = time()
+        self.output = self.accumulator.identity()
         for i, (path, data) in enumerate(uproot.iterate(paths2dsname.keys(),
                                                         "Events",
                                                         self.branches,
@@ -300,6 +316,8 @@ class Processor(ProcessorABC):
                                      path,
                                      now - self.starttime))
             self.starttime = now
+            self.output["cutflow"][dataset]=selector.cutflow
+            return output
 
     def branches_for_e_id(self, e_id):
         if e_id.startswith("cut:"):

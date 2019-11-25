@@ -7,7 +7,32 @@ from coffea.util import numpy as np
 import uproot_methods
 from uproot_methods.classes.TLorentzVector import PtEtaPhiMassLorentzVector as LV
 
-#Additional functions which should probably exist in coffea
+class JaggedArrayAccumulator(AccumulatorABC):
+    def __init__(self, value):
+        if not isinstance(value, awkward.JaggedArray):
+            raise ValueError("JaggedArrayAccumulator only works with jagged arrays")
+        self._empty = numpy.zeros(dtype=value.dtype, shape=(0,) + value.shape[1:])
+        self._value = value
+
+    def __repr__(self):
+        return "JaggedArrayAccumulator(%r)" % self.value
+
+    def identity(self):
+        return column_accumulator(self._empty)
+
+    def add(self, other):
+        if not isinstance(other, JaggedArrayaccumulator):
+            raise ValueError("JaggedArrayAccumulator cannot be added to %r" % type(other))
+        
+        self._value = awkward.JaggedArray.concatenate((self._value, other._value))
+
+    @property
+    def value(self):
+        '''The current value of the column
+        Returns a JaggedArray where the first dimension is the column dimension
+        '''
+        return self._value
+
 
 def concatenate(arrays):
     flatarrays = [a.flatten() for a in arrays]
