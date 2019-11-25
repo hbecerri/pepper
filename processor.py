@@ -192,7 +192,7 @@ def get_trigger_paths_for(dataset, trigger_paths, trigger_order=None):
     return list(dict.fromkeys(pos_triggers)), list(dict.fromkeys(neg_triggers))
 
 
-class Processor(object):
+class Processor(ProcessorABC):
     def __init__(self, config):
         self.config = config
 
@@ -224,7 +224,7 @@ class Processor(object):
 
         self.starttime = 0
 
-    def process(self, paths2dsname):
+    def process(self, df):
         self.starttime = time()
         for i, (path, data) in enumerate(uproot.iterate(paths2dsname.keys(),
                                                         "Events",
@@ -696,89 +696,3 @@ class Processor(object):
                                   pt=muons.pt.flatten())
                 weight *= utils.jaggedlike(muons.eta, factors_flat).prod()
         return weight
-
-
-if __name__ == "__main__":
-    from argparse import ArgumentParser
-
-    parser = ArgumentParser(description="Select events from nanoAODs")
-    parser.add_argument("config", help="Path to a configuration file")
-    parser.add_argument("dest", help="Path to destination output directory")
-    parser.add_argument(
-        "--dataset", nargs=2, action="append", metavar=("name", "path"),
-        help="Can be specified multiple times. Ignore datasets given in "
-        "config and instead process these")
-    parser.add_argument(
-        "--condor", type=int, const=10, nargs="?", metavar="files_per_job",
-        help="Split and submit to HTCondor. By default for every 10 files a "
-        "job is created. The number can be changed by supplying it to this "
-        "option")
-    parser.add_argument(
-        "--skip_existing", action="store_true", help="Skip already existing "
-        "files")
-    parser.add_argument(
-        "--mc", action="store_true", help="Only process MC files")
-    args = parser.parse_args()
-
-    config = utils.Config(args.config)
-    store = config["store"]
-
-    datasets = {}
-    if args.dataset is None:
-        datasets = config["exp_datasets"]
-        if "MC" in datasets:
-            raise utils.ConfigError(
-                "MC must not be specified in config exp_datasets")
-        datasets["MC"] = []
-        for mc_datasets in config["mc_datasets"].values():
-            datasets["MC"].extend(mc_datasets)
-    else:
-        datasets = {}
-        for dataset in args.dataset:
-            if dataset[0] in datasets:
-                datasets[dataset[0]].append(dataset[1])
-            else:
-                datasets[dataset[0]] = [dataset[1]]
-
-    if args.skip_existing:
-        datasets, paths2dsname = utils.expand_datasetdict(
-            datasets, store, partial(skip_existing, args.dest))
-    else:
-        datasets, paths2dsname = utils.expand_datasetdict(datasets, store)
-    if args.mc:
-        paths2dsname = {path: dsname for path, dsname in paths2dsname.items()
-                        if dsname == "MC"}
-        datasets = {"MC": datasets["MC"]}
-    num_files = len(paths2dsname)
-    num_mc_files = len(datasets["MC"]) if "MC" in datasets else 0
-
-    print("Got a total of {} files of which {} are MC".format(num_files,
-                                                              num_mc_files))
-
-    if args.condor is not None:
-        print("Submitting to condor")
-        paths = list(paths2dsname.keys())
-        random.shuffle(paths)
-        path_batches = np.split(np.array(paths),
-                                np.arange(num_files, step=args.condor)[1:])
-        for batch in path_batches:
-            dataset_args = [["--dataset", paths2dsname[path], path]
-                            for path in batch]
-            arguments = (
-                [sys.executable, os.path.realpath(__file__)]
-                + [item for dataset_arg in dataset_args
-                   for item in dataset_arg]
-                + [os.path.realpath(args.config)]
-                + [os.path.realpath(args.dest)]
-                )
-            if args.skip_existing:
-                arguments.append("--skip_existing")
-            htc_cmssw = os.path.join(
-                os.path.dirname(__file__), "condor_cmssw.sh")
-            utils.condor_submit(
-                os.path.realpath(htc_cmssw), arguments, os.getcwd())
-        print("Submitted {} jobs".format(len(path_batches)))
-        sys.exit(0)
-
-    proc = Processor(config)
-    proc.process(paths2dsname)
