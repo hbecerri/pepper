@@ -75,9 +75,8 @@ if __name__ == "__main__":
     
     key = next(iter(datasets.keys()))
     datasets_debug = {key: datasets[key]}
-    proc = Processor(config)
     output = coffea.processor.run_uproot_job(
         datasets_debug, treename="Events",
-        processor_instance=Processor(config),
+        processor_instance=Processor(config, args.dest),
         executor=coffea.processor.iterative_executor,
-        executor_args={"workers": 4, "flatten": True, "processor_compression": None}, chunksize=100000)
+        executor_args={"workers": 4, "flatten": False, "processor_compression": None}, chunksize=100000)

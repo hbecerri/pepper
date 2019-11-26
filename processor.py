@@ -17,6 +17,59 @@ import coffea.processor as processor
 import utils
 import AdUtils
 
+
+class LazyTable(object):
+    """Wrapper for LazyDataFrame to allow slicing"""
+    def __init__(self, df, slic=None):
+        self._df = df
+        self._slice = slic
+
+    def _mergeslice(self, slic):
+        if self._slice is not None:
+            return self._slice[slic]
+        else:
+            return slic
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            idx = np.arange(key.indices(self.size))
+        elif isinstance(key, np.ndarray):
+            if key.ndim > 1:
+                raise IndexError("too many indices for table")
+            if key.dtype == np.bool:
+                if key.size > self.size:
+                    raise IndexError("boolean index too long")
+                idx = np.argwhere(key).flatten()
+            elif key.dtype == np.int:
+                outofbounds = key > self.size
+                if any(outofbounds):
+                    raise IndexError("index {} is out of bounds".format(key[np.argmax(outofbounds)]))
+                idx = key
+            else:
+                raise IndexError("numpy arrays used as indices must be of intger or boolean type")
+        else:
+            arr = self._df[key]
+            if self._slice is not None:
+                return arr[self._slice]
+            else:
+                return arr
+
+        return LazyTable(self._df, self._mergeslice(idx))
+
+    def __setitem__(self, key, value):
+        self._df[key] = value
+
+    def __delitem__(self, key):
+        del self._df[key]
+
+    @property
+    def size(self):
+        if self._slice is None:
+            return self._df.size
+        else:
+            return self._slice.size
+
+
 class Selector(object):
     """Keeps track of the current event selection and data"""
 
@@ -122,6 +175,13 @@ class Selector(object):
             cls = awkward.array.objects.Methods.maybemixin(type(data),
                                                            awkward.JaggedArray)
             unmasked_data = cls.fromcounts(counts, data.flatten())
+        elif isinstance(data, awkward.ChunkedArray):
+            counts = np.zeros(self.mask.shape, dtype=int)
+            counts[self.mask] = data.counts
+            unchunked = awkward.concatenate(data.chunks)
+            cls = awkward.array.objects.Methods.maybemixin(type(data),
+                                                           awkward.JaggedArray)
+            unmasked_data = cls.fromcounts(counts, unchunked.flatten())
         else:
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
@@ -139,12 +199,11 @@ class Selector(object):
 
         Arguments:
         columns -- Iteratable of column names from the table to save
-        path -- Path to the output file which to save to. The file will get
-                overwritten if it exists already.
+        path -- Path to the output file which to save to.
         savecutflow -- bool, whether to save the numbers of events after every
                        cut
         """
-        with h5py.File(path, "w") as f:
+        with h5py.File(path, "a") as f:
             out = awkward.hdf5(f)
             for column in columns:
                 out[column] = self.masked[column]
@@ -195,8 +254,9 @@ def get_trigger_paths_for(dataset, trigger_paths, trigger_order=None):
 
 
 class Processor(processor.ProcessorABC):
-    def __init__(self, config):
+    def __init__(self, config, dest):
         self.config = config
+        self.dest = dest
 
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]
@@ -238,7 +298,7 @@ class Processor(processor.ProcessorABC):
 
     def process(self, df):
         self.output = self.accumulator.identity()
-        selector = Selector(df)
+        selector = Selector(LazyTable(df))
 
         is_mc = df["dataset"] == "MC"
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
@@ -281,7 +341,7 @@ class Processor(processor.ProcessorABC):
                                 "Jet_" + key)
         selector.set_column(lambda d: d["Lepton"].pdgId, "Lepton_pdgId")
 
-        outpath = get_outpath(path, args.dest)
+        outpath = get_outpath(df["dataset"], self.dest)
         os.makedirs(os.path.dirname(outpath), exist_ok=True)
         selector.save_columns(["Lepton_pt",
                                "Lepton_eta",
@@ -296,8 +356,8 @@ class Processor(processor.ProcessorABC):
                                "weight",
                                "cutflags"], outpath)
 
-        self.output["cutflow"][dataset]=selector.cutflow
-        return output
+        self.output["cutflow"][df["dataset"]]=selector.cutflow
+        return self.output
 
     def branches_for_e_id(self, e_id):
         if e_id.startswith("cut:"):
@@ -382,7 +442,9 @@ class Processor(processor.ProcessorABC):
         if is_mc:
             return True
         else:
-            return self.lumimask(data["run"], data["luminosityBlock"])
+            run = np.array(data["run"])
+            luminosityBlock = np.array(data["luminosityBlock"])
+            return self.lumimask(run, luminosityBlock)
 
     def passing_trigger(self, pos_triggers, neg_triggers, data):
         trigger = (
@@ -421,6 +483,7 @@ class Processor(processor.ProcessorABC):
             passing_filters &= data["Flag_ecalBadCalibFilterV2"]
 
         return passing_filters
+
 
     def in_hem1516(self, phi, eta):
         return ((-2.4 < eta) & (eta < -1.6) & (-1.4 < phi) & (phi < -1.0))
@@ -629,11 +692,11 @@ class Processor(processor.ProcessorABC):
 
     def no_additional_leptons(self, data):
         e_sel = ~data["is_good_electron"]
-        add_ele = self.electron_id(config["additional_ele_id"], data) & e_sel
+        add_ele = self.electron_id(self.config["additional_ele_id"], data) & e_sel
 
-        m_iso = config["additional_muon_iso"]
+        m_iso = self.config["additional_muon_iso"]
         m_sel = ~data["is_good_muon"]
-        add_muon = (self.muon_id(config["additional_muon_id"], data)
+        add_muon = (self.muon_id(self.config["additional_muon_id"], data)
                     & (data["Muon_pfRelIso04_all"] < m_iso)
                     & m_sel)
         return (~add_ele.any()) & (~add_muon.any())
