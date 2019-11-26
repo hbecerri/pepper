@@ -17,6 +17,15 @@ import utils
 from processor import Processor
 from argparse import ArgumentParser
 
+def get_outpath(path, dest):
+    if path.startswith("/pnfs/desy.de/cms/tier2/store/"):
+        outpath = path.replace("/pnfs/desy.de/cms/tier2/store/", "")
+    else:
+        outpath = path
+    outpath = os.path.splitext(outpath)[0] + ".hdf5"
+    outpath = os.path.join(dest, outpath)
+    return outpath
+
 parser = ArgumentParser(description="Select events from nanoAODs")
 parser.add_argument("config", help="Path to a configuration file")
 parser.add_argument("dest", help="Path to destination output directory")
@@ -71,10 +80,21 @@ num_mc_files = len(datasets["MC"]) if "MC" in datasets else 0
 print("Got a total of {} files of which {} are MC".format(num_files,
                                                           num_mc_files))
 
-key = next(iter(datasets.keys()))
-datasets_debug = {key: datasets[key]}
+#key = next(iter(datasets.keys()))
+#datasets_debug = {key: datasets[key]}
 output = coffea.processor.run_uproot_job(
-    datasets_debug, treename="Events",
-    processor_instance=Processor(config, args.dest),
+    datasets, treename="Events",
+    processor_instance=Processor(config),
     executor=coffea.processor.iterative_executor,
     executor_args={"workers": 4, "flatten": False, "processor_compression": None}, chunksize=100000)
+
+for dataset in datasets.keys():
+    if len(output["flat cols"][dataset])+len(output["jagged cols"][dataset])>0:
+        outpath = get_outpath(dataset, args.dest)
+        os.makedirs(os.path.dirname(outpath), exist_ok=True)
+        with h5py.File(outpath, "a") as f:
+            out = awkward.hdf5(f)
+            for key in output["flat cols"][dataset].keys():
+                out[key]=output["flat cols"][dataset][key]
+            for key in output["jagged cols"][dataset].keys():
+                out[key]=output["jagged cols"][dataset][key]

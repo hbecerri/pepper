@@ -12,7 +12,7 @@ class JaggedArrayAccumulator(AccumulatorABC):
     def __init__(self, value):
         if not isinstance(value, awkward.JaggedArray):
             raise ValueError("JaggedArrayAccumulator only works with jagged arrays")
-        self._empty = numpy.zeros(dtype=value.dtype, shape=(0,) + value.shape[1:])
+        self._empty = np.zeros(dtype=value.dtype, shape=(0,) + value.shape[1:])
         self._value = value
 
     def __repr__(self):
@@ -22,7 +22,7 @@ class JaggedArrayAccumulator(AccumulatorABC):
         return column_accumulator(self._empty)
 
     def add(self, other):
-        if not isinstance(other, JaggedArrayaccumulator):
+        if not isinstance(other, JaggedArrayAccumulator):
             raise ValueError("JaggedArrayAccumulator cannot be added to %r" % type(other))
         
         self._value = awkward.JaggedArray.concatenate((self._value, other._value))

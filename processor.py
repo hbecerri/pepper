@@ -194,38 +194,41 @@ class Selector(object):
         self._recording = True
         self.table["cutflags"] = np.zeros(self.table.size, dtype=int)
 
-    def save_columns(self, columns, path, savecutflow=True):
-        """Save the currently selected events
+    def save_columns(self, p4s, other_cols):
+        '''Save the currently selected events
 
         Arguments:
-        columns -- Iteratable of column names from the table to save
-        path -- Path to the output file which to save to.
-        savecutflow -- bool, whether to save the numbers of events after every
-                       cut
-        """
-        with h5py.File(path, "a") as f:
-            out = awkward.hdf5(f)
-            for column in columns:
-                out[column] = self.masked[column]
-            if savecutflow:
-                out["cutflow"] = list(self.cutflow.items())
+        p4s - names of particle columns for which one wishes to save all the components of the four-momentum
+        other_cols - The other column one wishes to save
+        
+        Returns:
+        flat_dict - A defaultdict_accumulator containing accumulators of all the flat columns to be saved
+        jagged_dict - A defaultdict_accumulator containing accumulators of all the jagged columns to be saved
+        '''
+        flat_dict=processor.defaultdict_accumulator(partial(processor.column_accumulator, np.array([])))
+        jagged_dict=processor.defaultdict_accumulator(partial(
+                    AdUtils.JaggedArrayAccumulator, awkward.JaggedArray.fromcounts([], [])))
 
-
-def get_outpath(path, dest):
-    if path.startswith("/pnfs/desy.de/cms/tier2/store/"):
-        outpath = path.replace("/pnfs/desy.de/cms/tier2/store/", "")
-    else:
-        outpath = path
-    outpath = os.path.splitext(outpath)[0] + ".hdf5"
-    outpath = os.path.join(dest, outpath)
-    return outpath
-
+        for part in p4s:
+            if isinstance(self.masked[part], Jca):
+                for p in ('pt', 'eta', 'phi', 'mass'):
+                    jagged_dict[part+"_"+p] = AdUtils.JaggedArrayAccumulator(self.masked[part][p])
+            elif isinstance(self.masked[part], awkward.Table):
+                for p in ('pt', 'eta', 'phi', 'mass'):
+                    flat_dict[part+"_"+p] = processor.column_accumulator(self.masked[part][p])
+        
+        for col in other_cols:
+            if isinstance(self.masked[col], awkward.JaggedArray):
+                jagged_dict[col] = AdUtils.JaggedArrayAccumulator(self.masked[col])
+            if isinstance(self.masked[col], awkward.Table):
+                flat_dict[col] = processor.column_accumulator(self.masked[col])
+        return flat_dict, jagged_dict
 
 def skip_existing(dest, path):
     return os.path.exists(get_outpath(path, dest))
 
 
-def get_trigger_paths_for(dataset, trigger_paths, trigger_order=None):
+def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None):
     """Get trigger paths needed for the specific dataset.
 
     Arguments:
@@ -241,7 +244,7 @@ def get_trigger_paths_for(dataset, trigger_paths, trigger_order=None):
     """
     pos_triggers = []
     neg_triggers = []
-    if dataset == "MC" or dataset == "all":
+    if is_mc:
         for paths in trigger_paths.values():
             pos_triggers.extend(paths)
     else:
@@ -254,9 +257,8 @@ def get_trigger_paths_for(dataset, trigger_paths, trigger_order=None):
 
 
 class Processor(processor.ProcessorABC):
-    def __init__(self, config, dest):
+    def __init__(self, config):
         self.config = config
-        self.dest = dest
 
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]
@@ -300,11 +302,12 @@ class Processor(processor.ProcessorABC):
         self.output = self.accumulator.identity()
         selector = Selector(LazyTable(df))
 
-        is_mc = df["dataset"] == "MC"
+        dsname = df["dataset"]
+        is_mc = (dsname in self.config["mc_datasets"].keys())
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
         pos_triggers, neg_triggers = get_trigger_paths_for(
-            df["dataset"], self.trigger_paths, self.trigger_order)
+            dsname, is_mc, self.trigger_paths, self.trigger_order)
         selector.add_cut(partial(
             self.passing_trigger, pos_triggers, neg_triggers), "Trigger")
 
@@ -341,22 +344,20 @@ class Processor(processor.ProcessorABC):
                                 "Jet_" + key)
         selector.set_column(lambda d: d["Lepton"].pdgId, "Lepton_pdgId")
 
-        outpath = get_outpath(df["dataset"], self.dest)
-        os.makedirs(os.path.dirname(outpath), exist_ok=True)
-        selector.save_columns(["Lepton_pt",
-                               "Lepton_eta",
-                               "Lepton_phi",
-                               "Lepton_mass",
-                               "Lepton_pdgId",
-                               "Jet_pt",
-                               "Jet_eta",
-                               "Jet_phi",
-                               "Jet_mass",
-                               "MET_sumEt",
-                               "weight",
-                               "cutflags"], outpath)
+        self.output["flat cols"][dsname], self.output["jagged cols"][dsname] = \
+                selector.save_columns(p4s=[], other_cols=["Lepton_pt",
+                                                          "Lepton_eta",
+                                                          "Lepton_phi",
+                                                          "Lepton_mass",
+                                                          "Lepton_pdgId",
+                                                          "Jet_pt",
+                                                          "Jet_eta",
+                                                          "Jet_phi",
+                                                          "Jet_mass",
+                                                          "MET_sumEt", 
+                                                          "weight"])
 
-        self.output["cutflow"][df["dataset"]]=selector.cutflow
+        self.output["cutflow"][dsname]=selector.cutflow
         return self.output
 
     def branches_for_e_id(self, e_id):
