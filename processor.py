@@ -100,22 +100,22 @@ class Selector(object):
         else:
             return self.table
 
-    def with_cuts(self, *names, All=False):
+    def with_cuts(self, *names, allcuts=False):
         '''
         Add to the list of cuts to be considered by masked
 
         Arguments:
         -*names: strings with names of cuts to add
-        -All: May be set to true instead of supplying names to consider all
+        -allcuts: May be set to true instead of supplying names to consider all
               currently applied cuts, but not future ones
         '''
-        if All:
+        if allcuts:
             self._current_cuts = copy(self._cuts.names)
         else:
             self._current_cuts.extend(names)
 
-    def without_cuts(self, *names, All=False):
-        if All:
+    def without_cuts(self, *names, allcuts=False):
+        if allcuts:
             self._current_cuts = []
         else:
             for name in names:
@@ -321,7 +321,7 @@ class Processor(processor.ProcessorABC):
         selector.set_column(self.good_muon, "is_good_muon")
         selector.set_column(self.build_lepton_column, "Lepton")
         selector.add_cut(self.exactly_lepton_pair, "#Lep = 2")
-        selector.with_cuts(All=True)
+        selector.with_cuts(allcuts=True)
         selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
         selector.set_column(self.same_flavor, "is_same_flavor")
 
