@@ -81,7 +81,7 @@ class Selector(object):
         '''Create a new Selector
 
         Arguments:
-        table -- An awkward.Table holding the events' data
+        table -- An `awkward.Table` or `LazyTable` holding the events' data
         '''
         self.table = table
         self._cuts = AdUtils.PackedSelectionAccumulator()
@@ -93,7 +93,7 @@ class Selector(object):
     def masked(self):
         '''Get currently selected events
 
-        Returns an awkward.Table of the currently selected events
+        Returns an `awkward.Table` of the currently selected events
         '''
         if len(self._current_cuts) > 0:
             return self.table[self._cuts.all(*self._current_cuts)]
@@ -102,12 +102,12 @@ class Selector(object):
 
     def with_cuts(self, *names, allcuts=False):
         '''
-        Add to the list of cuts to be considered by masked
+        Select the cuts that are considered for the current selection
 
         Arguments:
-        -*names: strings with names of cuts to add
-        -allcuts: May be set to true instead of supplying names to consider all
-              currently applied cuts, but not future ones
+        names -- Strings with names of cuts to add
+        allcuts -- May be set to true instead of supplying names to consider
+                   all currently applied cuts, but not future ones
         '''
         if allcuts:
             self._current_cuts = copy(self._cuts.names)
@@ -115,6 +115,11 @@ class Selector(object):
             self._current_cuts.extend(names)
 
     def without_cuts(self, *names, allcuts=False):
+        """
+        Deselect the cuts that are considered for the current selection
+
+        For arguments see with_cuts
+        """
         if allcuts:
             self._current_cuts = []
         else:
@@ -127,11 +132,10 @@ class Selector(object):
         return self._cutflow
 
     def add_cut(self, accept, name):
-        """Adds a cut to the current selection
+        """Adds a cut
 
-        If the selector is not recording, the current selection will get
-        modified according to the cut. Otherwise the cut will be recorded in
-        a cutflags bit in the table.
+        Cuts control what events get fed into later cuts, get saved and are
+        given by `masked`.
 
         Arguments:
         accept -- A function that will be called with a table of the currently
