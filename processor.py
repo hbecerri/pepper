@@ -43,10 +43,13 @@ class LazyTable(object):
             elif key.dtype == np.int:
                 outofbounds = key > self.size
                 if any(outofbounds):
-                    raise IndexError("index {} is out of bounds".format(key[np.argmax(outofbounds)]))
+                    raise IndexError("index {} is out of bounds"
+                                     .format(
+                                        key[np.argmax(outofbounds)]))
                 idx = key
             else:
-                raise IndexError("numpy arrays used as indices must be of intger or boolean type")
+                raise IndexError("numpy arrays used as indices must be "
+                                 "of intger or boolean type")
         else:
             arr = self._df[key]
             if self._slice is not None:
@@ -198,31 +201,41 @@ class Selector(object):
         '''Save the currently selected events
 
         Arguments:
-        p4s - names of particle columns for which one wishes to save all the components of the four-momentum
+        p4s - names of particle columns for which one wishes to save all
+              the components of the four-momentum
         other_cols - The other column one wishes to save
-        
+
         Returns:
-        flat_dict - A defaultdict_accumulator containing accumulators of all the flat columns to be saved
-        jagged_dict - A defaultdict_accumulator containing accumulators of all the jagged columns to be saved
+        flat_dict - A defaultdict_accumulator containing accumulators of
+                    all the flat columns to be saved
+        jagged_dict - A defaultdict_accumulator containing accumulators
+                      of all the jagged columns to be saved
         '''
-        flat_dict=processor.defaultdict_accumulator(partial(processor.column_accumulator, np.array([])))
-        jagged_dict=processor.defaultdict_accumulator(partial(
-                    AdUtils.JaggedArrayAccumulator, awkward.JaggedArray.fromcounts([], [])))
+        flat_dict = processor.defaultdict_accumulator(partial(
+            processor.column_accumulator, np.array([])))
+        jagged_dict = processor.defaultdict_accumulator(partial(
+            AdUtils.JaggedArrayAccumulator,
+            awkward.JaggedArray.fromcounts([], [])))
 
         for part in p4s:
             if isinstance(self.masked[part], Jca):
-                for p in ('pt', 'eta', 'phi', 'mass'):
-                    jagged_dict[part+"_"+p] = AdUtils.JaggedArrayAccumulator(self.masked[part][p])
+                for p in ("pt", "eta", "phi", "mass"):
+                    jagged_dict[part + "_" + p] =\
+                        AdUtils.JaggedArrayAccumulator(self.masked[part][p])
             elif isinstance(self.masked[part], awkward.Table):
-                for p in ('pt', 'eta', 'phi', 'mass'):
-                    flat_dict[part+"_"+p] = processor.column_accumulator(self.masked[part][p])
-        
+                for p in ("pt", "eta", "phi", "mass"):
+                    flat_dict[part + "_" + p] =\
+                        processor.column_accumulator(self.masked[part][p])
+
         for col in other_cols:
             if isinstance(self.masked[col], awkward.JaggedArray):
-                jagged_dict[col] = AdUtils.JaggedArrayAccumulator(self.masked[col])
+                jagged_dict[col] = AdUtils.JaggedArrayAccumulator(
+                    self.masked[col])
             if isinstance(self.masked[col], awkward.Table):
-                flat_dict[col] = processor.column_accumulator(self.masked[col])
+                flat_dict[col] = processor.column_accumulator(
+                    self.masked[col])
         return flat_dict, jagged_dict
+
 
 def skip_existing(dest, path):
     return os.path.exists(get_outpath(path, dest))
@@ -290,13 +303,13 @@ class Processor(processor.ProcessorABC):
                     processor.column_accumulator, np.array([])))),
             "jagged cols": processor.defaultdict_accumulator(
                 partial(processor.defaultdict_accumulator, partial(
-                    AdUtils.JaggedArrayAccumulator, awkward.JaggedArray.fromcounts([], []))))
+                    AdUtils.JaggedArrayAccumulator,
+                    awkward.JaggedArray.fromcounts([], []))))
         })
         return self._accumulator
 
     def postprocess(self, accumulator):
         return accumulator
-
 
     def process(self, df):
         self.output = self.accumulator.identity()
@@ -344,100 +357,21 @@ class Processor(processor.ProcessorABC):
                                 "Jet_" + key)
         selector.set_column(lambda d: d["Lepton"].pdgId, "Lepton_pdgId")
 
-        self.output["flat cols"][dsname], self.output["jagged cols"][dsname] = \
-                selector.save_columns(p4s=[], other_cols=["Lepton_pt",
-                                                          "Lepton_eta",
-                                                          "Lepton_phi",
-                                                          "Lepton_mass",
-                                                          "Lepton_pdgId",
-                                                          "Jet_pt",
-                                                          "Jet_eta",
-                                                          "Jet_phi",
-                                                          "Jet_mass",
-                                                          "MET_sumEt", 
-                                                          "weight"])
+        self.output["flat cols"][dsname], self.output["jagged cols"][dsname] =\
+            selector.save_columns(p4s=[], other_cols=["Lepton_pt",
+                                                      "Lepton_eta",
+                                                      "Lepton_phi",
+                                                      "Lepton_mass",
+                                                      "Lepton_pdgId",
+                                                      "Jet_pt",
+                                                      "Jet_eta",
+                                                      "Jet_phi",
+                                                      "Jet_mass",
+                                                      "MET_sumEt",
+                                                      "weight"])
 
-        self.output["cutflow"][dsname]=selector.cutflow
+        self.output["cutflow"][dsname] = selector.cutflow
         return self.output
-
-    def branches_for_e_id(self, e_id):
-        if e_id.startswith("cut:"):
-            return "Electron_cutBased"
-        elif e_id == "mva:wp80":
-            return "Electron_WP80"
-        elif e_id == "mva:wp90":
-            return "Electron_WP90"
-        return None
-
-    def branches_for_m_id(self, m_id):
-        if m_id == "cut:loose":
-            return "Muon_looseId"
-        elif m_id == "cut:medium":
-            return "Muon_mediumId"
-        elif m_id == "cut:tight":
-            return "Muon_tightId"
-        elif m_id.startswith("mva:"):
-            return "Muon_mvaId"
-        return None
-
-    def branches_for_j_id(self, j_id):
-        if j_id.startswith("cut:"):
-            return "Jet_jetId"
-        return None
-
-    def branches(self, branch):
-        # Read branches if they exist. The less branches are read,
-        # the shorter the execution time.
-        # Needs uproot version 3.10.10
-        req = [
-            "run",  # Needed for lumimask
-            "luminosityBlock",  # Needed for lumimask
-            "genWeight",  # Needed for weighting and distinguishing MC and data
-            "Electron_pt",
-            "Electron_eta",
-            "Electron_deltaEtaSC",
-            "Electron_phi",
-            "Electron_mass",
-            "Electron_pdgId",
-            "Muon_pt",
-            "Muon_eta",
-            "Muon_phi",
-            "Muon_mass",
-            "Muon_pdgId",
-            "Muon_pfRelIso04_all",
-            "Jet_pt",
-            "Jet_eta",
-            "Jet_phi",
-            "Jet_mass",
-            "MET_sumEt"
-        ]
-
-        if self.config["filter_year"].lower() != "none":
-            req.extend(["Flag_goodVertices",
-                        "Flag_globalSuperTightHalo2016Filter",
-                        "Flag_HBHENoiseFilter",
-                        "Flag_HBHENoiseIsoFilter",
-                        "Flag_EcalDeadCellTriggerPrimitiveFilter",
-                        "Flag_BadPFMuonFilter",
-                        "Flag_eeBadScFilter",
-                        "Flag_ecalBadCalibFilterV2"])
-
-        req.append(self.branches_for_e_id(self.config["good_ele_id"]))
-        req.append(self.branches_for_e_id(self.config["additional_ele_id"]))
-        req.append(self.branches_for_m_id(self.config["good_muon_id"]))
-        req.append(self.branches_for_m_id(self.config["additional_muon_id"]))
-        req.append(self.branches_for_j_id(self.config["good_jet_id"]))
-
-        if self.config["btag"].startswith("deepcvs"):
-            req.append("Jet_btagDeepB")
-        elif self.config["btag"].startswith("deepjet"):
-            req.append("Jet_btagDeepFlavB")
-
-        req.extend(get_trigger_paths_for("all", self.trigger_paths)[0])
-        for paths in self.config["channel_trigger_map"].values():
-            req.extend(paths)
-
-        return branch.name.decode("utf-8") in req
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
@@ -469,12 +403,13 @@ class Processor(processor.ProcessorABC):
         if filter_year == "none":
             return np.full(data.shape, True)
         elif filter_year in ("2018", "2017", "2016"):
-            passing_filters = (data["Flag_goodVertices"]
-                               & data["Flag_globalSuperTightHalo2016Filter"]
-                               & data["Flag_HBHENoiseFilter"]
-                               & data["Flag_HBHENoiseIsoFilter"]
-                               & data["Flag_EcalDeadCellTriggerPrimitiveFilter"]
-                               & data["Flag_BadPFMuonFilter"])
+            passing_filters =\
+                (data["Flag_goodVertices"]
+                 & data["Flag_globalSuperTightHalo2016Filter"]
+                 & data["Flag_HBHENoiseFilter"]
+                 & data["Flag_HBHENoiseIsoFilter"]
+                 & data["Flag_EcalDeadCellTriggerPrimitiveFilter"]
+                 & data["Flag_BadPFMuonFilter"])
             if not is_mc:
                 passing_filters &= data["Flag_eeBadScFilter"]
         else:
@@ -484,7 +419,6 @@ class Processor(processor.ProcessorABC):
             passing_filters &= data["Flag_ecalBadCalibFilterV2"]
 
         return passing_filters
-
 
     def in_hem1516(self, phi, eta):
         return ((-2.4 < eta) & (eta < -1.6) & (-1.4 < phi) & (phi < -1.0))
@@ -693,7 +627,8 @@ class Processor(processor.ProcessorABC):
 
     def no_additional_leptons(self, data):
         e_sel = ~data["is_good_electron"]
-        add_ele = self.electron_id(self.config["additional_ele_id"], data) & e_sel
+        add_ele = (self.electron_id(self.config["additional_ele_id"], data)
+                   & e_sel)
 
         m_iso = self.config["additional_muon_iso"]
         m_sel = ~data["is_good_muon"]
