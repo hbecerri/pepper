@@ -118,7 +118,7 @@
         "EGamma",
         "SingleMuon"
     ],
-    "channel_trigger_map": {git push origin --force --all
+    "channel_trigger_map": {
         "ee": [
             "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL",
             "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL_DZ"
