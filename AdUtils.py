@@ -6,7 +6,39 @@ from coffea.util import awkward
 from coffea.util import numpy as np
 import uproot_methods
 from uproot_methods.classes.TLorentzVector import PtEtaPhiMassLorentzVector as LV
+from coffea.processor import PackedSelection
 from coffea.processor import AccumulatorABC
+
+class PackedSelectionAccumulator(PackedSelection, AccumulatorABC):
+    def add_cut(self, name, selection):
+        return super(PackedSelectionAccumulator, self).add(name, selection)
+    
+    def identity(self):
+        return PackedSelectionAccumulator(dtype=self._dtype)
+    
+    def add(self, other):
+        if len(other.names)==0:
+            return self
+        elif len(self.names)==0:
+            return other
+        if self.names!=other.names:
+            if len(self.names)>len(other.names):
+                other=self._extend(other, self)
+            elif len(other.names)<len(self.names):
+                self=self._extend(self, other)
+            else:
+                raise ValueError("Names of cuts do not match")
+        self._mask=np.concatenate(self._mask, other._mask)
+        return self
+
+    @staticmethod
+    def _extend(short_names, long_names):
+        if long_names.names[:len(short_names.names)]==short_names.names:
+            for name in long_names.names[len(short_names.names):]:
+                short_names.add_cut(name, np.full(len(short_names._mask), True))
+        else:
+            raise ValueError("Names of cuts do not match")
+        return short_names
 
 class JaggedArrayAccumulator(AccumulatorABC):
     def __init__(self, value):

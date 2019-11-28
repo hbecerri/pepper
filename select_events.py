@@ -96,7 +96,7 @@ for dataset in datasets.keys():
        + len(output["jagged cols"][dataset])) > 0:
         outpath = get_outpath(dataset, args.dest)
         os.makedirs(os.path.dirname(outpath), exist_ok=True)
-        with h5py.File(outpath, "a") as f:
+        with h5py.File(outpath, "w") as f:
             out = awkward.hdf5(f)
             for key in output["flat cols"][dataset].keys():
                 out[key] = output["flat cols"][dataset][key]

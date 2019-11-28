@@ -2,6 +2,7 @@
 
 import os
 import sys
+from copy import copy
 import numpy as np
 import awkward
 import h5py
@@ -77,47 +78,47 @@ class Selector(object):
     """Keeps track of the current event selection and data"""
 
     def __init__(self, table):
-        """Create a new Selector
+        '''Create a new Selector
 
         Arguments:
         table -- An awkward.Table holding the events' data
-        """
+        '''
         self.table = table
-        self.mask = np.full(self.table.size, True)
-        self._recording = False
-        self._cutbitpos = 0
+        self._cuts = AdUtils.PackedSelectionAccumulator()
         self._cutflow = processor.defaultdict_accumulator(int)
-        self._cutflow["Events preselection"] += self.num_after_all_cuts
+        self._cutflow["Events preselection"] += self.table["genWeight"].sum()
+        self._current_cuts=[]
 
     @property
     def masked(self):
-        """Get currently selected events
+        '''Get currently selected events
 
         Returns an awkward.Table of the currently selected events
-        """
-        return self.table[self.mask]
+        '''
+        if len(self._current_cuts)>0:
+            return self.table[self._cuts.all(*self._current_cuts)]
+        else: return self.table
 
-    @property
-    def num_selected(self):
-        """Get the number of currently selected events
-
-        Stays the same after the first call of start_recording.
-        """
-        return self.mask.sum()
-
-    @property
-    def num_after_all_cuts(self):
-        """Get the number of events after all cuts applied"""
-        if self._cutbitpos == 0:
-            return self.num_selected
+    def with_cuts(self, *names, All=False):
+        '''
+        Add to the list of cuts to be considered by masked
+        
+        Arguments:
+        -*names: strings with names of cuts to add
+        -All: may be set to true instead of supplying names to consider all currently
+         applied cuts, but not future ones 
+        '''
+        if All:
+            self._current_cuts = copy(self._cuts.names)
         else:
-            allcutflags = (1 << self._cutbitpos) - 1
-            return (self.masked["cutflags"] == allcutflags).sum()
+            self._current_cuts.extend(names)
 
-    @property
-    def is_recording(self):
-        """Return whether the selector is currently recording"""
-        return self._recording
+    def without_cuts(self, *names, All=False):
+        if All:
+            self._current_cuts = []
+        else:
+            for name in names:
+                self._current_cuts.remove(name)
 
     @property
     def cutflow(self):
@@ -141,16 +142,13 @@ class Selector(object):
         """
         if name in self._cutflow:
             raise ValueError("A cut with name {} exists already".format(name))
-        if self.mask.any():
-            accepted = accept(self.masked)
-            if not self._recording:
-                self.mask[self.mask] &= accepted
-            else:
-                flag = accepted.astype(int) << self._cutbitpos
-                self.table["cutflags"][self.mask] = (self.masked["cutflags"]
-                                                     | flag)
-                self._cutbitpos += 1
-        self._cutflow[name] = self.num_after_all_cuts
+        accepted = accept(self.masked)
+        if len(self._current_cuts)>0:
+            cut = np.full(len(self._cuts.all(*self._current_cuts)), False)
+            cut[self._cuts.all(*self._current_cuts)] = accepted
+        else: cut = accepted
+        self._cuts.add_cut(name, cut)
+        self._cutflow[name] += self.table["genWeight"][self._cuts.all(*self._cuts.names)].sum()
 
     def set_column(self, column, column_name):
         """Sets a column of the table
@@ -165,22 +163,19 @@ class Selector(object):
         """
         if not isinstance(column_name, str):
             raise ValueError("column_name needs to be string")
-        if not self.mask.any():
-            data = np.array([])
-        else:
-            data = column(self.masked)
+        data = column(self.masked)
         if isinstance(data, np.ndarray):
-            unmasked_data = np.empty_like(self.mask, dtype=data.dtype)
-            unmasked_data[self.mask] = data
+            unmasked_data = np.empty(len(self._cuts.all(*self._current_cuts)), dtype=data.dtype)
+            unmasked_data[self._cuts.all(*self._current_cuts)] = data
         elif isinstance(data, awkward.JaggedArray):
-            counts = np.zeros(self.mask.shape, dtype=int)
-            counts[self.mask] = data.counts
+            counts = np.zeros(len(self._cuts.all(*self._current_cuts)), dtype=int)
+            counts[self._cuts.all(*self._current_cuts)] = data.counts
             cls = awkward.array.objects.Methods.maybemixin(type(data),
                                                            awkward.JaggedArray)
             unmasked_data = cls.fromcounts(counts, data.flatten())
         elif isinstance(data, awkward.ChunkedArray):
-            counts = np.zeros(self.mask.shape, dtype=int)
-            counts[self.mask] = data.counts
+            counts = np.zeros(self._cuts.all(*self._current_cuts).sum(), dtype=int)
+            counts[self._cuts.all(*self._current_cuts)] = data.counts
             unchunked = awkward.concatenate(data.chunks)
             cls = awkward.array.objects.Methods.maybemixin(type(data),
                                                            awkward.JaggedArray)
@@ -188,14 +183,6 @@ class Selector(object):
         else:
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
-
-    def start_recording(self):
-        """Start recording
-
-        This changes the behavior of add_cut.
-        """
-        self._recording = True
-        self.table["cutflags"] = np.zeros(self.table.size, dtype=int)
 
     def save_columns(self, p4s, other_cols):
         '''Save the currently selected events
@@ -330,10 +317,9 @@ class Processor(processor.ProcessorABC):
         selector.set_column(self.good_muon, "is_good_muon")
         selector.set_column(self.build_lepton_column, "Lepton")
         selector.add_cut(self.exactly_lepton_pair, "#Lep = 2")
+        selector.with_cuts(All=True)
         selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
         selector.set_column(self.same_flavor, "is_same_flavor")
-
-        selector.start_recording()
 
         selector.add_cut(self.channel_trigger_matching, "Chn. trig. match")
         selector.add_cut(self.lep_pt_requirement, "Req lep pT")
@@ -341,11 +327,13 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.no_additional_leptons, "No add. leps")
         selector.add_cut(self.z_window, "Z window")
 
+        selector.without_cuts("#Lep = 2")
         selector.set_column(self.good_jet, "is_good_jet")
         selector.set_column(self.build_jet_column, "Jet")
         selector.add_cut(self.has_jets, "#Jets >= n")
         selector.add_cut(self.jet_pt_requirement, "Req jet pT")
         selector.add_cut(self.btag, "B-tag")
+        selector.with_cuts("#Lep = 2")
         selector.add_cut(self.met_requirement, "Req MET")
 
         selector.set_column(partial(self.compute_weight, is_mc), "weight")
@@ -375,7 +363,7 @@ class Processor(processor.ProcessorABC):
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
-            return True
+            return np.full(len(data["genWeight"]), True)
         else:
             run = np.array(data["run"])
             luminosityBlock = np.array(data["luminosityBlock"])
