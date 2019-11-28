@@ -87,7 +87,7 @@ class Selector(object):
         self._cuts = AdUtils.PackedSelectionAccumulator()
         self._cutflow = processor.defaultdict_accumulator(int)
         self._cutflow["Events preselection"] += self.table["genWeight"].sum()
-        self._current_cuts=[]
+        self._current_cuts = []
 
     @property
     def masked(self):
@@ -95,18 +95,19 @@ class Selector(object):
 
         Returns an awkward.Table of the currently selected events
         '''
-        if len(self._current_cuts)>0:
+        if len(self._current_cuts) > 0:
             return self.table[self._cuts.all(*self._current_cuts)]
-        else: return self.table
+        else:
+            return self.table
 
     def with_cuts(self, *names, All=False):
         '''
         Add to the list of cuts to be considered by masked
-        
+
         Arguments:
         -*names: strings with names of cuts to add
-        -All: may be set to true instead of supplying names to consider all currently
-         applied cuts, but not future ones 
+        -All: May be set to true instead of supplying names to consider all
+              currently applied cuts, but not future ones
         '''
         if All:
             self._current_cuts = copy(self._cuts.names)
@@ -143,12 +144,14 @@ class Selector(object):
         if name in self._cutflow:
             raise ValueError("A cut with name {} exists already".format(name))
         accepted = accept(self.masked)
-        if len(self._current_cuts)>0:
+        if len(self._current_cuts) > 0:
             cut = np.full(len(self._cuts.all(*self._current_cuts)), False)
             cut[self._cuts.all(*self._current_cuts)] = accepted
-        else: cut = accepted
+        else:
+            cut = accepted
         self._cuts.add_cut(name, cut)
-        self._cutflow[name] += self.table["genWeight"][self._cuts.all(*self._cuts.names)].sum()
+        self._cutflow[name] += \
+            self.table["genWeight"][self._cuts.all(*self._cuts.names)].sum()
 
     def set_column(self, column, column_name):
         """Sets a column of the table
@@ -165,16 +168,19 @@ class Selector(object):
             raise ValueError("column_name needs to be string")
         data = column(self.masked)
         if isinstance(data, np.ndarray):
-            unmasked_data = np.empty(len(self._cuts.all(*self._current_cuts)), dtype=data.dtype)
+            unmasked_data = np.empty(
+                len(self._cuts.all(*self._current_cuts)), dtype=data.dtype)
             unmasked_data[self._cuts.all(*self._current_cuts)] = data
         elif isinstance(data, awkward.JaggedArray):
-            counts = np.zeros(len(self._cuts.all(*self._current_cuts)), dtype=int)
+            counts = np.zeros(
+                len(self._cuts.all(*self._current_cuts)), dtype=int)
             counts[self._cuts.all(*self._current_cuts)] = data.counts
             cls = awkward.array.objects.Methods.maybemixin(type(data),
                                                            awkward.JaggedArray)
             unmasked_data = cls.fromcounts(counts, data.flatten())
         elif isinstance(data, awkward.ChunkedArray):
-            counts = np.zeros(self._cuts.all(*self._current_cuts).sum(), dtype=int)
+            counts = np.zeros(
+                self._cuts.all(*self._current_cuts).sum(), dtype=int)
             counts[self._cuts.all(*self._current_cuts)] = data.counts
             unchunked = awkward.concatenate(data.chunks)
             cls = awkward.array.objects.Methods.maybemixin(type(data),
