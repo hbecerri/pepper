@@ -116,7 +116,7 @@ output = processor.run_parsl_job(fileset,
                                  executor=parsl_executor,
                                  chunksize = 100000)
 
-outfile = uproot.recreate('GenHists.root')
+outfile = uproot.recreate('/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/data/GenHists.root')
 outfile['Mlbbar'] = hist.export1d(output['Mlbbar'])
 outfile['Mlbarb'] = hist.export1d(output['Mlbarb'])
 outfile['Mlb'] = hist.export1d(output['Mlbbar'].add(output['Mlbarb']))
