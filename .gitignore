@@ -2,3 +2,4 @@ runinfo
 stafford.cc
 log.txt
 __pycache__
+*.hdf5
