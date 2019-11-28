@@ -127,6 +127,19 @@ class Selector(object):
                 self._current_cuts.remove(name)
 
     @property
+    def _idxs(self):
+        return self._cuts.all(*self._cuts)
+
+    @property
+    def _cur_idxs(self):
+        return self._cuts.all(*self._current_cuts)
+
+    @property
+    def num_selected(self):
+        """Return the number of currently selected events"""
+        return len(self._cur_idxs)
+
+    @property
     def cutflow(self):
         """Return an ordered dict of cut name -> selected events"""
         return self._cutflow
