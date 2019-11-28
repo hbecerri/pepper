@@ -248,12 +248,10 @@ def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None):
     dataset -- Name of the dataset
     trigger_paths -- dict mapping dataset names to their triggers
     trigger_order -- List of datasets to define the order in which the triggers
-                     are applied. Optional if dataset == "all"
+                     are applied.
 
     Returns a tuple of lists (pos_triggers, neg_triggers) describing trigger
-    paths to include and to exclude respectively. if dataset == "all", all
-    trigger paths will be returned as pos_triggers, while neg_triggers will be
-    empty.
+    paths to include and to exclude respectively.
     """
     pos_triggers = []
     neg_triggers = []
