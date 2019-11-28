@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
 
 import os
-import sys
-from copy import copy
 import numpy as np
 import awkward
-import h5py
-import uproot
 import coffea
 from coffea.analysis_objects import JaggedCandidateArray as CandArray
-from time import time
-import random
-from functools import partial
-from collections import OrderedDict
 import coffea.processor as processor
+from functools import partial
 
 import utils
 import AdUtils
@@ -110,7 +103,7 @@ class Selector(object):
                    all currently applied cuts, but not future ones
         '''
         if allcuts:
-            self._current_cuts = copy(self._cuts.names)
+            self._current_cuts = self._cuts.names.copy()
         else:
             self._current_cuts.extend(names)
 
