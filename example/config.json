@@ -118,7 +118,7 @@
         "EGamma",
         "SingleMuon"
     ],
-    "channel_trigger_map": {
+    "channel_trigger_map": {git push origin --force --all
         "ee": [
             "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL",
             "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL_DZ"
@@ -143,6 +143,8 @@
     },
     "filter_year": "2018",
     "mc_lumifactors": "/nfs/dust/cms/user/ruebenaj/analysis/mc_lumifactors.json",
+
+    "Mlb_hist_file": "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/data/GenHists.root"
 
     "good_ele_cut_hem": true,
     "good_ele_cut_transreg": true,
