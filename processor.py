@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
 
 import os
-import sys
-from copy import copy
 import numpy as np
 import awkward
-import h5py
-import uproot
 import coffea
 from coffea.analysis_objects import JaggedCandidateArray as CandArray
-from time import time
-import random
-from functools import partial
-from collections import OrderedDict
 import coffea.processor as processor
+from functools import partial
 
 import utils
 import AdUtils
@@ -81,7 +74,7 @@ class Selector(object):
         '''Create a new Selector
 
         Arguments:
-        table -- An awkward.Table holding the events' data
+        table -- An `awkward.Table` or `LazyTable` holding the events' data
         '''
         self.table = table
         self._cuts = AdUtils.PackedSelectionAccumulator()
@@ -93,33 +86,51 @@ class Selector(object):
     def masked(self):
         '''Get currently selected events
 
-        Returns an awkward.Table of the currently selected events
+        Returns an `awkward.Table` of the currently selected events
         '''
         if len(self._current_cuts) > 0:
             return self.table[self._cuts.all(*self._current_cuts)]
         else:
             return self.table
 
-    def with_cuts(self, *names, All=False):
+    def with_cuts(self, *names, allcuts=False):
         '''
-        Add to the list of cuts to be considered by masked
+        Select the cuts that are considered for the current selection
 
         Arguments:
-        -*names: strings with names of cuts to add
-        -All: May be set to true instead of supplying names to consider all
-              currently applied cuts, but not future ones
+        names -- Strings with names of cuts to add
+        allcuts -- May be set to true instead of supplying names to consider
+                   all currently applied cuts, but not future ones
         '''
-        if All:
-            self._current_cuts = copy(self._cuts.names)
+        if allcuts:
+            self._current_cuts = self._cuts.names.copy()
         else:
             self._current_cuts.extend(names)
 
-    def without_cuts(self, *names, All=False):
-        if All:
+    def without_cuts(self, *names, allcuts=False):
+        """
+        Deselect the cuts that are considered for the current selection
+
+        For arguments see with_cuts
+        """
+        if allcuts:
             self._current_cuts = []
         else:
             for name in names:
                 self._current_cuts.remove(name)
+
+    @property
+    def _idxs(self):
+        return self._cuts.all(*self._cuts)
+
+    @property
+    def _cur_idxs(self):
+        return self._cuts.all(*self._current_cuts)
+
+    @property
+    def num_selected(self):
+        """Return the number of currently selected events"""
+        return len(self._cur_idxs)
 
     @property
     def cutflow(self):
@@ -127,11 +138,10 @@ class Selector(object):
         return self._cutflow
 
     def add_cut(self, accept, name):
-        """Adds a cut to the current selection
+        """Adds a cut
 
-        If the selector is not recording, the current selection will get
-        modified according to the cut. Otherwise the cut will be recorded in
-        a cutflags bit in the table.
+        Cuts control what events get fed into later cuts, get saved and are
+        given by `masked`.
 
         Arguments:
         accept -- A function that will be called with a table of the currently
@@ -244,12 +254,10 @@ def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None):
     dataset -- Name of the dataset
     trigger_paths -- dict mapping dataset names to their triggers
     trigger_order -- List of datasets to define the order in which the triggers
-                     are applied. Optional if dataset == "all"
+                     are applied.
 
     Returns a tuple of lists (pos_triggers, neg_triggers) describing trigger
-    paths to include and to exclude respectively. if dataset == "all", all
-    trigger paths will be returned as pos_triggers, while neg_triggers will be
-    empty.
+    paths to include and to exclude respectively.
     """
     pos_triggers = []
     neg_triggers = []
@@ -328,7 +336,7 @@ class Processor(processor.ProcessorABC):
         selector.set_column(self.good_muon, "is_good_muon")
         selector.set_column(self.build_lepton_column, "Lepton")
         selector.add_cut(self.exactly_lepton_pair, "#Lep = 2")
-        selector.with_cuts(All=True)
+        selector.with_cuts(allcuts=True)
         selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
         selector.set_column(self.same_flavor, "is_same_flavor")
 
