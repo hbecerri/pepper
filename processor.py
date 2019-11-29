@@ -74,27 +74,30 @@ class Selector(object):
     """Keeps track of the current event selection and data"""
 
     def __init__(self, table, weight_col=None):
-        '''Create a new Selector
+        """Create a new Selector
 
         Arguments:
         table -- An `awkward.Table` or `LazyTable` holding the events' data
-        '''
+        """
         self.table = table
         self._cuts = AdUtils.PackedSelectionAccumulator()
         self._current_cuts = []
-        self._frozen = True
+        self._frozen = False
 
         self._cutflow = processor.defaultdict_accumulator(int)
         self._weight_col = weight_col
 
+        # Add a dummy cut to inform about event number and circumvent error
+        # when calling all or require before adding actual cuts
+        self._cuts.add_cut("Preselection", np.full(self.table.size, True))
         self._add_cutflow("Events preselection")
 
     @property
     def masked(self):
-        '''Get currently selected events
+        """Get currently selected events
 
         Returns an `awkward.Table` of the currently selected events
-        '''
+        """
         if len(self._current_cuts) > 0:
             return self.table[self._cuts.all(*self._current_cuts)]
         else:
@@ -110,24 +113,21 @@ class Selector(object):
         self._frozen = True
 
     def _add_cutflow(self, name):
+        passing_all = self._cuts.all(*(self._cuts.names or []))
         if self._weight_col and self._weight_col in self.table:
-            num = self.table[self._weight_col][self._idxs].sum()
+            num = self.table[self._weight_col][passing_all].sum()
         else:
-            num = len(self._idxs)
+            num = passing_all.sum()
         self._cutflow[name] = num
 
     @property
-    def _idxs(self):
-        return self._cuts.all(*self._cuts)
-
-    @property
-    def _cur_idxs(self):
+    def _cur_sel(self):
+        """Get a bool mask describing the current selection"""
         return self._cuts.all(*self._current_cuts)
 
     @property
     def num_selected(self):
-        """Return the number of currently selected events"""
-        return len(self._cur_idxs)
+        return self._cur_idx.sum()
 
     @property
     def cutflow(self):
@@ -152,8 +152,8 @@ class Selector(object):
             raise ValueError("A cut with name {} exists already".format(name))
         accepted = accept(self.masked)
         if len(self._current_cuts) > 0:
-            cut = np.full(len(self._cuts.all(*self._current_cuts)), False)
-            cut[self._cuts.all(*self._current_cuts)] = accepted
+            cut = np.full(self.table.size, False)
+            cut[self._cur_sel] = accepted
         else:
             cut = accepted
         self._cuts.add_cut(name, cut)
@@ -175,31 +175,27 @@ class Selector(object):
         if not isinstance(column_name, str):
             raise ValueError("column_name needs to be string")
         data = column(self.masked)
+
+        # Convert data to appropriate type if possible
+        if isinstance(data, awkward.ChunkedArray):
+            data = awkward.concatenate(data.chunks)
+
+        # Move data into the table with appropriate padding (important!)
         if isinstance(data, np.ndarray):
-            unmasked_data = np.empty(
-                len(self._cuts.all(*self._current_cuts)), dtype=data.dtype)
-            unmasked_data[self._cuts.all(*self._current_cuts)] = data
+            unmasked_data = np.empty(self.table.size, dtype=data.dtype)
+            unmasked_data[self._cur_sel] = data
         elif isinstance(data, awkward.JaggedArray):
-            counts = np.zeros(
-                len(self._cuts.all(*self._current_cuts)), dtype=int)
-            counts[self._cuts.all(*self._current_cuts)] = data.counts
+            counts = np.zeros(self.table.size, dtype=int)
+            counts[self._cur_sel] = data.counts
             cls = awkward.array.objects.Methods.maybemixin(type(data),
                                                            awkward.JaggedArray)
             unmasked_data = cls.fromcounts(counts, data.flatten())
-        elif isinstance(data, awkward.ChunkedArray):
-            counts = np.zeros(
-                self._cuts.all(*self._current_cuts).sum(), dtype=int)
-            counts[self._cuts.all(*self._current_cuts)] = data.counts
-            unchunked = awkward.concatenate(data.chunks)
-            cls = awkward.array.objects.Methods.maybemixin(type(data),
-                                                           awkward.JaggedArray)
-            unmasked_data = cls.fromcounts(counts, unchunked.flatten())
         else:
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
 
     def save_columns(self, p4s, other_properties, other_cols, save_cuts=True):
-        '''Save the currently selected events
+        """Save the currently selected events
 
         Arguments:
         p4s - names of particle columns for which one wishes to save all
@@ -211,7 +207,7 @@ class Selector(object):
                     all the flat columns to be saved
         jagged_dict - A defaultdict_accumulator containing accumulators
                       of all the jagged columns to be saved
-        '''
+        """
         flat_dict = processor.defaultdict_accumulator(partial(
             processor.column_accumulator, np.array([])))
         jagged_dict = processor.defaultdict_accumulator(partial(
