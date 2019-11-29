@@ -78,9 +78,11 @@ class Selector(object):
         '''
         self.table = table
         self._cuts = AdUtils.PackedSelectionAccumulator()
+        self._current_cuts = []
+        self._frozen = True
+
         self._cutflow = processor.defaultdict_accumulator(int)
         self._cutflow["Events preselection"] += self.table["genWeight"].sum()
-        self._current_cuts = []
 
     @property
     def masked(self):
@@ -93,31 +95,14 @@ class Selector(object):
         else:
             return self.table
 
-    def with_cuts(self, *names, allcuts=False):
-        '''
-        Select the cuts that are considered for the current selection
+    def freeze_selection(self):
+        """Freezes the selection
 
-        Arguments:
-        names -- Strings with names of cuts to add
-        allcuts -- May be set to true instead of supplying names to consider
-                   all currently applied cuts, but not future ones
-        '''
-        if allcuts:
-            self._current_cuts = self._cuts.names.copy()
-        else:
-            self._current_cuts.extend(names)
-
-    def without_cuts(self, *names, allcuts=False):
+        After a call to this method, additional cuts wont effect the current
+        selection anymore.
         """
-        Deselect the cuts that are considered for the current selection
 
-        For arguments see with_cuts
-        """
-        if allcuts:
-            self._current_cuts = []
-        else:
-            for name in names:
-                self._current_cuts.remove(name)
+        self._frozen = True
 
     @property
     def _idxs(self):
@@ -162,6 +147,8 @@ class Selector(object):
         self._cuts.add_cut(name, cut)
         self._cutflow[name] += \
             self.table["genWeight"][self._cuts.all(*self._cuts.names)].sum()
+        if not self._frozen:
+            self._current_cuts.append(name)
 
     def set_column(self, column, column_name):
         """Sets a column of the table
@@ -339,9 +326,10 @@ class Processor(processor.ProcessorABC):
         selector.set_column(self.good_muon, "is_good_muon")
         selector.set_column(self.build_lepton_column, "Lepton")
         selector.add_cut(self.exactly_lepton_pair, "#Lep = 2")
-        selector.with_cuts(allcuts=True)
         selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
         selector.set_column(self.same_flavor, "is_same_flavor")
+
+        selector.freeze_selection()
 
         selector.add_cut(self.channel_trigger_matching, "Chn. trig. match")
         selector.add_cut(self.lep_pt_requirement, "Req lep pT")

@@ -47,6 +47,9 @@ parser.add_argument(
    "files")
 parser.add_argument(
     "--mc", action="store_true", help="Only process MC files")
+parser.add_argument(
+    "--debug", action="store_true", help="Only process a small amount of files"
+    "to make debugging feasible")
 args = parser.parse_args()
 
 config = utils.Config(args.config)
@@ -84,6 +87,9 @@ num_mc_files = len(datasets["MC"]) if "MC" in datasets else 0
 print("Got a total of {} files of which {} are MC".format(num_files,
                                                           num_mc_files))
 
+if args.debug:
+    key = next(iter(datasets.keys()))
+    datasets = {key: datasets[key][:1]}
 output = coffea.processor.run_uproot_job(
     datasets, treename="Events",
     processor_instance=Processor(config),
