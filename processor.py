@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
 
 import os
-import sys
-from copy import copy
 import numpy as np
 import awkward
-import h5py
-import uproot
 import coffea
 from coffea.analysis_objects import JaggedCandidateArray as CandArray
-from time import time
-import random
-from functools import partial
-from collections import OrderedDict
 import coffea.processor as processor
+from functools import partial
 
 import utils
 import AdUtils
@@ -81,7 +74,7 @@ class Selector(object):
         '''Create a new Selector
 
         Arguments:
-        table -- An awkward.Table holding the events' data
+        table -- An `awkward.Table` or `LazyTable` holding the events' data
         '''
         self.table = table
         self._cuts = AdUtils.PackedSelectionAccumulator()
@@ -93,7 +86,7 @@ class Selector(object):
     def masked(self):
         '''Get currently selected events
 
-        Returns an awkward.Table of the currently selected events
+        Returns an `awkward.Table` of the currently selected events
         '''
         if len(self._current_cuts) > 0:
             return self.table[self._cuts.all(*self._current_cuts)]
@@ -102,19 +95,24 @@ class Selector(object):
 
     def with_cuts(self, *names, allcuts=False):
         '''
-        Add to the list of cuts to be considered by masked
+        Select the cuts that are considered for the current selection
 
         Arguments:
-        -*names: strings with names of cuts to add
-        -allcuts: May be set to true instead of supplying names to consider all
-              currently applied cuts, but not future ones
+        names -- Strings with names of cuts to add
+        allcuts -- May be set to true instead of supplying names to consider
+                   all currently applied cuts, but not future ones
         '''
         if allcuts:
-            self._current_cuts = copy(self._cuts.names)
+            self._current_cuts = self._cuts.names.copy()
         else:
             self._current_cuts.extend(names)
 
     def without_cuts(self, *names, allcuts=False):
+        """
+        Deselect the cuts that are considered for the current selection
+
+        For arguments see with_cuts
+        """
         if allcuts:
             self._current_cuts = []
         else:
@@ -122,16 +120,28 @@ class Selector(object):
                 self._current_cuts.remove(name)
 
     @property
+    def _idxs(self):
+        return self._cuts.all(*self._cuts)
+
+    @property
+    def _cur_idxs(self):
+        return self._cuts.all(*self._current_cuts)
+
+    @property
+    def num_selected(self):
+        """Return the number of currently selected events"""
+        return len(self._cur_idxs)
+
+    @property
     def cutflow(self):
         """Return an ordered dict of cut name -> selected events"""
         return self._cutflow
 
     def add_cut(self, accept, name):
-        """Adds a cut to the current selection
+        """Adds a cut
 
-        If the selector is not recording, the current selection will get
-        modified according to the cut. Otherwise the cut will be recorded in
-        a cutflags bit in the table.
+        Cuts control what events get fed into later cuts, get saved and are
+        given by `masked`.
 
         Arguments:
         accept -- A function that will be called with a table of the currently
