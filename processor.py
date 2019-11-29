@@ -4,7 +4,7 @@ import os
 import numpy as np
 import awkward
 import coffea
-from coffea.analysis_objects import JaggedCandidateArray as CandArray
+from coffea.analysis_objects import JaggedCandidateArray as Jca
 import coffea.processor as processor
 from functools import partial
 
@@ -200,7 +200,7 @@ class Selector(object):
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
 
-    def save_columns(self, p4s, other_cols, save_cuts=True):
+    def save_columns(self, p4s, other_properties, other_cols, save_cuts=True):
         '''Save the currently selected events
 
         Arguments:
@@ -229,6 +229,14 @@ class Selector(object):
                 for p in ("pt", "eta", "phi", "mass"):
                     flat_dict[part + "_" + p] =\
                         processor.column_accumulator(self.masked[part][p])
+
+        for (part, prop) in other_properties:
+            if isinstance(self.masked[part], Jca):
+                jagged_dict[part + "_" + prop] =\
+                        AdUtils.JaggedArrayAccumulator(self.masked[part][prop])
+            elif isinstance(self.masked[part], awkward.Table):
+                flat_dict[part + "_" + prop] =\
+                        processor.column_accumulator(self.masked[part][prop])
 
         for col in other_cols:
             if isinstance(self.masked[col], awkward.JaggedArray):
@@ -341,36 +349,18 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.no_additional_leptons, "No add. leps")
         selector.add_cut(self.z_window, "Z window")
 
-        selector.without_cuts("#Lep = 2")
         selector.set_column(self.good_jet, "is_good_jet")
         selector.set_column(self.build_jet_column, "Jet")
         selector.add_cut(self.has_jets, "#Jets >= n")
         selector.add_cut(self.jet_pt_requirement, "Req jet pT")
         selector.add_cut(self.btag, "B-tag")
-        selector.with_cuts("#Lep = 2")
         selector.add_cut(self.met_requirement, "Req MET")
 
         selector.set_column(partial(self.compute_weight, is_mc), "weight")
 
-        for key in ["pt", "eta", "phi", "mass"]:
-            selector.set_column(lambda d: getattr(d["Lepton"], key),
-                                "Lepton_" + key)
-            selector.set_column(lambda d: getattr(d["Jet"], key),
-                                "Jet_" + key)
-        selector.set_column(lambda d: d["Lepton"].pdgId, "Lepton_pdgId")
-
         self.output["flat cols"][dsname], self.output["jagged cols"][dsname], self.output["cut arrays"][dsname] =\
-            selector.save_columns(p4s=[], other_cols=["Lepton_pt",
-                                                      "Lepton_eta",
-                                                      "Lepton_phi",
-                                                      "Lepton_mass",
-                                                      "Lepton_pdgId",
-                                                      "Jet_pt",
-                                                      "Jet_eta",
-                                                      "Jet_phi",
-                                                      "Jet_mass",
-                                                      "MET_sumEt",
-                                                      "weight"])
+            selector.save_columns(p4s=["Lepton", "Jet"], other_properties=[("Lepton", "pdgId")],
+                                  other_cols=["MET_sumEt", "weight"])
 
         self.output["cutflow"][dsname] = selector.cutflow
         return self.output
@@ -518,7 +508,7 @@ class Processor(processor.ProcessorABC):
                                        data["Muon_" + key][gm]], axis=1)
             offsets = arr.offsets
             lep_dict[key] = arr.flatten()
-        leptons = CandArray.candidatesfromoffsets(offsets, **lep_dict)
+        leptons = Jca.candidatesfromoffsets(offsets, **lep_dict)
 
         # Sort leptons by pt
         leptons = leptons[leptons.pt.argsort()]
@@ -585,7 +575,7 @@ class Processor(processor.ProcessorABC):
             arr = data["Jet_" + key][gj]
             offsets = arr.offsets
             lep_dict[key] = arr.flatten()
-        jets = CandArray.candidatesfromoffsets(offsets, **lep_dict)
+        jets = Jca.candidatesfromoffsets(offsets, **lep_dict)
 
         # Sort jets by pt
         jets = jets[jets.pt.argsort()]
