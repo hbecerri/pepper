@@ -232,10 +232,12 @@ class Selector(object):
             if isinstance(self.masked[col], awkward.Table):
                 flat_dict[col] = processor.column_accumulator(
                     self.masked[col])
-        
-        cuts_to_save = self._cuts.mask_self(self._cuts.all(*self._current_cuts))
-        
+
+        cuts_to_save = self._cuts.mask_self(
+            self._cuts.all(*self._current_cuts))
+
         return flat_dict, jagged_dict, cuts_to_save
+
 
 def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None):
     """Get trigger paths needed for the specific dataset.
@@ -346,9 +348,11 @@ class Processor(processor.ProcessorABC):
 
         selector.set_column(partial(self.compute_weight, is_mc), "weight")
 
-        self.output["flat cols"][dsname], self.output["jagged cols"][dsname], self.output["cut arrays"][dsname] =\
-            selector.save_columns(p4s=["Lepton", "Jet"], other_properties=[("Lepton", "pdgId")],
-                                  other_cols=["MET_sumEt", "weight"])
+        (self.output["flat cols"][dsname],
+            self.output["jagged cols"][dsname],
+            self.output["cut arrays"][dsname]) = selector.save_columns(
+            p4s=["Lepton", "Jet"], other_properties=[("Lepton", "pdgId")],
+            other_cols=["MET_sumEt", "weight"])
 
         self.output["cutflow"][dsname] = selector.cutflow
         return self.output

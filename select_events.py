@@ -52,8 +52,10 @@ parser.add_argument(
     "to make debugging feasible")
 args = parser.parse_args()
 
+
 config = utils.Config(args.config)
 store = config["store"]
+
 
 datasets = {}
 if args.dataset is None:
