@@ -317,7 +317,7 @@ class Processor(processor.ProcessorABC):
         return accumulator
 
     def process(self, df):
-        self.output = self.accumulator.identity()
+        output = self.accumulator.identity()
         selector = Selector(LazyTable(df), "genWeight")
 
         dsname = df["dataset"]
@@ -355,14 +355,14 @@ class Processor(processor.ProcessorABC):
 
         selector.set_column(partial(self.compute_weight, is_mc), "weight")
 
-        (self.output["flat cols"][dsname],
-            self.output["jagged cols"][dsname],
-            self.output["cut arrays"][dsname]) = selector.save_columns(
+        (output["flat cols"][dsname],
+            output["jagged cols"][dsname],
+            output["cut arrays"][dsname]) = selector.save_columns(
             p4s=["Lepton", "Jet"], other_properties=[("Lepton", "pdgId")],
             other_cols=["MET_sumEt", "weight"])
 
-        self.output["cutflow"][dsname] = selector.cutflow
-        return self.output
+        output["cutflow"][dsname] = selector.cutflow
+        return output
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
