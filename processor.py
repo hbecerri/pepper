@@ -59,6 +59,9 @@ class LazyTable(object):
     def __delitem__(self, key):
         del self._df[key]
 
+    def __contains__(self, key):
+        return key in self._df
+
     @property
     def size(self):
         if self._slice is None:
@@ -70,7 +73,7 @@ class LazyTable(object):
 class Selector(object):
     """Keeps track of the current event selection and data"""
 
-    def __init__(self, table):
+    def __init__(self, table, weight_col=None):
         '''Create a new Selector
 
         Arguments:
@@ -82,7 +85,9 @@ class Selector(object):
         self._frozen = True
 
         self._cutflow = processor.defaultdict_accumulator(int)
-        self._cutflow["Events preselection"] += self.table["genWeight"].sum()
+        self._weight_col = weight_col
+
+        self._add_cutflow("Events preselection")
 
     @property
     def masked(self):
@@ -103,6 +108,13 @@ class Selector(object):
         """
 
         self._frozen = True
+
+    def _add_cutflow(self, name):
+        if self._weight_col and self._weight_col in self.table:
+            num = self.table[self._weight_col][self._idxs].sum()
+        else:
+            num = len(self._idxs)
+        self._cutflow[name] = num
 
     @property
     def _idxs(self):
@@ -145,8 +157,7 @@ class Selector(object):
         else:
             cut = accepted
         self._cuts.add_cut(name, cut)
-        self._cutflow[name] += \
-            self.table["genWeight"][self._cuts.all(*self._cuts.names)].sum()
+        self._add_cutflow(name)
         if not self._frozen:
             self._current_cuts.append(name)
 
@@ -311,7 +322,7 @@ class Processor(processor.ProcessorABC):
 
     def process(self, df):
         self.output = self.accumulator.identity()
-        selector = Selector(LazyTable(df))
+        selector = Selector(LazyTable(df), "genWeight")
 
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
