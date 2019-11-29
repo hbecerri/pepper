@@ -102,3 +102,5 @@ for dataset in datasets.keys():
                 out[key] = output["flat cols"][dataset][key]
             for key in output["jagged cols"][dataset].keys():
                 out[key] = output["jagged cols"][dataset][key]
+            if output["cut arrays"][dataset]._mask is not None:
+                out["cut arrays"] = output["cut arrays"][dataset]

@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from copy import copy
 
 from coffea import hist
 from coffea.analysis_objects import JaggedCandidateArray
@@ -17,18 +18,20 @@ class PackedSelectionAccumulator(PackedSelection, AccumulatorABC):
         return PackedSelectionAccumulator(dtype=self._dtype)
     
     def add(self, other):
-        if len(other.names)==0:
+        if len(other.names) == 0:
             return self
-        elif len(self.names)==0:
-            return other
-        if self.names!=other.names:
-            if len(self.names)>len(other.names):
-                other=self._extend(other, self)
-            elif len(other.names)<len(self.names):
-                self=self._extend(self, other)
+        elif len(self.names) == 0:
+            self._mask = other._mask
+            self._names = other._names
+            return self
+        if self.names != other.names:
+            if len(self.names) > len(other.names):
+                other = self._extend(other, self)
+            elif len(other.names) < len(self.names):
+                self = self._extend(self, other)
             else:
                 raise ValueError("Names of cuts do not match")
-        self._mask=np.concatenate(self._mask, other._mask)
+        self._mask = np.concatenate((self._mask, other._mask))
         return self
 
     @staticmethod
@@ -39,6 +42,11 @@ class PackedSelectionAccumulator(PackedSelection, AccumulatorABC):
         else:
             raise ValueError("Names of cuts do not match")
         return short_names
+
+    def mask_self(self, cuts):
+        masked=copy(self)
+        masked._mask=masked._mask[cuts]
+        return masked
 
 class JaggedArrayAccumulator(AccumulatorABC):
     def __init__(self, value):

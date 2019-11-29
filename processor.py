@@ -190,7 +190,7 @@ class Selector(object):
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
 
-    def save_columns(self, p4s, other_cols):
+    def save_columns(self, p4s, other_cols, save_cuts=True):
         '''Save the currently selected events
 
         Arguments:
@@ -227,7 +227,10 @@ class Selector(object):
             if isinstance(self.masked[col], awkward.Table):
                 flat_dict[col] = processor.column_accumulator(
                     self.masked[col])
-        return flat_dict, jagged_dict
+        
+        cuts_to_save = self._cuts.mask_self(self._cuts.all(*self._current_cuts))
+        
+        return flat_dict, jagged_dict, cuts_to_save
 
 
 def skip_existing(dest, path):
@@ -297,7 +300,9 @@ class Processor(processor.ProcessorABC):
             "jagged cols": processor.defaultdict_accumulator(
                 partial(processor.defaultdict_accumulator, partial(
                     AdUtils.JaggedArrayAccumulator,
-                    awkward.JaggedArray.fromcounts([], []))))
+                    awkward.JaggedArray.fromcounts([], [])))),
+            "cut arrays": processor.defaultdict_accumulator(
+                AdUtils.PackedSelectionAccumulator)
         })
         return self._accumulator
 
@@ -351,7 +356,7 @@ class Processor(processor.ProcessorABC):
                                 "Jet_" + key)
         selector.set_column(lambda d: d["Lepton"].pdgId, "Lepton_pdgId")
 
-        self.output["flat cols"][dsname], self.output["jagged cols"][dsname] =\
+        self.output["flat cols"][dsname], self.output["jagged cols"][dsname], self.output["cut arrays"][dsname] =\
             selector.save_columns(p4s=[], other_cols=["Lepton_pt",
                                                       "Lepton_eta",
                                                       "Lepton_phi",
