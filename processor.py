@@ -242,11 +242,6 @@ class Selector(object):
         
         return flat_dict, jagged_dict, cuts_to_save
 
-
-def skip_existing(dest, path):
-    return os.path.exists(get_outpath(path, dest))
-
-
 def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None):
     """Get trigger paths needed for the specific dataset.
 
