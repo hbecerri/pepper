@@ -59,6 +59,9 @@ class LazyTable(object):
     def __delitem__(self, key):
         del self._df[key]
 
+    def __contains__(self, key):
+        return key in self._df
+
     @property
     def size(self):
         if self._slice is None:
@@ -70,67 +73,61 @@ class LazyTable(object):
 class Selector(object):
     """Keeps track of the current event selection and data"""
 
-    def __init__(self, table):
-        '''Create a new Selector
+    def __init__(self, table, weight_col=None):
+        """Create a new Selector
 
         Arguments:
         table -- An `awkward.Table` or `LazyTable` holding the events' data
-        '''
+        """
         self.table = table
         self._cuts = AdUtils.PackedSelectionAccumulator()
-        self._cutflow = processor.defaultdict_accumulator(int)
-        self._cutflow["Events preselection"] += self.table["genWeight"].sum()
         self._current_cuts = []
+        self._frozen = False
+
+        self._cutflow = processor.defaultdict_accumulator(int)
+        self._weight_col = weight_col
+
+        # Add a dummy cut to inform about event number and circumvent error
+        # when calling all or require before adding actual cuts
+        self._cuts.add_cut("Preselection", np.full(self.table.size, True))
+        self._add_cutflow("Events preselection")
 
     @property
     def masked(self):
-        '''Get currently selected events
+        """Get currently selected events
 
         Returns an `awkward.Table` of the currently selected events
-        '''
+        """
         if len(self._current_cuts) > 0:
-            return self.table[self._cuts.all(*self._current_cuts)]
+            return self.table[self._cur_sel]
         else:
             return self.table
 
-    def with_cuts(self, *names, allcuts=False):
-        '''
-        Select the cuts that are considered for the current selection
+    def freeze_selection(self):
+        """Freezes the selection
 
-        Arguments:
-        names -- Strings with names of cuts to add
-        allcuts -- May be set to true instead of supplying names to consider
-                   all currently applied cuts, but not future ones
-        '''
-        if allcuts:
-            self._current_cuts = self._cuts.names.copy()
-        else:
-            self._current_cuts.extend(names)
-
-    def without_cuts(self, *names, allcuts=False):
+        After a call to this method, additional cuts wont effect the current
+        selection anymore.
         """
-        Deselect the cuts that are considered for the current selection
 
-        For arguments see with_cuts
-        """
-        if allcuts:
-            self._current_cuts = []
+        self._frozen = True
+
+    def _add_cutflow(self, name):
+        passing_all = self._cuts.all(*(self._cuts.names or []))
+        if self._weight_col and self._weight_col in self.table:
+            num = self.table[self._weight_col][passing_all].sum()
         else:
-            for name in names:
-                self._current_cuts.remove(name)
+            num = passing_all.sum()
+        self._cutflow[name] = num
 
     @property
-    def _idxs(self):
-        return self._cuts.all(*self._cuts)
-
-    @property
-    def _cur_idxs(self):
+    def _cur_sel(self):
+        """Get a bool mask describing the current selection"""
         return self._cuts.all(*self._current_cuts)
 
     @property
     def num_selected(self):
-        """Return the number of currently selected events"""
-        return len(self._cur_idxs)
+        return self._cur_idx.sum()
 
     @property
     def cutflow(self):
@@ -155,13 +152,14 @@ class Selector(object):
             raise ValueError("A cut with name {} exists already".format(name))
         accepted = accept(self.masked)
         if len(self._current_cuts) > 0:
-            cut = np.full(len(self._cuts.all(*self._current_cuts)), False)
-            cut[self._cuts.all(*self._current_cuts)] = accepted
+            cut = np.full(self.table.size, False)
+            cut[self._cur_sel] = accepted
         else:
             cut = accepted
         self._cuts.add_cut(name, cut)
-        self._cutflow[name] += \
-            self.table["genWeight"][self._cuts.all(*self._cuts.names)].sum()
+        self._add_cutflow(name)
+        if not self._frozen:
+            self._current_cuts.append(name)
 
     def set_column(self, column, column_name):
         """Sets a column of the table
@@ -177,31 +175,27 @@ class Selector(object):
         if not isinstance(column_name, str):
             raise ValueError("column_name needs to be string")
         data = column(self.masked)
+
+        # Convert data to appropriate type if possible
+        if isinstance(data, awkward.ChunkedArray):
+            data = awkward.concatenate(data.chunks)
+
+        # Move data into the table with appropriate padding (important!)
         if isinstance(data, np.ndarray):
-            unmasked_data = np.empty(
-                len(self._cuts.all(*self._current_cuts)), dtype=data.dtype)
-            unmasked_data[self._cuts.all(*self._current_cuts)] = data
+            unmasked_data = np.empty(self.table.size, dtype=data.dtype)
+            unmasked_data[self._cur_sel] = data
         elif isinstance(data, awkward.JaggedArray):
-            counts = np.zeros(
-                len(self._cuts.all(*self._current_cuts)), dtype=int)
-            counts[self._cuts.all(*self._current_cuts)] = data.counts
+            counts = np.zeros(self.table.size, dtype=int)
+            counts[self._cur_sel] = data.counts
             cls = awkward.array.objects.Methods.maybemixin(type(data),
                                                            awkward.JaggedArray)
             unmasked_data = cls.fromcounts(counts, data.flatten())
-        elif isinstance(data, awkward.ChunkedArray):
-            counts = np.zeros(
-                self._cuts.all(*self._current_cuts).sum(), dtype=int)
-            counts[self._cuts.all(*self._current_cuts)] = data.counts
-            unchunked = awkward.concatenate(data.chunks)
-            cls = awkward.array.objects.Methods.maybemixin(type(data),
-                                                           awkward.JaggedArray)
-            unmasked_data = cls.fromcounts(counts, unchunked.flatten())
         else:
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
 
-    def save_columns(self, p4s, other_properties, other_cols, save_cuts=True):
-        '''Save the currently selected events
+    def save_columns(self, part_props={}, other_cols=[], cuts="Current"):
+        """Save the currently selected events
 
         Arguments:
         p4s - names of particle columns for which one wishes to save all
@@ -213,44 +207,33 @@ class Selector(object):
                     all the flat columns to be saved
         jagged_dict - A defaultdict_accumulator containing accumulators
                       of all the jagged columns to be saved
-        '''
-        flat_dict = processor.defaultdict_accumulator(partial(
-            processor.column_accumulator, np.array([])))
-        jagged_dict = processor.defaultdict_accumulator(partial(
-            AdUtils.JaggedArrayAccumulator,
-            awkward.JaggedArray.fromcounts([], [])))
-
-        for part in p4s:
-            if isinstance(self.masked[part], Jca):
-                for p in ("pt", "eta", "phi", "mass"):
-                    jagged_dict[part + "_" + p] =\
-                        AdUtils.JaggedArrayAccumulator(self.masked[part][p])
-            elif isinstance(self.masked[part], awkward.Table):
-                for p in ("pt", "eta", "phi", "mass"):
-                    flat_dict[part + "_" + p] =\
-                        processor.column_accumulator(self.masked[part][p])
-
-        for (part, prop) in other_properties:
-            if isinstance(self.masked[part], Jca):
-                jagged_dict[part + "_" + prop] =\
-                        AdUtils.JaggedArrayAccumulator(self.masked[part][prop])
-            elif isinstance(self.masked[part], awkward.Table):
-                flat_dict[part + "_" + prop] =\
-                        processor.column_accumulator(self.masked[part][prop])
-
+        """
+        if cuts == "Current":
+            cuts = self._current_cuts
+        return_dict= processor.defaultdict_accumulator(
+            AdUtils.ArrayAccumulator)
+        for part in part_props.keys():
+            for prop in part_props[part]:
+                if prop == "p4":
+                    return_dict[part + "_pt"].value =\
+                        self.table[self._cuts.all(*cuts)][part].pt
+                    return_dict[part + "_eta"].value =\
+                        self.table[self._cuts.all(*cuts)][part].eta
+                    return_dict[part + "_phi"].value =\
+                        self.table[self._cuts.all(*cuts)][part].phi
+                    return_dict[part + "_mass"].value =\
+                        self.table[self._cuts.all(*cuts)][part].mass
+                else:
+                    return_dict[part + "_" + prop].value =\
+                        self.table[self._cuts.all(*cuts)][part][prop]
         for col in other_cols:
-            if isinstance(self.masked[col], awkward.JaggedArray):
-                jagged_dict[col] = AdUtils.JaggedArrayAccumulator(
-                    self.masked[col])
-            if isinstance(self.masked[col], awkward.Table):
-                flat_dict[col] = processor.column_accumulator(
-                    self.masked[col])
-        
-        cuts_to_save = self._cuts.mask_self(self._cuts.all(*self._current_cuts))
-        
-        return flat_dict, jagged_dict, cuts_to_save
+            return_dict[col].value = self.table[self._cuts.all(*cuts)][col]
+        return return_dict
 
-    def 
+    def save_cuts(self, cuts="Current"):
+        if cuts == "Current":
+            cuts = self._current_cuts
+        return self._cuts.mask_self(self._cuts.all(*cuts))
 
 def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None):
     """Get trigger paths needed for the specific dataset.
@@ -307,13 +290,8 @@ class Processor(processor.ProcessorABC):
         self._accumulator = processor.dict_accumulator({
             "cutflow": processor.defaultdict_accumulator(
                 partial(processor.defaultdict_accumulator, int)),
-            "flat cols": processor.defaultdict_accumulator(
-                partial(processor.defaultdict_accumulator, partial(
-                    processor.column_accumulator, np.array([])))),
-            "jagged cols": processor.defaultdict_accumulator(
-                partial(processor.defaultdict_accumulator, partial(
-                    AdUtils.JaggedArrayAccumulator,
-                    awkward.JaggedArray.fromcounts([], [])))),
+            "cols to save": processor.defaultdict_accumulator( partial(
+                processor.defaultdict_accumulator, AdUtils.ArrayAccumulator)),
             "cut arrays": processor.defaultdict_accumulator(
                 AdUtils.PackedSelectionAccumulator)
         })
@@ -323,8 +301,8 @@ class Processor(processor.ProcessorABC):
         return accumulator
 
     def process(self, df):
-        self.output = self.accumulator.identity()
-        selector = Selector(LazyTable(df))
+        output = self.accumulator.identity()
+        selector = Selector(LazyTable(df), "genWeight")
 
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
@@ -341,9 +319,10 @@ class Processor(processor.ProcessorABC):
         selector.set_column(self.good_muon, "is_good_muon")
         selector.set_column(self.build_lepton_column, "Lepton")
         selector.add_cut(self.exactly_lepton_pair, "#Lep = 2")
-        selector.with_cuts(allcuts=True)
         selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
         selector.set_column(self.same_flavor, "is_same_flavor")
+
+        selector.freeze_selection()
 
         selector.add_cut(self.channel_trigger_matching, "Chn. trig. match")
         selector.add_cut(self.lep_pt_requirement, "Req lep pT")
@@ -360,12 +339,12 @@ class Processor(processor.ProcessorABC):
 
         selector.set_column(partial(self.compute_weight, is_mc), "weight")
 
-        self.output["flat cols"][dsname], self.output["jagged cols"][dsname], self.output["cut arrays"][dsname] =\
-            selector.save_columns(p4s=["Lepton", "Jet"], other_properties=[("Lepton", "pdgId")],
-                                  other_cols=["MET_sumEt", "weight"])
-
-        self.output["cutflow"][dsname] = selector.cutflow
-        return self.output
+        output["cols to save"][dsname] = selector.save_columns(
+            part_props={"Lepton":["p4", "pdgId"], "Jet":["p4"]},
+            other_cols=["MET_sumEt", "weight"])
+        output["cut arrays"][dsname]=selector.save_cuts()
+        output["cutflow"][dsname] = selector.cutflow
+        return output
 
     def good_lumimask(self, is_mc, data):
         if is_mc:

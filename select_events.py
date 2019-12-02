@@ -47,10 +47,15 @@ parser.add_argument(
    "files")
 parser.add_argument(
     "--mc", action="store_true", help="Only process MC files")
+parser.add_argument(
+    "--debug", action="store_true", help="Only process a small amount of files"
+    "to make debugging feasible")
 args = parser.parse_args()
+
 
 config = utils.Config(args.config)
 store = config["store"]
+
 
 datasets = {}
 if args.dataset is None:
@@ -84,6 +89,9 @@ num_mc_files = len(datasets["MC"]) if "MC" in datasets else 0
 print("Got a total of {} files of which {} are MC".format(num_files,
                                                           num_mc_files))
 
+if args.debug:
+    key = next(iter(datasets.keys()))
+    datasets = {key: datasets[key][:1]}
 output = coffea.processor.run_uproot_job(
     datasets, treename="Events",
     processor_instance=Processor(config),
@@ -94,15 +102,13 @@ output = coffea.processor.run_uproot_job(
     chunksize=100000)
 
 for dataset in datasets.keys():
-    if (len(output["flat cols"][dataset])
-       + len(output["jagged cols"][dataset])) > 0:
+    if len(output["cols to save"][dataset]) > 0:
+        print ("here!")
         outpath = get_outpath(dataset, args.dest)
         os.makedirs(os.path.dirname(outpath), exist_ok=True)
         with h5py.File(outpath, "w") as f:
             out = awkward.hdf5(f)
-            for key in output["flat cols"][dataset].keys():
-                out[key] = output["flat cols"][dataset][key].values
-            for key in output["jagged cols"][dataset].keys():
-                out[key] = output["jagged cols"][dataset][key].values
+            for key in output["cols to save"][dataset].keys():
+                out[key] = output["cols to save"][dataset][key].value
             if output["cut arrays"][dataset].names is not None:
                 out["cut arrays"] = output["cut arrays"][dataset]

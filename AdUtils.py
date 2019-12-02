@@ -48,24 +48,35 @@ class PackedSelectionAccumulator(PackedSelection, AccumulatorABC):
         masked._mask=masked._mask[cuts]
         return masked
 
-class JaggedArrayAccumulator(AccumulatorABC):
-    def __init__(self, value):
-        if not isinstance(value, awkward.JaggedArray):
-            raise ValueError("JaggedArrayAccumulator only works with jagged arrays")
-        self._empty = np.zeros(dtype=value.dtype, shape=(0,) + value.shape[1:])
-        self._value = value
+class ArrayAccumulator(AccumulatorABC):
+    def __init__(self):
+        self._empty = None
+        self._value = None
 
     def __repr__(self):
-        return "JaggedArrayAccumulator(%r)" % self.value
+        return "ArrayAccumulator(%r)" % self.value
 
     def identity(self):
-        return column_accumulator(self._empty)
+        return array_accumulator(self._empty)
 
     def add(self, other):
-        if not isinstance(other, JaggedArrayAccumulator):
-            raise ValueError("JaggedArrayAccumulator cannot be added to %r" % type(other))
-        
-        self._value = awkward.JaggedArray.concatenate((self._value, other._value))
+        if self._value is None:
+            self._empty = other._empty
+            self.value = other.value
+        elif other._value is None:
+            pass
+        elif (isinstance(self.value, np.ndarray) & isinstance(other.value, np.ndarray)):
+            if other._empty.shape != self._empty.shape:
+                raise ValueError("Cannot add two np arrays of dissimilar shape (%r vs %r)"
+                             % (self._empty.shape, other._empty.shape))
+            self.value = np.concatenate((self.value, other.value))
+        elif (isinstance(self.value, awkward.JaggedArray) & isinstance(other.value, awkward.JaggedArray)):
+            if other._empty.shape != self._empty.shape:
+                raise ValueError("Cannot add two JaggedArrays of dissimilar shape (%r vs %r)"
+                             % (self._empty.shape, other._empty.shape))
+            self.value = awkward.JaggedArray.concatenate((self.value, other.value))
+        else:
+            raise ValueError("Cannot add %r to %r" % (type(other._value), type(self._value)))
 
     @property
     def value(self):
@@ -73,7 +84,20 @@ class JaggedArrayAccumulator(AccumulatorABC):
         Returns a JaggedArray where the first dimension is the column dimension
         '''
         return self._value
-
+    
+    @value.setter
+    def value(self, val):
+        if (self._value is not None) & (type(self.value) != type(val)):
+            raise ValueError("Cannot change type of value once set!")
+        elif isinstance(val, np.ndarray):
+            self._empty = np.zeros(dtype=val.dtype, shape=(0,) + val.shape[1:])
+            self._value = val
+        elif isinstance(val, awkward.JaggedArray):
+            self._empty = np.zeros(dtype=val.dtype, shape=(0,) + val.shape[1:])
+            self._value = val
+        else:
+            raise ValueError("Must set value with either a np array or JaggedArray, not %r"
+                             % type(val))
 
 def concatenate(arrays):
     flatarrays = [a.flatten() for a in arrays]
