@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 
 import os
+from functools import partial
+
 import numpy as np
 import awkward
 import coffea
+from coffea import hist
 from coffea.analysis_objects import JaggedCandidateArray as Jca
 import coffea.processor as processor
-from functools import partial
+import uproot
 
 import utils
 import AdUtils
-
+from reconstructionUtils.KinRecoSonnenschein import KinReco
 
 class LazyTable(object):
     """Wrapper for LazyDataFrame to allow slicing"""
@@ -103,6 +106,13 @@ class Selector(object):
         else:
             return self.table
 
+    @property
+    def final(self):
+        """Get events which have passed all cuts
+        (both those before and after freeze_selection)
+        """
+        return self.table[self._cuts.all(*self._cuts.names)]
+
     def freeze_selection(self):
         """Freezes the selection
 
@@ -127,7 +137,7 @@ class Selector(object):
 
     @property
     def num_selected(self):
-        return self._cur_idx.sum()
+        return self._cur_sel.sum()
 
     @property
     def cutflow(self):
@@ -287,7 +297,15 @@ class Processor(processor.ProcessorABC):
 
     @property
     def accumulator(self):
+        dataset_axis = hist.Cat("dataset", "")
+        ttbarmass_axis = hist.Bin("Mttbar", "Mttbar [GeV]", 100, 0, 1000)
+        Wmass_axis = hist.Bin("MW", "MW [GeV]", 100, 0, 200)
+        tmass_axis = hist.Bin("Mt", "Mt [GeV]", 100, 0, 300)
+
         self._accumulator = processor.dict_accumulator({
+            "Mttbar": hist.Hist("Counts", dataset_axis, ttbarmass_axis),
+            "MWplus": hist.Hist("Counts", dataset_axis, Wmass_axis),
+            "Mt": hist.Hist("Counts", dataset_axis, tmass_axis),
             "cutflow": processor.defaultdict_accumulator(
                 partial(processor.defaultdict_accumulator, int)),
             "cols to save": processor.defaultdict_accumulator( partial(
@@ -334,10 +352,33 @@ class Processor(processor.ProcessorABC):
         selector.set_column(self.build_jet_column, "Jet")
         selector.add_cut(self.has_jets, "#Jets >= n")
         selector.add_cut(self.jet_pt_requirement, "Req jet pT")
-        selector.add_cut(self.btag, "B-tag")
+        selector.add_cut(self.btag_cut, "At least %d btag"%self.config["num_atleast_btagged"])
         selector.add_cut(self.met_requirement, "Req MET")
-
+        
         selector.set_column(partial(self.compute_weight, is_mc), "weight")
+
+        lep, antilep = self.pick_leps(selector.final)
+        b, bbar = self.choose_bs(selector.final, lep, antilep)
+        neutrino, antineutrino = KinReco(lep["p4"], antilep["p4"],
+                    b["p4"], bbar["p4"], selector.final["MET_pt"], selector.final["MET_phi"])
+        reco_objects=Selector(awkward.Table(lep=lep, antilep=antilep,
+                b=b, bbar=bbar, neutrino=neutrino, antineutrino=antineutrino,
+                weight=selector.final["weight"]))
+        reco_objects.add_cut(self.passing_reco, "Reco")
+        reco_objects.set_column(self.Wminus, "Wminus")
+        reco_objects.set_column(self.Wplus, "Wplus")
+        reco_objects.set_column(self.top, "top")
+        reco_objects.set_column(self.antitop, "antitop")
+        reco_objects.set_column(self.ttbar, "ttbar")
+
+        best = reco_objects.masked["ttbar"].mass.argmin()
+        Mttbar = reco_objects.masked["ttbar"][best].mass.content
+        MWplus = reco_objects.masked["Wplus"][best].mass.content
+        Mtop = reco_objects.masked["top"][best].mass.content
+
+        output["Mttbar"].fill(dataset=dsname, Mttbar=Mttbar, weight=reco_objects.masked["weight"])
+        output["Mt"].fill(dataset=dsname, Mt=Mtop, weight=reco_objects.masked["weight"])
+        output["MWplus"].fill(dataset=dsname, MW=MWplus, weight=reco_objects.masked["weight"])
 
         output["cols to save"][dsname] = selector.save_columns(
             part_props={"Lepton":["p4", "pdgId"], "Jet":["p4"]},
@@ -550,13 +591,29 @@ class Processor(processor.ProcessorABC):
 
     def build_jet_column(self, data):
         keys = ["pt", "eta", "phi", "mass"]
-        lep_dict = {}
+        jet_dict = {}
         gj = data["is_good_jet"]
         for key in keys:
             arr = data["Jet_" + key][gj]
             offsets = arr.offsets
-            lep_dict[key] = arr.flatten()
-        jets = Jca.candidatesfromoffsets(offsets, **lep_dict)
+            jet_dict[key] = arr.flatten()
+        tagger, wp = self.config["btag"].split(":")
+        if tagger == "deepcsv":
+            disc = data["Jet_btagDeepB"][gj]
+            wps = {"loose": 0.1241, "medium": 0.4184, "tight": 0.7527}
+            if wp not in wps:
+                raise utils.ConfigError("Invalid DeepCSV working point: {}"
+                                        .format(wp))
+        elif tagger == "deepjet":
+            disc = data["Jet_btagDeepFlavB"][gj]
+            wps = {"loose": 0.0494, "medium": 0.2770, "tight": 0.7264}
+            if wp not in wps:
+                raise utils.ConfigError("Invalid DeepJet working point: {}"
+                                        .format(wp))
+        else:
+            raise utils.ConfigError("Invalid tagger name: {}".format(tagger))
+        jet_dict["btag"] = (disc > wps[wp]).flatten()
+        jets = Jca.candidatesfromoffsets(offsets, **jet_dict)
 
         # Sort jets by pt
         jets = jets[jets.pt.argsort()]
@@ -627,24 +684,8 @@ class Processor(processor.ProcessorABC):
             n[mask] += (pt_min < data["Jet"].pt[mask, i]).astype(int)
         return n >= self.config["jet_pt_num_satisfied"]
 
-    def btag(self, data):
-        tagger, wp = self.config["btag"].split(":")
-        if tagger == "deepcsv":
-            disc = data["Jet_btagDeepB"]
-            wps = {"loose": 0.1241, "medium": 0.4184, "tight": 0.7527}
-            if wp not in wps:
-                raise utils.ConfigError("Invalid DeepCSV working point: {}"
-                                        .format(wp))
-        elif tagger == "deepjet":
-            disc = data["Jet_btagDeepFlavB"]
-            wps = {"loose": 0.0494, "medium": 0.2770, "tight": 0.7264}
-            if wp not in wps:
-                raise utils.ConfigError("Invalid DeepJet working point: {}"
-                                        .format(wp))
-        else:
-            raise utils.ConfigError("Invalid tagger name: {}".format(tagger))
-        btagged = disc > wps[wp]
-        return btagged.sum() >= self.config["num_atleast_btagged"]
+    def btag_cut(self, data):
+        return data["Jet"].btag.sum() >= self.config["num_atleast_btagged"]
 
     def met_requirement(self, data):
         is_sf = data["is_same_flavor"]
@@ -666,3 +707,44 @@ class Processor(processor.ProcessorABC):
                                   pt=muons.pt.flatten())
                 weight *= utils.jaggedlike(muons.eta, factors_flat).prod()
         return weight
+
+    def pick_leps(self, data):
+        lepPair=data["Lepton"][:,:2]
+        lep = lepPair[lepPair.pdgId>0]
+        antilep = lepPair[lepPair.pdgId<0]
+        return lep, antilep
+
+    def choose_bs(self, data, lep, antilep):
+        btags = data["Jet"][data["Jet"].btag]
+        jetsnob = data["Jet"][~data["Jet"].btag]
+        b0, b1 = AdUtils.Pairswhere(btags.counts>1, btags.distincts(), btags.cross(jetsnob))
+        bs = AdUtils.concatenate(b0, b1)
+        bbars = AdUtils.concatenate(b1, b0)
+        GenHistFile = uproot.open("data/GenHists.root")
+        HistMlb = GenHistFile["Mlb"]
+        alb = bs.cross(antilep)
+        lbbar = bbars.cross(lep)
+        PMalb = awkward.JaggedArray.fromcounts(bs.counts,
+            HistMlb.allvalues[np.searchsorted(HistMlb.alledges, alb.mass.content)-1])
+        PMlbbar = awkward.JaggedArray.fromcounts(bs.counts,
+            HistMlb.allvalues[np.searchsorted(HistMlb.alledges, lbbar.mass.content)-1])
+        bestbpairMlb = (PMalb*PMlbbar).argmax()
+        return bs[bestbpairMlb], bbars[bestbpairMlb]
+
+    def passing_reco(self, data):
+        return data["neutrino"].counts>0
+
+    def Wminus(self, data):
+        return data["antineutrino"].cross(data["lep"])
+        
+    def Wplus(self, data):
+        return data["neutrino"].cross(data["antilep"])
+        
+    def top(self, data):
+        return data["Wplus"].cross(data["b"])
+    
+    def antitop(self, data):
+        return data["Wminus"].cross(data["bbar"])
+    
+    def ttbar(slef, data):
+        return data["top"].p4 + data["antitop"].p4

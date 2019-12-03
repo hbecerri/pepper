@@ -103,7 +103,6 @@ output = coffea.processor.run_uproot_job(
 
 for dataset in datasets.keys():
     if len(output["cols to save"][dataset]) > 0:
-        print ("here!")
         outpath = get_outpath(dataset, args.dest)
         os.makedirs(os.path.dirname(outpath), exist_ok=True)
         with h5py.File(outpath, "w") as f:
