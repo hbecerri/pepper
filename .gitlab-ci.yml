@@ -1,0 +1,8 @@
+before_script:
+  - yum install -y python3-pip > /dev/null
+  - pip3 install pycodestyle > /dev/null
+
+pycodestyle:
+  script:
+    - python3 -m pycodestyle $(find . -type f -name "*.py")
+
