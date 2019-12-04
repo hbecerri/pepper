@@ -208,18 +208,19 @@ class Selector(object):
         """Save the currently selected events
 
         Arguments:
-        p4s - names of particle columns for which one wishes to save all
-              the components of the four-momentum
-        other_cols - The other column one wishes to save
+        part_props - A dictionary of particles, followed by a list of properties one wishes
+                     to save for those particles- "p4" will add all components of the 4-momentum
+        other_cols - The other columns one wishes to save
+        cuts       - "Current", "All" or a list of cuts - the list of cuts to apply before saving-
+                     The default, "Current", only applies the cuts before freeze_selection
 
         Returns:
-        flat_dict - A defaultdict_accumulator containing accumulators of
-                    all the flat columns to be saved
-        jagged_dict - A defaultdict_accumulator containing accumulators
-                      of all the jagged columns to be saved
+        return_dict - A defaultdict_accumulator containing accumulators of the columns to be saved
         """
         if cuts == "Current":
             cuts = self._current_cuts
+        elif cuts == "All":
+            cuts = self._cuts.names
         return_dict= processor.defaultdict_accumulator(
             proc_utils.ArrayAccumulator)
         for part in part_props.keys():
@@ -239,6 +240,9 @@ class Selector(object):
         for col in other_cols:
             return_dict[col].value = self.table[self._cuts.all(*cuts)][col]
         return return_dict
+
+    def save_from_config(self, to_save):
+        return self.save_columns(to_save["part_props"], to_save["other_cols"], to_save["cuts"])
 
     def save_cuts(self, cuts="Current"):
         if cuts == "Current":
@@ -354,9 +358,10 @@ class Processor(processor.ProcessorABC):
         output["Mt"].fill(dataset=dsname, Mt=Mtop, weight=reco_objects.masked["weight"])
         output["MWplus"].fill(dataset=dsname, MW=MWplus, weight=reco_objects.masked["weight"])
 
-        output["cols to save"][dsname] = selector.save_columns(
-            part_props={"Lepton":["p4", "pdgId"], "Jet":["p4"]},
-            other_cols=["MET_sumEt", "weight"])
+        output["cols to save"][dsname] = selector.save_from_config(
+            self.config["selector_cols_to_save"])
+        output["cols to save"][dsname] += reco_objects.save_from_config(
+            self.config["reco_cols_to_save"])
         output["cut arrays"][dsname]=selector.save_cuts()
         output["cutflow"][dsname] = selector.cutflow
         return output

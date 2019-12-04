@@ -141,6 +141,17 @@
             "HLT_IsoMu24"
         ]
     },
+    "selector_cols_to_save":{
+        "part_props":{},
+        "other_cols":{},
+        "cuts":"Current"
+    },
+    "reco_cols_to_save":{
+        "part_props":{"lep":["p4"], "antilep":["p4"], "b":["p4"], "bbar":["p4"]},
+        "other_cols":{},
+        "cuts":"All"
+    },
+    
     "filter_year": "2018",
     "mc_lumifactors": "/nfs/dust/cms/user/ruebenaj/analysis/mc_lumifactors.json",
 
