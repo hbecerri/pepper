@@ -221,7 +221,3 @@ class Config(object):
 
     def __contains__(self, key):
         return key in self._config
-
-
-def jaggedlike(j, content):
-    return awkward.JaggedArray(j.starts, j.stops, content)

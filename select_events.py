@@ -13,7 +13,7 @@ import random
 from functools import partial
 from collections import OrderedDict
 
-import utils
+import config_utils
 from processor import Processor
 from argparse import ArgumentParser
 
@@ -53,7 +53,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 
-config = utils.Config(args.config)
+config = config_utils.Config(args.config)
 store = config["store"]
 
 
@@ -61,7 +61,7 @@ datasets = {}
 if args.dataset is None:
     datasets = config["exp_datasets"]
     if "MC" in datasets:
-        raise utils.ConfigError(
+        raise config_utils.ConfigError(
             "MC must not be specified in config exp_datasets")
     datasets["MC"] = []
     for mc_datasets in config["mc_datasets"].values():
@@ -75,10 +75,10 @@ else:
             datasets[dataset[0]] = [dataset[1]]
 
 if args.skip_existing:
-    datasets, paths2dsname = utils.expand_datasetdict(
+    datasets, paths2dsname = config_utils.expand_datasetdict(
         datasets, store, partial(skip_existing, args.dest))
 else:
-    datasets, paths2dsname = utils.expand_datasetdict(datasets, store)
+    datasets, paths2dsname = config_utils.expand_datasetdict(datasets, store)
 if args.mc:
     paths2dsname = {path: dsname for path, dsname in paths2dsname.items()
                     if dsname == "MC"}

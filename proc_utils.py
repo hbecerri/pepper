@@ -111,25 +111,6 @@ def concatenate(arr1, arr2):
         arr_dict["pdgId"] = awkward.concatenate([arr1["pdgId"], arr2["pdgId"]], axis=1).flatten()
     return Jca.candidatesfromoffsets(offsets, **arr_dict)
 
-def LVwhere(condition, x, y):
-    pt=np.empty(len(condition), dtype=float)
-    eta=np.empty(len(condition), dtype=float)
-    phi=np.empty(len(condition), dtype=float)
-    mass=np.empty(len(condition), dtype=float)
-
-    #condition=condition.astype(awkward.JaggedArray.MASKTYPmass)
-    pt[condition]=x.pt
-    pt[~condition]=y.pt
-    eta[condition]=x.eta
-    eta[~condition]=y.eta
-    phi[condition]=x.phi
-    phi[~condition]=y.phi
-    mass[condition]=x.mass
-    mass[~condition]=y.mass
-    out=Jca.candidatesfromcounts(np.ones_like(condition), pt=pt,eta=eta,phi=phi,mass=mass)
-    return out
-
-
 def Pairswhere(condition, x, y):
     counts=np.where(condition, x.counts, y.counts)
     pt0=np.empty(counts.sum(), dtype=float)
@@ -173,3 +154,31 @@ def Pairswhere(condition, x, y):
     mass1[~mask]=y[~condition].i1.mass.flatten()
     out1=Jca.candidatesfromcounts(counts, pt=pt1,eta=eta1,phi=phi1,mass=mass1)
     return out0, out1
+
+def jaggedlike(j, content):
+    return awkward.JaggedArray(j.starts, j.stops, content)
+
+def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None):
+    """Get trigger paths needed for the specific dataset.
+
+    Arguments:
+    dataset -- Name of the dataset
+    trigger_paths -- dict mapping dataset names to their triggers
+    trigger_order -- List of datasets to define the order in which the triggers
+                     are applied.
+
+    Returns a tuple of lists (pos_triggers, neg_triggers) describing trigger
+    paths to include and to exclude respectively.
+    """
+    pos_triggers = []
+    neg_triggers = []
+    if is_mc:
+        for paths in trigger_paths.values():
+            pos_triggers.extend(paths)
+    else:
+        for dsname in trigger_order:
+            if dsname == dataset:
+                break
+            neg_triggers.extend(trigger_paths[dsname])
+        pos_triggers = trigger_paths[dataset]
+    return list(dict.fromkeys(pos_triggers)), list(dict.fromkeys(neg_triggers))

@@ -11,8 +11,8 @@ from coffea.analysis_objects import JaggedCandidateArray as Jca
 import coffea.processor as processor
 import uproot
 
-import utils
-import AdUtils
+import config_utils
+import proc_utils
 from reconstructionUtils.KinRecoSonnenschein import KinReco
 
 class LazyTable(object):
@@ -83,7 +83,7 @@ class Selector(object):
         table -- An `awkward.Table` or `LazyTable` holding the events' data
         """
         self.table = table
-        self._cuts = AdUtils.PackedSelectionAccumulator()
+        self._cuts = proc_utils.PackedSelectionAccumulator()
         self._current_cuts = []
         self._frozen = False
 
@@ -221,7 +221,7 @@ class Selector(object):
         if cuts == "Current":
             cuts = self._current_cuts
         return_dict= processor.defaultdict_accumulator(
-            AdUtils.ArrayAccumulator)
+            proc_utils.ArrayAccumulator)
         for part in part_props.keys():
             for prop in part_props[part]:
                 if prop == "p4":
@@ -244,32 +244,6 @@ class Selector(object):
         if cuts == "Current":
             cuts = self._current_cuts
         return self._cuts.mask_self(self._cuts.all(*cuts))
-
-def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None):
-    """Get trigger paths needed for the specific dataset.
-
-    Arguments:
-    dataset -- Name of the dataset
-    trigger_paths -- dict mapping dataset names to their triggers
-    trigger_order -- List of datasets to define the order in which the triggers
-                     are applied.
-
-    Returns a tuple of lists (pos_triggers, neg_triggers) describing trigger
-    paths to include and to exclude respectively.
-    """
-    pos_triggers = []
-    neg_triggers = []
-    if is_mc:
-        for paths in trigger_paths.values():
-            pos_triggers.extend(paths)
-    else:
-        for dsname in trigger_order:
-            if dsname == dataset:
-                break
-            neg_triggers.extend(trigger_paths[dsname])
-        pos_triggers = trigger_paths[dataset]
-    return list(dict.fromkeys(pos_triggers)), list(dict.fromkeys(neg_triggers))
-
 
 class Processor(processor.ProcessorABC):
     def __init__(self, config):
@@ -309,9 +283,9 @@ class Processor(processor.ProcessorABC):
             "cutflow": processor.defaultdict_accumulator(
                 partial(processor.defaultdict_accumulator, int)),
             "cols to save": processor.defaultdict_accumulator( partial(
-                processor.defaultdict_accumulator, AdUtils.ArrayAccumulator)),
+                processor.defaultdict_accumulator, proc_utils.ArrayAccumulator)),
             "cut arrays": processor.defaultdict_accumulator(
-                AdUtils.PackedSelectionAccumulator)
+                proc_utils.PackedSelectionAccumulator)
         })
         return self._accumulator
 
@@ -326,7 +300,7 @@ class Processor(processor.ProcessorABC):
         is_mc = (dsname in self.config["mc_datasets"].keys())
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
-        pos_triggers, neg_triggers = get_trigger_paths_for(
+        pos_triggers, neg_triggers = proc_utils.get_trigger_paths_for(
             dsname, is_mc, self.trigger_paths, self.trigger_order)
         selector.add_cut(partial(
             self.passing_trigger, pos_triggers, neg_triggers), "Trigger")
@@ -427,7 +401,7 @@ class Processor(processor.ProcessorABC):
             if not is_mc:
                 passing_filters &= data["Flag_eeBadScFilter"]
         else:
-            raise utils.ConfigError("Invalid filter year: {}".format(
+            raise config_utils.ConfigError("Invalid filter year: {}".format(
                 filter_year))
         if filter_year in ("2018", "2017"):
             passing_filters &= data["Flag_ecalBadCalibFilterV2"]
@@ -565,7 +539,7 @@ class Processor(processor.ProcessorABC):
         elif j_id == "cut:tightlepveto":
             has_id = (data["Jet_jetId"] & 0b100).astype(bool)
         else:
-            raise utils.ConfigError("Invalid good_jet_id: {}".format(j_id))
+            raise config_utils.ConfigError("Invalid good_jet_id: {}".format(j_id))
 
         lep_dist = self.config["good_jet_lepton_distance"]
 
@@ -602,16 +576,16 @@ class Processor(processor.ProcessorABC):
             disc = data["Jet_btagDeepB"][gj]
             wps = {"loose": 0.1241, "medium": 0.4184, "tight": 0.7527}
             if wp not in wps:
-                raise utils.ConfigError("Invalid DeepCSV working point: {}"
+                raise config_utils.ConfigError("Invalid DeepCSV working point: {}"
                                         .format(wp))
         elif tagger == "deepjet":
             disc = data["Jet_btagDeepFlavB"][gj]
             wps = {"loose": 0.0494, "medium": 0.2770, "tight": 0.7264}
             if wp not in wps:
-                raise utils.ConfigError("Invalid DeepJet working point: {}"
+                raise config_utils.ConfigError("Invalid DeepJet working point: {}"
                                         .format(wp))
         else:
-            raise utils.ConfigError("Invalid tagger name: {}".format(tagger))
+            raise config_utils.ConfigError("Invalid tagger name: {}".format(tagger))
         jet_dict["btag"] = (disc > wps[wp]).flatten()
         jets = Jca.candidatesfromoffsets(offsets, **jet_dict)
 
@@ -701,11 +675,11 @@ class Processor(processor.ProcessorABC):
             for sf in self.electron_sf:
                 factors_flat = sf(eta=electrons.eta.flatten(),
                                   pt=electrons.pt.flatten())
-                weight *= utils.jaggedlike(electrons.eta, factors_flat).prod()
+                weight *= proc_utils.jaggedlike(electrons.eta, factors_flat).prod()
             for sf in self.muon_sf:
                 factors_flat = sf(abseta=abs(muons.eta.flatten()),
                                   pt=muons.pt.flatten())
-                weight *= utils.jaggedlike(muons.eta, factors_flat).prod()
+                weight *= proc_utils.jaggedlike(muons.eta, factors_flat).prod()
         return weight
 
     def pick_leps(self, data):
@@ -717,9 +691,9 @@ class Processor(processor.ProcessorABC):
     def choose_bs(self, data, lep, antilep):
         btags = data["Jet"][data["Jet"].btag]
         jetsnob = data["Jet"][~data["Jet"].btag]
-        b0, b1 = AdUtils.Pairswhere(btags.counts>1, btags.distincts(), btags.cross(jetsnob))
-        bs = AdUtils.concatenate(b0, b1)
-        bbars = AdUtils.concatenate(b1, b0)
+        b0, b1 = proc_utils.Pairswhere(btags.counts>1, btags.distincts(), btags.cross(jetsnob))
+        bs = proc_utils.concatenate(b0, b1)
+        bbars = proc_utils.concatenate(b1, b0)
         GenHistFile = uproot.open("data/GenHists.root")
         HistMlb = GenHistFile["Mlb"]
         alb = bs.cross(antilep)
