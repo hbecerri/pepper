@@ -27,8 +27,10 @@ def get_outpath(path, dest):
     outpath = os.path.join(dest, outpath)
     return outpath
 
+
 def skip_existing(dest, path):
     return os.path.exists(get_outpath(path, dest))
+
 
 parser = ArgumentParser(description="Select events from nanoAODs")
 parser.add_argument("config", help="Path to a configuration file")
