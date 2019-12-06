@@ -49,6 +49,10 @@ class PackedSelectionAccumulator(PackedSelection, AccumulatorABC):
         masked._mask = masked._mask[cuts]
         return masked
 
+    @property
+    def mask(self):
+        return self._mask
+
 
 class ArrayAccumulator(AccumulatorABC):
     def __init__(self):

@@ -228,24 +228,23 @@ class Selector(object):
         else:
             raise ValueError("cuts needs to be one of 'Current', 'All'. Got {}"
                              .format(cuts))
-        return_dict = processor.defaultdict_accumulator(
-            proc_utils.ArrayAccumulator)
+        return_dict = {}
         for part in part_props.keys():
             for prop in part_props[part]:
                 if prop == "p4":
-                    return_dict[part + "_pt"].value =\
+                    return_dict[part + "_pt"] =\
                         self.table[self._cuts.all(*cuts)][part].pt
-                    return_dict[part + "_eta"].value =\
+                    return_dict[part + "_eta"] =\
                         self.table[self._cuts.all(*cuts)][part].eta
-                    return_dict[part + "_phi"].value =\
+                    return_dict[part + "_phi"] =\
                         self.table[self._cuts.all(*cuts)][part].phi
-                    return_dict[part + "_mass"].value =\
+                    return_dict[part + "_mass"] =\
                         self.table[self._cuts.all(*cuts)][part].mass
                 else:
-                    return_dict[part + "_" + prop].value =\
+                    return_dict[part + "_" + prop] =\
                         self.table[self._cuts.all(*cuts)][part][prop]
         for col in other_cols:
-            return_dict[col].value = self.table[self._cuts.all(*cuts)][col]
+            return_dict[col] = self.table[self._cuts.all(*cuts)][col]
         return return_dict
 
     def save_from_config(self, to_save):
@@ -335,8 +334,8 @@ class Processor(processor.ProcessorABC):
             outf = awkward.hdf5(f)
             out_dict = selector.save_from_config(
                 self.config["selector_cols_to_save"])
-            out_dict += reco_selector.save_from_config(
-                self.config["reco_cols_to_save"])
+            out_dict.update(reco_selector.save_from_config(
+                self.config["reco_cols_to_save"]))
             out_dict["cut_arrays"] = selector.save_cuts()
             out_dict["cutflow"] = selector.cutflow
 
