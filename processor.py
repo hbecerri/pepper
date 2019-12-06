@@ -225,9 +225,9 @@ class Selector(object):
             cuts = self._current_cuts
         elif cuts == "All":
             cuts = self._cuts.names
-        else:
-            raise ValueError("cuts needs to be one of 'Current', 'All'. Got {}"
-                             .format(cuts))
+        elif not isinstance(cuts, list):
+            raise ValueError("cuts needs to be one of 'Current', 'All' or a "
+                             "list")
         data = self.table[self._cuts.all(*cuts)]
         return_dict = {}
         for part in part_props.keys():
@@ -248,8 +248,20 @@ class Selector(object):
                                 to_save["other_cols"], to_save["cuts"])
 
     def get_cuts(self, cuts="Current"):
+        """Get information on what events pass which cuts
+
+        Arguments:
+        cuts -- "Current", "All" or a list of cuts - the list of cuts to
+                apply before saving- The default, "Current", only applies
+                the cuts before freeze_selection
+        """
         if cuts == "Current":
             cuts = self._current_cuts
+        elif cuts == "All":
+            cuts = self._cuts.names
+        elif not isinstance(cuts, list):
+            raise ValueError("cuts needs to be one of 'Current', 'All' or a "
+                             "list")
         return self._cuts.mask[self._cuts.all(*cuts)]
 
 
