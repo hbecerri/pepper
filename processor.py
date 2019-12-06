@@ -753,7 +753,7 @@ class Processor(processor.ProcessorABC):
                                        btags.cross(jetsnob))
         bs = proc_utils.concatenate(b0, b1)
         bbars = proc_utils.concatenate(b1, b0)
-        GenHistFile = uproot.open("data/GenHists.root")
+        GenHistFile = uproot.open(self.config["genhist_path"])
         HistMlb = GenHistFile["Mlb"]
         alb = bs.cross(antilep)
         lbbar = bbars.cross(lep)
