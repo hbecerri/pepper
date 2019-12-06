@@ -205,8 +205,8 @@ class Selector(object):
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
 
-    def save_columns(self, part_props={}, other_cols=[], cuts="Current"):
-        """Save the currently selected events
+    def get_columns(self, part_props={}, other_cols=[], cuts="Current"):
+        """Get columns of events passing cuts
 
         Arguments:
         part_props- A dictionary of particles, followed by a list of properties
@@ -218,8 +218,8 @@ class Selector(object):
                      the cuts before freeze_selection
 
         Returns:
-        return_dict - A defaultdict_accumulator containing accumulators of the
-                      columns to be saved
+        return_dict - A dict containing JaggedArrays or numpy arrays of the
+                      columns
         """
         if cuts == "Current":
             cuts = self._current_cuts
@@ -228,33 +228,29 @@ class Selector(object):
         else:
             raise ValueError("cuts needs to be one of 'Current', 'All'. Got {}"
                              .format(cuts))
+        data = self.table[self._cuts.all(*cuts)]
         return_dict = {}
         for part in part_props.keys():
             for prop in part_props[part]:
                 if prop == "p4":
-                    return_dict[part + "_pt"] =\
-                        self.table[self._cuts.all(*cuts)][part].pt
-                    return_dict[part + "_eta"] =\
-                        self.table[self._cuts.all(*cuts)][part].eta
-                    return_dict[part + "_phi"] =\
-                        self.table[self._cuts.all(*cuts)][part].phi
-                    return_dict[part + "_mass"] =\
-                        self.table[self._cuts.all(*cuts)][part].mass
+                    return_dict[part + "_pt"] = data[part].pt
+                    return_dict[part + "_eta"] = data[part].eta
+                    return_dict[part + "_phi"] = data[part].phi
+                    return_dict[part + "_mass"] = data[part].mass
                 else:
-                    return_dict[part + "_" + prop] =\
-                        self.table[self._cuts.all(*cuts)][part][prop]
+                    return_dict[part + "_" + prop] = data[part][prop]
         for col in other_cols:
-            return_dict[col] = self.table[self._cuts.all(*cuts)][col]
+            return_dict[col] = data[col]
         return return_dict
 
-    def save_from_config(self, to_save):
-        return self.save_columns(to_save["part_props"],
-                                 to_save["other_cols"], to_save["cuts"])
+    def get_columns_from_config(self, to_save):
+        return self.get_columns(to_save["part_props"],
+                                to_save["other_cols"], to_save["cuts"])
 
-    def save_cuts(self, cuts="Current"):
+    def get_cuts(self, cuts="Current"):
         if cuts == "Current":
             cuts = self._current_cuts
-        return self._cuts.mask_self(self._cuts.all(*cuts))
+        return self._cuts.mask[self._cuts.all(*cuts)]
 
 
 class Processor(processor.ProcessorABC):
@@ -332,11 +328,11 @@ class Processor(processor.ProcessorABC):
     def _save_per_event_info(self, dsname, selector, reco_selector):
         with self._open_output(dsname) as f:
             outf = awkward.hdf5(f)
-            out_dict = selector.save_from_config(
+            out_dict = selector.get_columns_from_config(
                 self.config["selector_cols_to_save"])
-            out_dict.update(reco_selector.save_from_config(
+            out_dict.update(reco_selector.get_columns_from_config(
                 self.config["reco_cols_to_save"]))
-            out_dict["cut_arrays"] = selector.save_cuts()
+            out_dict["cut_arrays"] = selector.get_cuts()
             out_dict["cutflow"] = selector.cutflow
 
             for key in out_dict.keys():
