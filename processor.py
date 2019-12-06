@@ -225,6 +225,9 @@ class Selector(object):
             cuts = self._current_cuts
         elif cuts == "All":
             cuts = self._cuts.names
+        else:
+            raise ValueError("cuts needs to be one of 'Current', 'All'. Got {}"
+                             .format(cuts))
         return_dict = processor.defaultdict_accumulator(
             proc_utils.ArrayAccumulator)
         for part in part_props.keys():
