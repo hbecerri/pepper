@@ -2,7 +2,6 @@
 
 import os
 from functools import partial
-
 import numpy as np
 import awkward
 import coffea
@@ -10,6 +9,7 @@ from coffea import hist
 from coffea.analysis_objects import JaggedCandidateArray as Jca
 import coffea.processor as processor
 import uproot
+import h5py
 
 import config_utils
 import proc_utils
@@ -225,6 +225,9 @@ class Selector(object):
             cuts = self._current_cuts
         elif cuts == "All":
             cuts = self._cuts.names
+        else:
+            raise ValueError("cuts needs to be one of 'Current', 'All'. Got {}"
+                             .format(cuts))
         return_dict = processor.defaultdict_accumulator(
             proc_utils.ArrayAccumulator)
         for part in part_props.keys():
@@ -256,8 +259,16 @@ class Selector(object):
 
 
 class Processor(processor.ProcessorABC):
-    def __init__(self, config):
+    def __init__(self, config, destdir):
+        """Create a new Processor
+
+        Arguments:
+        config -- A Config instance, defining the configuration to use
+        destdir -- Destination directory, where the event HDF5s are saved
+
+        """
         self.config = config
+        self.destdir = destdir
 
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]
@@ -302,6 +313,35 @@ class Processor(processor.ProcessorABC):
 
     def postprocess(self, accumulator):
         return accumulator
+
+    def _open_output(self, dsname):
+        dsname = dsname.replace("/", "_")
+        dsdir = os.path.join(self.destdir, dsname)
+        os.makedirs(dsdir, exist_ok=True)
+        i = 0
+        while True:
+            filepath = os.path.join(dsdir, str(i).zfill(4) + ".hdf5")
+            try:
+                f = h5py.File(filepath, "x")
+            except (FileExistsError, OSError):
+                i += 1
+                continue
+            else:
+                break
+        return f
+
+    def _save_per_event_info(self, dsname, selector, reco_selector):
+        with self._open_output(dsname) as f:
+            outf = awkward.hdf5(f)
+            out_dict = selector.save_from_config(
+                self.config["selector_cols_to_save"])
+            out_dict += reco_selector.save_from_config(
+                self.config["reco_cols_to_save"])
+            out_dict["cut_arrays"] = selector.save_cuts()
+            out_dict["cutflow"] = selector.cutflow
+
+            for key in out_dict.keys():
+                outf[key] = out_dict[key]
 
     def process(self, df):
         output = self.accumulator.identity()
@@ -373,12 +413,9 @@ class Processor(processor.ProcessorABC):
         output["MWplus"].fill(dataset=dsname, MW=MWplus,
                               weight=reco_objects.masked["weight"])
 
-        output["cols to save"][dsname] = selector.save_from_config(
-            self.config["selector_cols_to_save"])
-        output["cols to save"][dsname] += reco_objects.save_from_config(
-            self.config["reco_cols_to_save"])
-        output["cut arrays"][dsname] = selector.save_cuts()
-        output["cutflow"][dsname] = selector.cutflow
+        if self.destdir is not None:
+            self._save_per_event_info(dsname, selector, reco_objects)
+
         return output
 
     def good_lumimask(self, is_mc, data):
@@ -719,7 +756,7 @@ class Processor(processor.ProcessorABC):
                                        btags.cross(jetsnob))
         bs = proc_utils.concatenate(b0, b1)
         bbars = proc_utils.concatenate(b1, b0)
-        GenHistFile = uproot.open("data/GenHists.root")
+        GenHistFile = uproot.open(self.config["genhist_path"])
         HistMlb = GenHistFile["Mlb"]
         alb = bs.cross(antilep)
         lbbar = bbars.cross(lep)
