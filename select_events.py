@@ -4,7 +4,6 @@ import os
 import sys
 import numpy as np
 import awkward
-import h5py
 import uproot
 import coffea
 from coffea.analysis_objects import JaggedCandidateArray as CandArray
@@ -12,6 +11,7 @@ from time import time
 import random
 from functools import partial
 from collections import OrderedDict
+import shutil
 
 import config_utils
 from processor import Processor
@@ -94,22 +94,31 @@ print("Got a total of {} files of which {} are MC".format(num_files,
 if args.debug:
     key = next(iter(datasets.keys()))
     datasets = {key: datasets[key][:1]}
+
+nonempty = []
+for dsname in datasets.keys():
+    try:
+        next(os.scandir(os.path.join(args.dest, dsname)))
+    except (FileNotFoundError, StopIteration):
+        pass
+    else:
+        nonempty.append(dsname)
+if len(nonempty) != 0:
+    print("Non-empty output directories: {}".format(", ".join(nonempty)))
+    while True:
+        answer = input("Delete? y/n ")
+        if answer == "y":
+            for dsname in nonempty:
+                shutil.rmtree(os.path.join(args.dest, dsname))
+            break
+        elif answer == "n":
+            break
+
 output = coffea.processor.run_uproot_job(
     datasets, treename="Events",
-    processor_instance=Processor(config),
+    processor_instance=Processor(config, args.dest),
     executor=coffea.processor.iterative_executor,
     executor_args={"workers": 4,
                    "flatten": False,
                    "processor_compression": None},
     chunksize=100000)
-
-for dataset in datasets.keys():
-    if len(output["cols to save"][dataset]) > 0:
-        outpath = get_outpath(dataset, args.dest)
-        os.makedirs(os.path.dirname(outpath), exist_ok=True)
-        with h5py.File(outpath, "w") as f:
-            out = awkward.hdf5(f)
-            for key in output["cols to save"][dataset].keys():
-                out[key] = output["cols to save"][dataset][key].value
-            if output["cut arrays"][dataset].names is not None:
-                out["cut arrays"] = output["cut arrays"][dataset]
