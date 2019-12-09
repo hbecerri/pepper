@@ -189,11 +189,7 @@ class Config(object):
         if key not in self._config:
             raise ConfigError("\"{}\" not specified in config".format(key))
 
-        if key == "lumimask":
-            self._cache["lumimask"] = coffea.lumi_tools.LumiMask(
-                self._config[key])
-            return self._cache["lumimask"]
-        elif key == "electron_sf":
+        if key == "electron_sf":
             self._cache["electron_sf"] = self._get_scalefactors("electron_sf",
                                                                 False)
             return self._cache["electron_sf"]

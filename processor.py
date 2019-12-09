@@ -351,6 +351,7 @@ class Processor(processor.ProcessorABC):
                 outf[key] = out_dict[key]
 
     def process(self, df):
+        print("Processor is processing!")
         output = self.accumulator.identity()
         selector = Selector(LazyTable(df), "genWeight")
 
@@ -431,7 +432,8 @@ class Processor(processor.ProcessorABC):
         else:
             run = np.array(data["run"])
             luminosityBlock = np.array(data["luminosityBlock"])
-            return self.lumimask(run, luminosityBlock)
+            lumimask = coffea.lumi_tools.LumiMask(self.lumimask)
+            return lumimask(run, luminosityBlock)
 
     def passing_trigger(self, pos_triggers, neg_triggers, data):
         trigger = (
