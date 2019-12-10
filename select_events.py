@@ -12,6 +12,8 @@ import random
 from functools import partial
 from collections import OrderedDict
 import shutil
+import parsl
+from parsl.addresses import address_by_hostname
 
 import config_utils
 from processor import Processor
@@ -40,10 +42,10 @@ parser.add_argument(
     help="Can be specified multiple times. Ignore datasets given in "
     "config and instead process these")
 parser.add_argument(
-    "--condor", type=int, const=10, nargs="?", metavar="files_per_job",
-    help="Split and submit to HTCondor. By default for every 10 files a "
-    "job is created. The number can be changed by supplying it to this "
-    "option")
+    "--condor", type=int, const=10, nargs="?", metavar="simul_jobs",
+    help="Split and submit to HTCondor. By default 10 condor jobs are "
+    "submitted. The number can be changed by supplying it to this option"
+)
 parser.add_argument(
    "--skip_existing", action="store_true", help="Skip already existing "
    "files")
@@ -114,11 +116,48 @@ if len(nonempty) != 0:
         elif answer == "n":
             break
 
+processor = Processor(config, os.path.realpath(args.dest))
+if args.condor is not None:
+    executor = coffea.processor.parsl_executor
+    conor_config = ""
+    # Need to unset PYTHONPATH because of cmssw setting it incorrectly
+    # Need to put own directory into PYTHONPATH for unpickling processor to
+    # work. Should be unncessecary, one this we have correct module structure
+    # Need to extend PATH to be able to execute the main parsle script
+    condor_init = """
+source /cvmfs/cms.cern.ch/cmsset_default.sh
+cd /cvmfs/cms.cern.ch/slc6_amd64_gcc700/cms/cmssw-patch/CMSSW_10_2_4_patch1/src
+eval `scramv1 runtime -sh`
+cd -
+export PYTHONPATH={}
+export PATH=~/.local/bin:$PATH
+""".format(os.path.dirname(os.path.abspath(__file__)))
+    provider = parsl.providers.CondorProvider(
+        channel=parsl.channels.LocalChannel(),
+        init_blocks=args.condor,
+        max_blocks=args.condor,
+        nodes_per_block=1,
+        parallelism=1,
+        scheduler_options=conor_config,
+        worker_init=condor_init
+    )
+    parsl_executor = parsl.executors.HighThroughputExecutor(
+        label="HTCondor",
+        address=address_by_hostname(),
+        prefetch_capacity=0,
+        cores_per_worker=1,
+        max_workers=1,
+        provider=provider,
+        worker_debug=True,
+    )
+    parsl_config = parsl.config.Config(
+        executors=[parsl_executor],
+        lazy_errors=False
+    )
+
+    executor_args = {"config": parsl_config}
+else:
+    executor = coffea.processor.iterative_executor
+    executor_args = {}
 output = coffea.processor.run_uproot_job(
-    datasets, treename="Events",
-    processor_instance=Processor(config, args.dest),
-    executor=coffea.processor.iterative_executor,
-    executor_args={"workers": 4,
-                   "flatten": False,
-                   "processor_compression": None},
-    chunksize=100000)
+    datasets, "Events", processor, executor, executor_args)
