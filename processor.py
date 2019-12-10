@@ -413,6 +413,7 @@ class Processor(processor.ProcessorABC):
         MWplus = reco_objects.masked["Wplus"][best].mass.content
         Mtop = reco_objects.masked["top"][best].mass.content
 
+        output["cutflow"][dsname] = selector.cutflow
         output["Mttbar"].fill(dataset=dsname, Mttbar=Mttbar,
                               weight=reco_objects.masked["weight"])
         output["Mt"].fill(dataset=dsname, Mt=Mtop,

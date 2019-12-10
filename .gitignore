@@ -4,3 +4,4 @@ log.txt
 __pycache__
 *.hdf5
 data
+selected_columns
