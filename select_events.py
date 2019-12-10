@@ -63,13 +63,14 @@ store = config["store"]
 
 datasets = {}
 if args.dataset is None:
-    datasets = config["exp_datasets"]
-    if "MC" in datasets:
-        raise config_utils.ConfigError(
-            "MC must not be specified in config exp_datasets")
-    datasets["MC"] = []
-    for mc_datasets in config["mc_datasets"].values():
-        datasets["MC"].extend(mc_datasets)
+    datasets = {}
+    if not args.mc:
+        datasets.update(config["exp_datasets"])
+    duplicate = set(datasets.keys()) & set(config["mc_datasets"])
+    if len(duplicate) > 0:
+        print("Got duplicate dataset names: {}".format(", ".join(duplicate)))
+        exit(1)
+    datasets.update(config["mc_datasets"])
 else:
     datasets = {}
     for dataset in args.dataset:
@@ -83,17 +84,15 @@ if args.skip_existing:
         datasets, store, partial(skip_existing, args.dest))
 else:
     datasets, paths2dsname = config_utils.expand_datasetdict(datasets, store)
-if args.mc:
-    paths2dsname = {path: dsname for path, dsname in paths2dsname.items()
-                    if dsname == "MC"}
-    datasets = {"MC": datasets["MC"]}
 num_files = len(paths2dsname)
-num_mc_files = len(datasets["MC"]) if "MC" in datasets else 0
+num_mc_files = sum(len(datasets[dsname])
+                   for dsname in config["mc_datasets"].keys())
 
 print("Got a total of {} files of which {} are MC".format(num_files,
                                                           num_mc_files))
 
 if args.debug:
+    print("Processing only one file because of --debug")
     key = next(iter(datasets.keys()))
     datasets = {key: datasets[key][:1]}
 
@@ -115,6 +114,7 @@ if len(nonempty) != 0:
             break
         elif answer == "n":
             break
+print(datasets)
 
 processor = Processor(config, os.path.realpath(args.dest))
 if args.condor is not None:
