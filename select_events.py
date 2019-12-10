@@ -114,7 +114,6 @@ if len(nonempty) != 0:
             break
         elif answer == "n":
             break
-print(datasets)
 
 processor = Processor(config, os.path.realpath(args.dest))
 if args.condor is not None:
