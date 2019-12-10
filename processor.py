@@ -205,7 +205,8 @@ class Selector(object):
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
 
-    def get_columns(self, part_props={}, other_cols=[], cuts="Current"):
+    def get_columns(self, part_props={}, other_cols=[], cuts="Current",
+                    prefix=""):
         """Get columns of events passing cuts
 
         Arguments:
@@ -216,6 +217,7 @@ class Selector(object):
         cuts      - "Current", "All" or a list of cuts - the list of cuts to
                      apply before saving- The default, "Current", only applies
                      the cuts before freeze_selection
+        prefix    - A string that gets prepended to every key in return_dict
 
         Returns:
         return_dict - A dict containing JaggedArrays or numpy arrays of the
@@ -240,12 +242,14 @@ class Selector(object):
                 else:
                     return_dict[part + "_" + prop] = data[part][prop]
         for col in other_cols:
-            return_dict[col] = data[col]
+            return_dict[prefix + col] = data[col]
         return return_dict
 
-    def get_columns_from_config(self, to_save):
+    def get_columns_from_config(self, to_save, prefix=""):
         return self.get_columns(to_save["part_props"],
-                                to_save["other_cols"], to_save["cuts"])
+                                to_save["other_cols"],
+                                to_save["cuts"],
+                                prefix=prefix)
 
     def get_cuts(self, cuts="Current"):
         """Get information on what events pass which cuts
@@ -271,7 +275,9 @@ class Processor(processor.ProcessorABC):
 
         Arguments:
         config -- A Config instance, defining the configuration to use
-        destdir -- Destination directory, where the event HDF5s are saved
+        destdir -- Destination directory, where the event HDF5s are saved.
+                   Every chunk will be saved in its own file. If `None`,
+                   nothing will be saved.
 
         """
         self.config = config
@@ -343,7 +349,7 @@ class Processor(processor.ProcessorABC):
             out_dict = selector.get_columns_from_config(
                 self.config["selector_cols_to_save"])
             out_dict.update(reco_selector.get_columns_from_config(
-                self.config["reco_cols_to_save"]))
+                self.config["reco_cols_to_save"], "reco"))
             out_dict["cut_arrays"] = selector.get_cuts()
             out_dict["cutflow"] = selector.cutflow
 
