@@ -351,7 +351,6 @@ class Processor(processor.ProcessorABC):
                 outf[key] = out_dict[key]
 
     def process(self, df):
-        print("Processor is processing!")
         output = self.accumulator.identity()
         selector = Selector(LazyTable(df), "genWeight")
 
