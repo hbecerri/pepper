@@ -1,23 +1,15 @@
 #!/usr/bin/env python3
 
 import os
-import sys
-import numpy as np
-import awkward
-import uproot
 import coffea
-from coffea.analysis_objects import JaggedCandidateArray as CandArray
-from time import time
-import random
 from functools import partial
-from collections import OrderedDict
 import shutil
 import parsl
 from parsl.addresses import address_by_hostname
+from argparse import ArgumentParser
 
 import config_utils
 from processor import Processor
-from argparse import ArgumentParser
 
 
 def get_outpath(path, dest):
@@ -132,22 +124,16 @@ export PYTHONPATH={}
 export PATH=~/.local/bin:$PATH
 """.format(os.path.dirname(os.path.abspath(__file__)))
     provider = parsl.providers.CondorProvider(
-        channel=parsl.channels.LocalChannel(),
         init_blocks=args.condor,
         max_blocks=args.condor,
-        nodes_per_block=1,
-        parallelism=1,
         scheduler_options=conor_config,
         worker_init=condor_init
     )
     parsl_executor = parsl.executors.HighThroughputExecutor(
         label="HTCondor",
         address=address_by_hostname(),
-        prefetch_capacity=0,
-        cores_per_worker=1,
         max_workers=1,
         provider=provider,
-        worker_debug=True,
     )
     parsl_config = parsl.config.Config(
         executors=[parsl_executor],
