@@ -5,7 +5,7 @@ from coffea.util import awkward, numpy
 from coffea.util import numpy as np
 from awkward import JaggedArray
 import coffea.processor as processor
-from coffea.processor.parsl.parsl_executor import parsl_executor
+import coffea
 import uproot
 import matplotlib
 import matplotlib.pyplot as plt
@@ -118,7 +118,7 @@ class ttbarProcessor(processor.ProcessorABC):
             mass=df['Jet_mass'],
             btag=df['Jet_btagDeepB'],
             )
-        genpart = JaggedCandidateArray.candidatesfromcounts(
+        '''genpart = JaggedCandidateArray.candidatesfromcounts(
             df['nGenPart'],
             pt=df['GenPart_pt'],
             eta=df['GenPart_eta'],
@@ -128,7 +128,7 @@ class ttbarProcessor(processor.ProcessorABC):
             motherIdx=df['GenPart_genPartIdxMother'],
             status=df['GenPart_status'],
             statusFlags=df['GenPart_statusFlags'],
-            )
+            )'''
         MET= awkward.Table(pt=df['MET_pt'], phi=df['MET_phi'])
         genMET= awkward.Table(pt=df['GenMET_pt'], phi=df['GenMET_phi'])
         weights=df['Generator_weight']  #or genWeight? Not sure what the difference between them is...
@@ -306,7 +306,7 @@ config = Config(
                     cores_per_worker=1,
                     max_workers=nproc,
                     provider=CondorProvider(channel=LocalChannel(),
-                        init_blocks=800,
+                        init_blocks=20,
                         min_blocks=5,
                         max_blocks=1000,
                         nodes_per_block=1,
@@ -325,10 +325,11 @@ try:
                                       executor_args={'workers': 4, 'flatten': True},
                                       chunksize = 100000)
     '''
-    output = processor.run_parsl_job(fileset,
+    output = processor.run_uproot_job(smallfileset,
                                      treename='Events',
                                      processor_instance=ttbarProcessor(),
-                                     executor=parsl_executor,
+                                     executor=coffea.processor.parsl_executor,
+                                     executor_args={'flatten': True},
                                      chunksize = 100000)
 except KeyboardInterrupt:
     raise
