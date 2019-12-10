@@ -12,20 +12,6 @@ import config_utils
 from processor import Processor
 
 
-def get_outpath(path, dest):
-    if path.startswith("/pnfs/desy.de/cms/tier2/store/"):
-        outpath = path.replace("/pnfs/desy.de/cms/tier2/store/", "")
-    else:
-        outpath = path
-    outpath = os.path.splitext(outpath)[0] + ".hdf5"
-    outpath = os.path.join(dest, outpath)
-    return outpath
-
-
-def skip_existing(dest, path):
-    return os.path.exists(get_outpath(path, dest))
-
-
 parser = ArgumentParser(description="Select events from nanoAODs")
 parser.add_argument("config", help="Path to a configuration file")
 parser.add_argument("dest", help="Path to destination output directory")
@@ -38,9 +24,6 @@ parser.add_argument(
     help="Split and submit to HTCondor. By default 10 condor jobs are "
     "submitted. The number can be changed by supplying it to this option"
 )
-parser.add_argument(
-   "--skip_existing", action="store_true", help="Skip already existing "
-   "files")
 parser.add_argument(
     "--mc", action="store_true", help="Only process MC files")
 parser.add_argument(
@@ -71,11 +54,7 @@ else:
         else:
             datasets[dataset[0]] = [dataset[1]]
 
-if args.skip_existing:
-    datasets, paths2dsname = config_utils.expand_datasetdict(
-        datasets, store, partial(skip_existing, args.dest))
-else:
-    datasets, paths2dsname = config_utils.expand_datasetdict(datasets, store)
+datasets, paths2dsname = config_utils.expand_datasetdict(datasets, store)
 num_files = len(paths2dsname)
 num_mc_files = sum(len(datasets[dsname])
                    for dsname in config["mc_datasets"].keys())
