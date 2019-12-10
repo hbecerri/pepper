@@ -154,7 +154,10 @@ export PATH=~/.local/bin:$PATH
         lazy_errors=False
     )
 
-    executor_args = {"config": parsl_config}
+    # Load config now instead of putting it into executor_args to be able to
+    # use the same jobs for preprocessing and processing
+    parsl.load(parsl_config)
+    executor_args = {}
 else:
     executor = coffea.processor.iterative_executor
     executor_args = {}
