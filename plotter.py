@@ -24,36 +24,39 @@ from processor import Processor
 
 matplotlib.interactive(True)
 
-wrk_init='''
+wrk_init = """
 export PATH=/afs/desy.de/user/s/stafford/.local/bin:$PATH
-export PYTHONPATH=/afs/desy.de/user/s/stafford/.local/lib/python3.6/site-packages:$PYTHONPATH
-export PYTHONPATH=/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea:$PYTHONPATH
-'''
+export PYTHONPATH=\
+/afs/desy.de/user/s/stafford/.local/lib/python3.6/site-packages:$PYTHONPATH
+export PYTHONPATH=\
+/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea:$PYTHONPATH
+"""
 
-nproc=1
-condor_cfg='''
+nproc = 1
+condor_cfg = """
 Requirements = OpSysAndVer == "CentOS7"
-RequestMemory=%d
-RequestCores=%d
-'''%(2048*nproc, nproc)
+RequestMemory = %d
+RequestCores = %d
+""" % (2048*nproc, nproc)
 
 parsl_config = Config(
         executors=[HighThroughputExecutor(label="HTCondor",
-                    address=address_by_hostname(),
-                    prefetch_capacity=0,
-                    cores_per_worker=1,
-                    max_workers=nproc,
-                    provider=CondorProvider(channel=LocalChannel(),
+                   address=address_by_hostname(),
+                   prefetch_capacity=0,
+                   cores_per_worker=1,
+                   max_workers=nproc,
+                   provider=CondorProvider(
+                        channel=LocalChannel(),
                         init_blocks=20,
                         min_blocks=5,
                         max_blocks=1000,
                         nodes_per_block=1,
                         parallelism=1,
-                        scheduler_options=condor_cfg, 
+                        scheduler_options=condor_cfg,
                         worker_init=wrk_init))],
         lazy_errors=False
 )
-dfk=load(parsl_config)
+dfk = load(parsl_config)
 
 config = config_utils.Config("example/config.json")
 store = config["store"]
@@ -66,53 +69,62 @@ smallfileset = {"TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8":
                 [fileset["WZ_TuneCP5_13TeV-pythia8"][0]],
                 "ZZ_TuneCP5_13TeV-pythia8":
                 [fileset["ZZ_TuneCP5_13TeV-pythia8"][0]]}
-'''output = coffea.processor.run_uproot_job(smallfileset,
-                                      treename='Events',
-                                      processor_instance=Processor(config, "selected_columns"),
-                                      executor=coffea.processor.iterative_executor,
-                                      executor_args={'workers': 4},
-                                      chunksize = 100000)
-'''
-output = coffea.processor.run_uproot_job(smallfileset,
-                                 treename='Events',
-                                 processor_instance=Processor(config, "selected_columns"),
-                                 executor=parsl_executor,
-                                 chunksize = 500000)
+"""output = coffea.processor.run_uproot_job(
+    smallfileset,
+    treename="Events",
+    processor_instance=Processor(config, "selected_columns"),
+    executor=coffea.processor.iterative_executor,
+    executor_args={"workers": 4},
+    chunksize=100000)
+"""
+output = coffea.processor.run_uproot_job(
+    smallfileset,
+    treename="Events",
+    processor_instance=Processor(config, "selected_columns"),
+    executor=parsl_executor,
+    chunksize=500000)
 
-plot_config=config_utils.Config("example/plot_config.json")
-labels=plot_config["labels"]
-xsecs=plot_config["cross-sections"]
+plot_config = config_utils.Config("example/plot_config.json")
+labels = plot_config["labels"]
+xsecs = plot_config["cross-sections"]
 
-cutvalues = dict((k,np.zeros(len(output['cutflow']["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]))) for k in set(labels.values()))
-cuteffs = dict((k,np.zeros(len(
-    output['cutflow']["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]) - 1))
+cutvalues = dict((k, np.zeros(
+    len(output["cutflow"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"])))
     for k in set(labels.values()))
-#currently assumes one always runs over a dilepton sample- might be nice to relax this 
+cuteffs = dict((k, np.zeros(len(
+    output["cutflow"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]) - 1))
+    for k in set(labels.values()))
+# currently assumes one always runs over a dilepton sample-
+# might be nice to relax this
 lumifactors = defaultdict(int)
 for dataset in fileset.keys():
-    cutvals = np.array(list(output['cutflow'][dataset].values()))
+    cutvals = np.array(list(output["cutflow"][dataset].values()))
     if len(cutvals) == 0:
         eff = 0
         lumifactors[dataset] = 0
     else:
         eff = cutvals[-1]/cutvals[0]
         lumifactors[dataset] = 0.05 * xsecs[dataset]/cutvals[0]
-    print (dataset, "efficiency:", eff*100)
-    if len(cutvals>0):
+    print(dataset, "efficiency:", eff*100)
+    if len(cutvals > 0):
         cutvalues[labels[dataset]] += cutvals
-        
+
 labelsset = list(set(labels.values()))
 nlabels = len(labelsset)
 ax = plt.gca()
 for n, label in enumerate(labelsset):
-    cuteffs[label]=100*cutvalues[label][1:]/cutvalues[label][:-1]
-    ax.bar(np.arange(len(cuteffs[label]))+(2*n-nlabels)*0.4/nlabels, cuteffs[label], 0.8/nlabels, label=label)
+    cuteffs[label] = 100*cutvalues[label][1:]/cutvalues[label][:-1]
+    ax.bar(np.arange(len(cuteffs[label])) + (2*n-nlabels)*0.4/nlabels,
+           cuteffs[label], 0.8/nlabels, label=label)
 
-ax.set_xticks(np.arange(len(cuteffs[labels["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]])))
-ax.set_xticklabels(np.array(list((output['cutflow']["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]).keys()))[1:])
-ax.set_ylabel('Efficiency')
+ax.set_xticks(np.arange(len(
+    cuteffs[labels["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]])))
+ax.set_xticklabels(np.array(list(
+    (output["cutflow"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]).keys()))[1:])
+ax.set_ylabel("Efficiency")
 
-handles, labs = ax.get_legend_handles_labels() #https://stackoverflow.com/questions/43348348/pyplot-legend-index-error-tuple-index-out-of-range
+handles, labs = ax.get_legend_handles_labels()
+# https://stackoverflow.com/questions/43348348/pyplot-legend-index-error-tuple-index-out-of-range
 leghandles = []
 leglabs = []
 for i, h in enumerate(handles):
@@ -123,20 +135,22 @@ ax.legend(leghandles, leglabs)
 
 plt.show(block=True)
 
-output['Mttbar'].scale(lumifactors, axis='dataset')
+output["Mttbar"].scale(lumifactors, axis="dataset")
 labelmap = defaultdict(list)
 for key, val in labels.items():
-    cutvals = np.array(list(output['cutflow'][key].values()))
+    cutvals = np.array(list(output["cutflow"][key].values()))
     if len(cutvals) > 0 and cutvals[-1] > 0:
         labelmap[val].append(key)
 
-sortedlabels = sorted(labelsset, key=(lambda x : sum([(output['Mttbar'].integrate('Mttbar')).values()[(y,)] for y in labelmap[x]])))
+sortedlabels = sorted(labelsset, key=(
+    lambda x: sum([(output["Mttbar"].integrate("Mttbar")).values()[(y,)]
+                  for y in labelmap[x]])))
 for key in sortedlabels:
     labelmap[key] = labelmap.pop(key)
 
-labels_axis = hist.Cat("labels", "", sorting='placement')
-mttbar = output['Mttbar'].group('dataset', labels_axis, labelmap)
+labels_axis = hist.Cat("labels", "", sorting="placement")
+mttbar = output["Mttbar"].group("dataset", labels_axis, labelmap)
 
-hist.plot1d(mttbar, overlay='labels', stack=True)
+hist.plot1d(mttbar, overlay="labels", stack=True)
 
 plt.show(block=True)
