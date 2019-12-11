@@ -13,7 +13,7 @@ import h5py
 
 import config_utils
 import proc_utils
-from reconstructionUtils.KinRecoSonnenschein import KinReco
+from reconstructionUtils.KinRecoSonnenschein import kinreco
 
 
 class LazyTable(object):
@@ -306,12 +306,12 @@ class Processor(processor.ProcessorABC):
     def accumulator(self):
         dataset_axis = hist.Cat("dataset", "")
         ttbarmass_axis = hist.Bin("Mttbar", "Mttbar [GeV]", 100, 0, 1000)
-        Wmass_axis = hist.Bin("MW", "MW [GeV]", 100, 0, 200)
+        wmass_axis = hist.Bin("MW", "MW [GeV]", 100, 0, 200)
         tmass_axis = hist.Bin("Mt", "Mt [GeV]", 100, 0, 300)
 
         self._accumulator = processor.dict_accumulator({
             "Mttbar": hist.Hist("Counts", dataset_axis, ttbarmass_axis),
-            "MWplus": hist.Hist("Counts", dataset_axis, Wmass_axis),
+            "MWplus": hist.Hist("Counts", dataset_axis, wmass_axis),
             "Mt": hist.Hist("Counts", dataset_axis, tmass_axis),
             "cutflow": processor.defaultdict_accumulator(
                 partial(processor.defaultdict_accumulator, int)),
@@ -397,7 +397,7 @@ class Processor(processor.ProcessorABC):
 
         lep, antilep = self.pick_leps(selector.final)
         b, bbar = self.choose_bs(selector.final, lep, antilep)
-        neutrino, antineutrino = KinReco(lep["p4"], antilep["p4"],
+        neutrino, antineutrino = kinreco(lep["p4"], antilep["p4"],
                                          b["p4"], bbar["p4"],
                                          selector.final["MET_pt"],
                                          selector.final["MET_phi"])
@@ -407,22 +407,22 @@ class Processor(processor.ProcessorABC):
                                               antineutrino=antineutrino,
                                               weight=selector.final["weight"]))
         reco_objects.add_cut(self.passing_reco, "Reco")
-        reco_objects.set_column(self.Wminus, "Wminus")
-        reco_objects.set_column(self.Wplus, "Wplus")
+        reco_objects.set_column(self.wminus, "Wminus")
+        reco_objects.set_column(self.wplus, "Wplus")
         reco_objects.set_column(self.top, "top")
         reco_objects.set_column(self.antitop, "antitop")
         reco_objects.set_column(self.ttbar, "ttbar")
 
         best = reco_objects.masked["ttbar"].mass.argmin()
-        Mttbar = reco_objects.masked["ttbar"][best].mass.content
-        MWplus = reco_objects.masked["Wplus"][best].mass.content
-        Mtop = reco_objects.masked["top"][best].mass.content
+        m_ttbar = reco_objects.masked["ttbar"][best].mass.content
+        m_wplus = reco_objects.masked["Wplus"][best].mass.content
+        m_top = reco_objects.masked["top"][best].mass.content
 
-        output["Mttbar"].fill(dataset=dsname, Mttbar=Mttbar,
+        output["Mttbar"].fill(dataset=dsname, Mttbar=m_ttbar,
                               weight=reco_objects.masked["weight"])
-        output["Mt"].fill(dataset=dsname, Mt=Mtop,
+        output["Mt"].fill(dataset=dsname, Mt=m_top,
                           weight=reco_objects.masked["weight"])
-        output["MWplus"].fill(dataset=dsname, MW=MWplus,
+        output["MWplus"].fill(dataset=dsname, MW=m_wplus,
                               weight=reco_objects.masked["weight"])
 
         if self.destdir is not None:
@@ -435,9 +435,9 @@ class Processor(processor.ProcessorABC):
             return np.full(len(data["genWeight"]), True)
         else:
             run = np.array(data["run"])
-            luminosityBlock = np.array(data["luminosityBlock"])
+            luminosity_block = np.array(data["luminosityBlock"])
             lumimask = coffea.lumi_tools.LumiMask(self.lumimask)
-            return lumimask(run, luminosityBlock)
+            return lumimask(run, luminosity_block)
 
     def passing_trigger(self, pos_triggers, neg_triggers, data):
         trigger = (
@@ -624,8 +624,8 @@ class Processor(processor.ProcessorABC):
         j_phi, l_phi = j_phi.cross(l_phi, nested=True).unzip()
         delta_eta = j_eta - l_eta
         delta_phi = j_phi - l_phi
-        delta_R = np.hypot(delta_eta, delta_phi)
-        has_lepton_close = (delta_R < lep_dist).any()
+        delta_r = np.hypot(delta_eta, delta_phi)
+        has_lepton_close = (delta_r < lep_dist).any()
 
         return (has_id
                 & (~has_lepton_close)
@@ -756,39 +756,38 @@ class Processor(processor.ProcessorABC):
         return weight
 
     def pick_leps(self, data):
-        lepPair = data["Lepton"][:, :2]
-        lep = lepPair[lepPair.pdgId > 0]
-        antilep = lepPair[lepPair.pdgId < 0]
+        lep_pair = data["Lepton"][:, :2]
+        lep = lep_pair[lep_pair.pdgId > 0]
+        antilep = lep_pair[lep_pair.pdgId < 0]
         return lep, antilep
 
     def choose_bs(self, data, lep, antilep):
         btags = data["Jet"][data["Jet"].btag]
         jetsnob = data["Jet"][~data["Jet"].btag]
-        b0, b1 = proc_utils.Pairswhere(btags.counts > 1,
+        b0, b1 = proc_utils.pairswhere(btags.counts > 1,
                                        btags.distincts(),
                                        btags.cross(jetsnob))
         bs = proc_utils.concatenate(b0, b1)
         bbars = proc_utils.concatenate(b1, b0)
-        GenHistFile = uproot.open(self.config["genhist_path"])
-        HistMlb = GenHistFile["Mlb"]
+        hist_mlb = uproot.open(self.config["genhist_path"])["Mlb"]
         alb = bs.cross(antilep)
         lbbar = bbars.cross(lep)
-        PMalb = awkward.JaggedArray.fromcounts(
-            bs.counts, HistMlb.allvalues[np.searchsorted(
-                HistMlb.alledges, alb.mass.content)-1])
-        PMlbbar = awkward.JaggedArray.fromcounts(
-            bs.counts, HistMlb.allvalues[np.searchsorted(
-                HistMlb.alledges, lbbar.mass.content)-1])
-        bestbpairMlb = (PMalb*PMlbbar).argmax()
-        return bs[bestbpairMlb], bbars[bestbpairMlb]
+        p_m_alb = awkward.JaggedArray.fromcounts(
+            bs.counts, hist_mlb.allvalues[np.searchsorted(
+                hist_mlb.alledges, alb.mass.content)-1])
+        p_m_lbbar = awkward.JaggedArray.fromcounts(
+            bs.counts, hist_mlb.allvalues[np.searchsorted(
+                hist_mlb.alledges, lbbar.mass.content)-1])
+        bestbpair_mlb = (p_m_alb*p_m_lbbar).argmax()
+        return bs[bestbpair_mlb], bbars[bestbpair_mlb]
 
     def passing_reco(self, data):
         return data["neutrino"].counts > 0
 
-    def Wminus(self, data):
+    def wminus(self, data):
         return data["antineutrino"].cross(data["lep"])
 
-    def Wplus(self, data):
+    def wplus(self, data):
         return data["neutrino"].cross(data["antilep"])
 
     def top(self, data):

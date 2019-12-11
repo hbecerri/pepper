@@ -131,7 +131,7 @@ def concatenate(arr1, arr2):
     return Jca.candidatesfromoffsets(offsets, **arr_dict)
 
 
-def Pairswhere(condition, x, y):
+def pairswhere(condition, x, y):
     counts = np.where(condition, x.counts, y.counts)
     pt0 = np.empty(counts.sum(), dtype=float)
     eta0 = np.empty(counts.sum(), dtype=float)
