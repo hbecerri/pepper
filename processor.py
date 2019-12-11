@@ -205,7 +205,7 @@ class Selector(object):
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
 
-    def get_columns(self, part_props={}, other_cols=[], cuts="Current",
+    def get_columns(self, part_props={}, other_cols=set(), cuts="Current",
                     prefix=""):
         """Get columns of events passing cuts
 
@@ -233,14 +233,12 @@ class Selector(object):
         data = self.table[self._cuts.all(*cuts)]
         return_dict = {}
         for part in part_props.keys():
-            for prop in part_props[part]:
-                if prop == "p4":
-                    return_dict[part + "_pt"] = data[part].pt
-                    return_dict[part + "_eta"] = data[part].eta
-                    return_dict[part + "_phi"] = data[part].phi
-                    return_dict[part + "_mass"] = data[part].mass
-                else:
-                    return_dict[part + "_" + prop] = data[part][prop]
+            props = set(part_props[part])
+            if "p4" in props:
+                props |= {"pt", "eta", "phi", "mass"}
+            props -= {"p4"}
+            for prop in props:
+                return_dict[part + "_" + prop] = data[part][prop]
         for col in other_cols:
             return_dict[prefix + col] = data[col]
         return return_dict
