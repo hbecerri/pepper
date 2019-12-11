@@ -28,8 +28,7 @@ wrk_init = """
 export PATH=/afs/desy.de/user/s/stafford/.local/bin:$PATH
 export PYTHONPATH=\
 /afs/desy.de/user/s/stafford/.local/lib/python3.6/site-packages:$PYTHONPATH
-export PYTHONPATH=\
-/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea:$PYTHONPATH
+export PYTHONPATH=\/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea:$PYTHONPATH
 """
 
 nproc = 1
@@ -69,6 +68,7 @@ smallfileset = {"TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8":
                 [fileset["WZ_TuneCP5_13TeV-pythia8"][0]],
                 "ZZ_TuneCP5_13TeV-pythia8":
                 [fileset["ZZ_TuneCP5_13TeV-pythia8"][0]]}
+destdir="/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
 """output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
@@ -80,7 +80,7 @@ smallfileset = {"TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8":
 output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
-    processor_instance=Processor(config, "selected_columns"),
+    processor_instance=Processor(config, destdir),
     executor=parsl_executor,
     chunksize=500000)
 

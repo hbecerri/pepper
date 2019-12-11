@@ -370,23 +370,21 @@ class Processor(processor.ProcessorABC):
         selector.set_column(self.build_lepton_column, "Lepton")
         selector.add_cut(self.exactly_lepton_pair, "#Lep = 2")
         selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
-        selector.set_column(self.same_flavor, "is_same_flavor")
 
         selector.freeze_selection()
 
+        selector.add_cut(self.no_additional_leptons, "No add. leps")
+        selector.set_column(self.same_flavor, "is_same_flavor")
         selector.add_cut(self.channel_trigger_matching, "Chn. trig. match")
         selector.add_cut(self.lep_pt_requirement, "Req lep pT")
         selector.add_cut(self.good_mll, "M_ll")
-        selector.add_cut(self.no_additional_leptons, "No add. leps")
         selector.add_cut(self.z_window, "Z window")
 
-        selector.set_column(self.good_jet, "is_good_jet")
         selector.set_column(self.build_jet_column, "Jet")
-        selector.add_cut(self.has_jets, "#Jets >= n")
-        selector.add_cut(self.jet_pt_requirement, "Req jet pT")
+        selector.add_cut(self.two_good_jets, "2 jets pt>30")
         selector.add_cut(self.btag_cut, "At least %d btag"
                          % self.config["num_atleast_btagged"])
-        selector.add_cut(self.met_requirement, "Req MET")
+        selector.add_cut(self.met_requirement, "sf MET > 40 GeV")
 
         selector.set_column(partial(self.compute_weight, is_mc), "weight")
 
@@ -489,10 +487,14 @@ class Processor(processor.ProcessorABC):
             has_id = data["Electron_cutBased"] >= 3
         elif e_id == "cut:tight":
             has_id = data["Electron_cutBased"] >= 4
-        elif e_id == "mva:wp80":
-            has_id = data["Electron_WP80"]
-        elif e_id == "mva:wp90":
-            has_id = data["Electron_WP90"]
+        elif e_id == "mva:noIso80":
+            has_id = data["Electron_mvaFall17V2noIso_WP80"]
+        elif e_id == "mva:noIso90":
+            has_id = data["Electron_mvaFall17V2noIso_WP90"]
+        elif e_id == "mva:Iso80":
+            has_id = data["Electron_mvaFall17V2Iso_WP80"]
+        elif e_id == "mva:Iso90":
+            has_id = data["Electron_mvaFall17V2Iso_WP90"]
         else:
             raise ValueError("Invalid electron id string")
         return has_id
@@ -569,7 +571,7 @@ class Processor(processor.ProcessorABC):
             arr = awkward.concatenate([data["Electron_" + key][ge],
                                        data["Muon_" + key][gm]], axis=1)
             offsets = arr.offsets
-            lep_dict[key] = arr.flatten()
+            lep_dict[key] = arr.flatten() #Could use concatenate here
         leptons = Jca.candidatesfromoffsets(offsets, **lep_dict)
 
         # Sort leptons by pt
@@ -580,8 +582,8 @@ class Processor(processor.ProcessorABC):
     def require_emu(self, data):
         return data["is_good_electron"].any() & data["is_good_muon"].any()
 
-    def exactly_lepton_pair(self, data):
-        return data["Lepton"].counts == 2
+    def lepton_pair(self, data):
+        return data["Lepton"].counts >= 2
 
     def opposite_sign_lepton_pair(self, data):
         return (np.sign(data["Lepton"][:, 0].pdgId)
@@ -590,6 +592,55 @@ class Processor(processor.ProcessorABC):
     def same_flavor(self, data):
         return (abs(data["Lepton"][:, 0].pdgId)
                 == abs(data["Lepton"][:, 1].pdgId))
+
+    def no_additional_leptons(self, data):
+        add_ele = self.electron_id(self.config["additional_ele_id"], data)
+        m_iso = self.config["additional_muon_iso"]
+        add_muon = (self.muon_id(self.config["additional_muon_id"], data)
+                    & (data["Muon_pfRelIso04_all"] < m_iso))
+        return add_ele.counts + add_muon.counts == 2
+
+    def channel_trigger_matching(self, data):
+        p0 = abs(data["Lepton"].pdgId[:, 0])
+        p1 = abs(data["Lepton"].pdgId[:, 1])
+        is_ee = (p0 == 11) & (p1 == 11)
+        is_mm = (p0 == 13) & (p1 == 13)
+        is_em = (~is_ee) & (~is_mm)
+        triggers = self.config["channel_trigger_map"]
+
+        ret = np.full(data.size, False)
+        if "ee" in triggers:
+            ret |= is_ee & self.passing_trigger(triggers["ee"], [], data)
+        if "mumu" in triggers:
+            ret |= is_mm & self.passing_trigger(triggers["mumu"], [], data)
+        if "emu" in triggers:
+            ret |= is_em & self.passing_trigger(triggers["emu"], [], data)
+        if "e" in triggers:
+            ret |= is_ee & self.passing_trigger(triggers["e"], [], data)
+            ret |= is_em & self.passing_trigger(triggers["e"], [], data)
+        if "mu" in triggers:
+            ret |= is_mm & self.passing_trigger(triggers["mu"], [], data)
+            ret |= is_em & self.passing_trigger(triggers["mu"], [], data)
+
+        return ret
+
+    def lep_pt_requirement(self, data):
+        n = np.zeros(data.size)
+        for i, pt_min in enumerate(self.config["lep_pt_min"]):
+            mask = data["Lepton"].counts > i
+            n[mask] += (pt_min < data["Lepton"].pt[mask, i]).astype(int)
+        return n >= self.config["lep_pt_num_satisfied"]
+
+    def good_mll(self, data):
+        return ((data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
+                > self.config["mll_min"])
+
+    def z_window(self, data):
+        m_min = self.config["z_boson_window_start"]
+        m_max = self.config["z_boson_window_end"]
+        is_sf = data["is_same_flavor"]
+        invmass = (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
+        return ~is_sf | ((invmass <= m_min) | (m_max <= invmass))
 
     def good_jet(self, data):
         j_id, lep_dist, eta_min, eta_max, pt_min, pt_max = self.config[[
@@ -633,7 +684,7 @@ class Processor(processor.ProcessorABC):
     def build_jet_column(self, data):
         keys = ["pt", "eta", "phi", "mass"]
         jet_dict = {}
-        gj = data["is_good_jet"]
+        gj = self.good_jet(data)
         for key in keys:
             arr = data["Jet_" + key][gj]
             offsets = arr.offsets
@@ -662,69 +713,8 @@ class Processor(processor.ProcessorABC):
 
         return jets
 
-    def channel_trigger_matching(self, data):
-        p0 = abs(data["Lepton"].pdgId[:, 0])
-        p1 = abs(data["Lepton"].pdgId[:, 1])
-        is_ee = (p0 == 11) & (p1 == 11)
-        is_mm = (p0 == 13) & (p1 == 13)
-        is_em = (~is_ee) & (~is_mm)
-        triggers = self.config["channel_trigger_map"]
-
-        ret = np.full(data.size, False)
-        if "ee" in triggers:
-            ret |= is_ee & self.passing_trigger(triggers["ee"], [], data)
-        if "mumu" in triggers:
-            ret |= is_mm & self.passing_trigger(triggers["mumu"], [], data)
-        if "emu" in triggers:
-            ret |= is_em & self.passing_trigger(triggers["emu"], [], data)
-        if "e" in triggers:
-            ret |= is_ee & self.passing_trigger(triggers["e"], [], data)
-            ret |= is_em & self.passing_trigger(triggers["e"], [], data)
-        if "mu" in triggers:
-            ret |= is_mm & self.passing_trigger(triggers["mu"], [], data)
-            ret |= is_em & self.passing_trigger(triggers["mu"], [], data)
-
-        return ret
-
-    def lep_pt_requirement(self, data):
-        n = np.zeros(data.size)
-        for i, pt_min in enumerate(self.config["lep_pt_min"]):
-            mask = data["Lepton"].counts > i
-            n[mask] += (pt_min < data["Lepton"].pt[mask, i]).astype(int)
-        return n >= self.config["lep_pt_num_satisfied"]
-
-    def good_mll(self, data):
-        return ((data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
-                > self.config["mll_min"])
-
-    def no_additional_leptons(self, data):
-        e_sel = ~data["is_good_electron"]
-        add_ele = (self.electron_id(self.config["additional_ele_id"], data)
-                   & e_sel)
-
-        m_iso = self.config["additional_muon_iso"]
-        m_sel = ~data["is_good_muon"]
-        add_muon = (self.muon_id(self.config["additional_muon_id"], data)
-                    & (data["Muon_pfRelIso04_all"] < m_iso)
-                    & m_sel)
-        return (~add_ele.any()) & (~add_muon.any())
-
-    def z_window(self, data):
-        m_min = self.config["z_boson_window_start"]
-        m_max = self.config["z_boson_window_end"]
-        is_sf = data["is_same_flavor"]
-        invmass = (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
-        return ~is_sf | ((invmass <= m_min) & (m_max <= invmass))
-
-    def has_jets(self, data):
-        return self.config["num_jets_atleast"] <= data["Jet"].counts
-
-    def jet_pt_requirement(self, data):
-        n = np.zeros(data.size)
-        for i, pt_min in enumerate(self.config["jet_pt_min"]):
-            mask = data["Jet"].counts > i
-            n[mask] += (pt_min < data["Jet"].pt[mask, i]).astype(int)
-        return n >= self.config["jet_pt_num_satisfied"]
+    def two_good_jets(self, data):
+        return (data["Jet"].pt > config["2_lead_jet_pt_min"]).counts > 2
 
     def btag_cut(self, data):
         return data["Jet"].btag.sum() >= self.config["num_atleast_btagged"]
