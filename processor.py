@@ -238,9 +238,10 @@ class Selector(object):
                 props |= {"pt", "eta", "phi", "mass"}
             props -= {"p4"}
             for prop in props:
-                return_dict[part + "_" + prop] = data[part][prop]
+                arr = proc_utils.jagged_reduce(getattr(data[part], prop))
+                return_dict[part + "_" + prop] = arr
         for col in other_cols:
-            return_dict[prefix + col] = data[col]
+            return_dict[prefix + col] = proc_utils.jagged_reduce(data[col])
         return return_dict
 
     def get_columns_from_config(self, to_save, prefix=""):
