@@ -350,7 +350,7 @@ class Processor(processor.ProcessorABC):
                 self.config["selector_cols_to_save"])
             out_dict.update(reco_selector.get_columns_from_config(
                 self.config["reco_cols_to_save"], "reco"))
-            out_dict["cut_arrays"] = selector.get_cuts()
+            out_dict["cutflags"] = selector.get_cuts()
             out_dict["cutflow"] = selector.cutflow
 
             for key in out_dict.keys():
