@@ -3,12 +3,24 @@
     "genhist_path": "/nfs/dust/cms/user/ruebenaj/analysis/data/GenHists.root",
     "lumimask": "/afs/cern.ch/cms/CAF/CMSCOMM/COMM_DQM/certification/Collisions18/13TeV/PromptReco/Cert_314472-325175_13TeV_PromptReco_Collisions18_JSON.txt",
     "electron_sf": [
-        ["/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root", "EGamma_SF2D"],
-        ["/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/2018_ElectronTight.root", "EGamma_SF2D"]
+        [
+            "/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root",
+            "EGamma_SF2D"
+        ],
+        [
+            "/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/2018_ElectronTight.root",
+            "EGamma_SF2D"
+        ]
     ],
     "muon_sf": [
-        ["/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/Muon2018_RunABCD_SF_ID.root", "NUM_TightID_DEN_TrackerMuons_pt_abseta"],
-        ["/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/Muon2018_RunABCD_SF_ISO.root", "NUM_LooseRelIso_DEN_TightIDandIPCut_pt_abseta"]
+        [
+            "/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/Muon2018_RunABCD_SF_ID.root",
+            "NUM_TightID_DEN_TrackerMuons_pt_abseta"
+        ],
+        [
+            "/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/Muon2018_RunABCD_SF_ISO.root",
+            "NUM_LooseRelIso_DEN_TightIDandIPCut_pt_abseta"
+        ]
     ],
     "exp_datasets": {
         "MuonEG": [
@@ -142,17 +154,30 @@
             "HLT_IsoMu24"
         ]
     },
-    "selector_cols_to_save":{
-        "part_props":{},
-        "other_cols":{},
-        "cuts":"Current"
+    "selector_cols_to_save": {
+        "part_props": {},
+        "other_cols": {},
+        "cuts": "Current"
     },
-    "reco_cols_to_save":{
-        "part_props":{"lep":["p4"], "antilep":["p4"], "b":["p4"], "bbar":["p4"]},
-        "other_cols":{},
-        "cuts":"All"
+    "reco_cols_to_save": {
+        "part_props": {
+            "lep": [
+                "p4"
+            ],
+            "antilep": [
+                "p4"
+            ],
+            "b": [
+                "p4"
+            ],
+            "bbar": [
+                "p4"
+            ]
+        },
+        "other_cols": {},
+        "cuts": "All"
     },
-    
+
     "filter_year": "2018",
     "mc_lumifactors": "/nfs/dust/cms/user/ruebenaj/analysis/mc_lumifactors.json",
 
@@ -165,7 +190,6 @@
     "good_ele_eta_max": 2.4,
     "good_ele_pt_min": 20.0,
     "good_ele_pt_max": Infinity,
-
     "good_muon_cut_hem": true,
     "good_muon_cut_transreg": false,
     "good_muon_id": "cut:tight",
@@ -187,12 +211,19 @@
     "additional_muon_iso": 0.25,
 
     "mll_min": 20.0,
-    "lep_pt_min": [25, 20],
+    "lep_pt_min": [
+        25,
+        20
+    ],
     "lep_pt_num_satisfied": 2,
     "z_boson_window_start": 76,
     "z_boson_window_end": 106,
     "num_jets_atleast": 2,
-    "jet_pt_min": [30, 30, 20],
+    "jet_pt_min": [
+        30,
+        30,
+        20
+    ],
     "jet_pt_num_satisfied": 2,
     "btag": "deepjet:medium",
     "num_atleast_btagged": 1,
