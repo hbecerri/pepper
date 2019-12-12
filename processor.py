@@ -368,7 +368,7 @@ class Processor(processor.ProcessorABC):
         selector.set_column(self.good_electron, "is_good_electron")
         selector.set_column(self.good_muon, "is_good_muon")
         selector.set_column(self.build_lepton_column, "Lepton")
-        selector.add_cut(self.exactly_lepton_pair, "#Lep = 2")
+        selector.add_cut(self.lepton_pair, "At least 2 leps")
         selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
 
         selector.freeze_selection()
@@ -384,7 +384,7 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.two_good_jets, "2 jets pt>30")
         selector.add_cut(self.btag_cut, "At least %d btag"
                          % self.config["num_atleast_btagged"])
-        selector.add_cut(self.met_requirement, "sf MET > 40 GeV")
+        selector.add_cut(self.met_requirement, "MET > 40 GeV")
 
         selector.set_column(partial(self.compute_weight, is_mc), "weight")
 
@@ -541,6 +541,27 @@ class Processor(processor.ProcessorABC):
             raise ValueError("Invalid muon id string")
         return has_id
 
+    def muon_iso(self, iso, iso_value, data):
+        if iso == "cut_based":
+            if iso_value == "very_loose":
+                return data["Muon_pfIsoId"] > 0
+            if iso_value == "loose":
+                return data["Muon_pfIsoId"] > 1
+            if iso_value == "medium":
+                return data["Muon_pfIsoId"] > 2
+            if iso_value == "tight":
+                return data["Muon_pfIsoId"] > 3
+            if iso_value == "very_tight":
+                return data["Muon_pfIsoId"] > 4
+            if iso_value == "very_very_tight":
+                return data["Muon_pfIsoId"] > 5
+        elif iso =="dR<0.3_chg":
+            return data["Muon_pfRelIso03_chg"] < value
+        elif iso =="dR<0.4_all":
+            return data["Muon_pfRelIso03_all"] < value
+        elif iso =="dR<0.3_chg":
+            return data["Muon_pfRelIso04_all"] < value
+
     def good_muon(self, data):
         if self.config["good_muon_cut_hem"]:
             is_in_hem1516 = self.in_hem1516(data["Muon_phi"], data["Muon_eta"])
@@ -550,11 +571,12 @@ class Processor(processor.ProcessorABC):
             is_in_transreg = self.in_transreg(abs(data["Muon_eta"]))
         else:
             is_in_transreg = np.array(False)
-        m_id, eta_min, eta_max, pt_min, pt_max, iso = self.config[[
+        m_id, eta_min, eta_max, pt_min, pt_max, iso, iso_value = self.config[[
             "good_muon_id", "good_muon_eta_min", "good_muon_eta_max",
-            "good_muon_pt_min", "good_muon_pt_max", "good_muon_iso"]]
+            "good_muon_pt_min", "good_muon_pt_max", "good_muon_iso",
+            "good_muon_iso_value"]]
         return (self.muon_id(m_id, data)
-                & (data["Muon_pfRelIso04_all"] < iso)
+                & self.muon_iso(iso, iso_value, data)
                 & (~is_in_hem1516)
                 & (~is_in_transreg)
                 & (eta_min < data["Muon_eta"])
@@ -594,11 +616,27 @@ class Processor(processor.ProcessorABC):
                 == abs(data["Lepton"][:, 1].pdgId))
 
     def no_additional_leptons(self, data):
-        add_ele = self.electron_id(self.config["additional_ele_id"], data)
-        m_iso = self.config["additional_muon_iso"]
-        add_muon = (self.muon_id(self.config["additional_muon_id"], data)
-                    & (data["Muon_pfRelIso04_all"] < m_iso))
-        return add_ele.counts + add_muon.counts == 2
+        e_id, eta_min, eta_max, pt_min, pt_max = self.config[[
+            "additional_ele_id", "good_ele_eta_min", "good_ele_eta_max",
+            "good_ele_pt_min", "good_ele_pt_max"]]
+        SC_eta_abs = abs(data["Electron_eta"]
+                    + data["Electron_deltaEtaSC"])
+        add_ele = (self.electron_id(e_id, data)
+            &~self.in_transreg(SC_eta_abs)
+            & (eta_min < data["Electron_eta"])
+            & (data["Electron_eta"] < eta_max)
+            & (pt_min < data["Electron_pt"]))
+        m_id, m_iso, m_iso_value, eta_min, eta_max, pt_min, pt_max, = self.config[[
+            "additional_muon_id", "additional_muon_iso",
+            "additional_muon_iso_value", "good_muon_eta_min", "good_muon_eta_max",
+            "good_muon_pt_min", "good_muon_pt_max"]]
+        add_muon = (self.muon_id(m_id, data)
+                    & self.muon_iso(m_iso, m_iso_value, data)
+                    & (eta_min < data["Muon_eta"])
+                    & (data["Muon_eta"] < eta_max)
+                    & (pt_min < data["Muon_pt"])
+                    & (data["Muon_pt"] < pt_max))
+        return add_ele.counts + add_muon.counts <= 2
 
     def channel_trigger_matching(self, data):
         p0 = abs(data["Lepton"].pdgId[:, 0])
@@ -663,10 +701,8 @@ class Processor(processor.ProcessorABC):
 
         j_eta = data["Jet_eta"]
         j_phi = data["Jet_phi"]
-        l_eta = awkward.concatenate(
-            [data["Electron_eta"], data["Muon_eta"]], axis=1)
-        l_phi = awkward.concatenate(
-            [data["Electron_phi"], data["Muon_phi"]], axis=1)
+        l_eta = data["Lepton"].eta
+        l_phi = data["Lepton"].phi
         j_eta, l_eta = j_eta.cross(l_eta, nested=True).unzip()
         j_phi, l_phi = j_phi.cross(l_phi, nested=True).unzip()
         delta_eta = j_eta - l_eta
@@ -714,14 +750,14 @@ class Processor(processor.ProcessorABC):
         return jets
 
     def two_good_jets(self, data):
-        return (data["Jet"].pt > config["2_lead_jet_pt_min"]).counts > 2
+        return (data["Jet"].pt > self.config["2_lead_jet_pt_min"]).counts > 2
 
     def btag_cut(self, data):
         return data["Jet"].btag.sum() >= self.config["num_atleast_btagged"]
 
     def met_requirement(self, data):
         is_sf = data["is_same_flavor"]
-        met = data["MET_sumEt"]
+        met = data["MET_pt"]
         return ~is_sf | (met > self.config["ee/mm_min_met"])
 
     def compute_weight(self, is_mc, data):

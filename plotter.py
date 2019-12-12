@@ -46,7 +46,7 @@ parsl_config = Config(
                    max_workers=nproc,
                    provider=CondorProvider(
                         channel=LocalChannel(),
-                        init_blocks=20,
+                        init_blocks=800,
                         min_blocks=5,
                         max_blocks=1000,
                         nodes_per_block=1,
@@ -70,15 +70,15 @@ smallfileset = {"TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8":
                 [fileset["ZZ_TuneCP5_13TeV-pythia8"][0]]}
 destdir="/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
 """output = coffea.processor.run_uproot_job(
-    smallfileset,
+    fileset,
     treename="Events",
     processor_instance=Processor(config, "selected_columns"),
     executor=coffea.processor.iterative_executor,
     executor_args={"workers": 4},
-    chunksize=100000)
+    chunksize=500000)
 """
 output = coffea.processor.run_uproot_job(
-    smallfileset,
+    fileset,
     treename="Events",
     processor_instance=Processor(config, destdir),
     executor=parsl_executor,
