@@ -238,6 +238,8 @@ class Selector(object):
                 props |= {"pt", "eta", "phi", "mass"}
             props -= {"p4"}
             for prop in props:
+                if not hasattr(data[part], prop):
+                    continue
                 arr = proc_utils.jagged_reduce(getattr(data[part], prop))
                 return_dict[part + "_" + prop] = arr
         for col in other_cols:
@@ -635,10 +637,12 @@ class Processor(processor.ProcessorABC):
                 & (data["Jet_pt"] < pt_max))
 
     def build_jet_column(self, data):
-        keys = ["pt", "eta", "phi", "mass"]
+        keys = ["pt", "eta", "phi", "mass", "hadronFlavour"]
         jet_dict = {}
         gj = data["is_good_jet"]
         for key in keys:
+            if "Jet_" + key not in data:
+                continue
             arr = data["Jet_" + key][gj]
             offsets = arr.offsets
             jet_dict[key] = arr.flatten()
