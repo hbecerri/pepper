@@ -315,13 +315,6 @@ class Processor(processor.ProcessorABC):
             "Mttbar": hist.Hist("Counts", dataset_axis, ttbarmass_axis),
             "MWplus": hist.Hist("Counts", dataset_axis, wmass_axis),
             "Mt": hist.Hist("Counts", dataset_axis, tmass_axis),
-            "cutflow": processor.defaultdict_accumulator(
-                partial(processor.defaultdict_accumulator, int)),
-            "cols to save": processor.defaultdict_accumulator(partial(
-                processor.defaultdict_accumulator,
-                proc_utils.ArrayAccumulator)),
-            "cut arrays": processor.defaultdict_accumulator(
-                proc_utils.PackedSelectionAccumulator)
         })
         return self._accumulator
 
