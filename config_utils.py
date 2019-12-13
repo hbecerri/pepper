@@ -189,6 +189,12 @@ class Config(object):
         if key not in self._config:
             raise ConfigError("\"{}\" not specified in config".format(key))
 
+        if key == "year":
+            self._cache["year"] = str(self._config[key])
+            if self._cache["year"] not in ("2016", "2017", "2018"):
+                raise ConfigError(
+                    "Invalid year {}".format(self._cache["year"]))
+            return self._cache["year"]
         if key == "electron_sf":
             self._cache["electron_sf"] = self._get_scalefactors("electron_sf",
                                                                 False)

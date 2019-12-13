@@ -452,10 +452,10 @@ class Processor(processor.ProcessorABC):
                 & (R <= 2))
 
     def met_filters(self, is_mc, data):
-        filter_year = str(self.config["filter_year"]).lower()
-        if filter_year == "none":
+        year = str(self.config["year"]).lower()
+        if not self.config["apply_met_filters"]:
             return np.full(data.shape, True)
-        elif filter_year in ("2018", "2017", "2016"):
+        else:
             passing_filters =\
                 (data["Flag_goodVertices"]
                  & data["Flag_globalSuperTightHalo2016Filter"]
@@ -465,10 +465,7 @@ class Processor(processor.ProcessorABC):
                  & data["Flag_BadPFMuonFilter"])
             if not is_mc:
                 passing_filters &= data["Flag_eeBadScFilter"]
-        else:
-            raise config_utils.ConfigError("Invalid filter year: {}".format(
-                filter_year))
-        if filter_year in ("2018", "2017"):
+        if year in ("2018", "2017"):
             passing_filters &= data["Flag_ecalBadCalibFilterV2"]
 
         return passing_filters

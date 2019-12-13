@@ -1,4 +1,5 @@
 {
+    "year": "2018",
     "store": "/pnfs/desy.de/cms/tier2/store",
     "genhist_path": "/nfs/dust/cms/user/ruebenaj/analysis/data/GenHists.root",
     "lumimask": "/afs/cern.ch/cms/CAF/CMSCOMM/COMM_DQM/certification/Collisions18/13TeV/PromptReco/Cert_314472-325175_13TeV_PromptReco_Collisions18_JSON.txt",
@@ -178,7 +179,7 @@
         "cuts": "All"
     },
 
-    "filter_year": "2018",
+    "apply_met_filters": true,
     "mc_lumifactors": "/nfs/dust/cms/user/ruebenaj/analysis/mc_lumifactors.json",
 
     "Mlb_hist_file": "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/data/GenHists.root",
