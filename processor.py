@@ -315,6 +315,9 @@ class Processor(processor.ProcessorABC):
             "Mttbar": hist.Hist("Counts", dataset_axis, ttbarmass_axis),
             "MWplus": hist.Hist("Counts", dataset_axis, wmass_axis),
             "Mt": hist.Hist("Counts", dataset_axis, tmass_axis),
+            "cutflow": processor.defaultdict_accumulator(
+                partial(processor.defaultdict_accumulator, int)),
+
         })
         return self._accumulator
 
@@ -419,6 +422,7 @@ class Processor(processor.ProcessorABC):
                           weight=reco_objects.masked["weight"])
         output["MWplus"].fill(dataset=dsname, MW=m_wplus,
                               weight=reco_objects.masked["weight"])
+        output["cutflow"][dsname] = selector.cutflow
 
         if self.destdir is not None:
             self._save_per_event_info(dsname, selector, reco_objects)
