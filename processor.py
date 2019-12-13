@@ -662,7 +662,8 @@ class Processor(processor.ProcessorABC):
         else:
             raise config_utils.ConfigError(
                 "Invalid tagger name: {}".format(tagger))
-        jet_dict["btag"] = (disc > wps[wp]).flatten()
+        jet_dict["btag"] = disc.flatten()
+        jet_dict["btagged"] = (disc > wps[wp]).flatten()
         jets = Jca.candidatesfromoffsets(offsets, **jet_dict)
 
         # Sort jets by pt
@@ -735,7 +736,8 @@ class Processor(processor.ProcessorABC):
         return n >= self.config["jet_pt_num_satisfied"]
 
     def btag_cut(self, data):
-        return data["Jet"].btag.sum() >= self.config["num_atleast_btagged"]
+        num_btagged = data["Jet"]["btagged"].sum()
+        return num_btagged >= self.config["num_atleast_btagged"]
 
     def met_requirement(self, data):
         is_sf = data["is_same_flavor"]
@@ -766,8 +768,8 @@ class Processor(processor.ProcessorABC):
         return lep, antilep
 
     def choose_bs(self, data, lep, antilep):
-        btags = data["Jet"][data["Jet"].btag]
-        jetsnob = data["Jet"][~data["Jet"].btag]
+        btags = data["Jet"][data["Jet"].btagged]
+        jetsnob = data["Jet"][~data["Jet"].btagged]
         b0, b1 = proc_utils.pairswhere(btags.counts > 1,
                                        btags.distincts(),
                                        btags.cross(jetsnob))
