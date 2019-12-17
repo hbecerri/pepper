@@ -14,7 +14,7 @@ import json
 from functools import partial
 import itertools
 
-import config_utils
+from utils.config import Config
 
 
 def get_event_files(eventdir, eventext, datasets):
@@ -216,7 +216,7 @@ parser.add_argument(
     "their entry in the cut_arrays")
 args = parser.parse_args()
 
-config = config_utils.Config(args.config)
+config = Config(args.config)
 
 exp_datasets = get_event_files(
     args.eventdir, args.eventext, config["exp_datasets"])

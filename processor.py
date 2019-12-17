@@ -11,10 +11,10 @@ import coffea.processor as processor
 import uproot
 import h5py
 
-import config_utils
-import proc_utils
+import utils.config
+import utils.misc
 import btagging
-from reconstructionUtils.KinRecoSonnenschein import kinreco
+from kin_reco.sonnenschein import kinreco
 
 
 class LazyTable(object):
@@ -85,7 +85,7 @@ class Selector(object):
         table -- An `awkward.Table` or `LazyTable` holding the events' data
         """
         self.table = table
-        self._cuts = proc_utils.PackedSelectionAccumulator()
+        self._cuts = utils.misc.PackedSelectionAccumulator()
         self._current_cuts = []
         self._frozen = False
 
@@ -241,10 +241,10 @@ class Selector(object):
             for prop in props:
                 if not hasattr(data[part], prop):
                     continue
-                arr = proc_utils.jagged_reduce(getattr(data[part], prop))
+                arr = utils.misc.jagged_reduce(getattr(data[part], prop))
                 return_dict[part + "_" + prop] = arr
         for col in other_cols:
-            return_dict[prefix + col] = proc_utils.jagged_reduce(data[col])
+            return_dict[prefix + col] = utils.misc.jagged_reduce(data[col])
         return return_dict
 
     def get_columns_from_config(self, to_save, prefix=""):
@@ -371,7 +371,7 @@ class Processor(processor.ProcessorABC):
         is_mc = (dsname in self.config["mc_datasets"].keys())
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
-        pos_triggers, neg_triggers = proc_utils.get_trigger_paths_for(
+        pos_triggers, neg_triggers = utils.misc.get_trigger_paths_for(
             dsname, is_mc, self.trigger_paths, self.trigger_order)
         selector.add_cut(partial(
             self.passing_trigger, pos_triggers, neg_triggers), "Trigger")
@@ -615,7 +615,7 @@ class Processor(processor.ProcessorABC):
         elif j_id == "cut:tightlepveto":
             has_id = (data["Jet_jetId"] & 0b100).astype(bool)
         else:
-            raise config_utils.ConfigError(
+            raise utils.config.ConfigError(
                     "Invalid good_jet_id: {}".format(j_id))
 
         lep_dist = self.config["good_jet_lepton_distance"]
@@ -655,16 +655,16 @@ class Processor(processor.ProcessorABC):
             disc = data["Jet_btagDeepB"][gj]
             wps = {"loose": 0.1241, "medium": 0.4184, "tight": 0.7527}
             if wp not in wps:
-                raise config_utils.ConfigError(
+                raise utils.config.ConfigError(
                     "Invalid DeepCSV working point: {}".format(wp))
         elif tagger == "deepjet":
             disc = data["Jet_btagDeepFlavB"][gj]
             wps = {"loose": 0.0494, "medium": 0.2770, "tight": 0.7264}
             if wp not in wps:
-                raise config_utils.ConfigError(
+                raise utils.config.ConfigError(
                     "Invalid DeepJet working point: {}".format(wp))
         else:
-            raise config_utils.ConfigError(
+            raise utils.config.ConfigError(
                 "Invalid tagger name: {}".format(tagger))
         jet_dict["btag"] = disc.flatten()
         jet_dict["btagged"] = (disc > wps[wp]).flatten()
@@ -758,12 +758,12 @@ class Processor(processor.ProcessorABC):
             for sf in self.electron_sf:
                 factors_flat = sf(eta=electrons.eta.flatten(),
                                   pt=electrons.pt.flatten())
-                weight *= proc_utils.jaggedlike(
+                weight *= utils.misc.jaggedlike(
                     electrons.eta, factors_flat).prod()
             for sf in self.muon_sf:
                 factors_flat = sf(abseta=abs(muons.eta.flatten()),
                                   pt=muons.pt.flatten())
-                weight *= proc_utils.jaggedlike(muons.eta, factors_flat).prod()
+                weight *= utils.misc.jaggedlike(muons.eta, factors_flat).prod()
             if self.btagweighter is not None:
                 wp = self.config["btag"].split(":", 1)[1]
                 flav = jets["hadronFlavour"]
@@ -782,11 +782,11 @@ class Processor(processor.ProcessorABC):
     def choose_bs(self, data, lep, antilep):
         btags = data["Jet"][data["Jet"].btagged]
         jetsnob = data["Jet"][~data["Jet"].btagged]
-        b0, b1 = proc_utils.pairswhere(btags.counts > 1,
+        b0, b1 = utils.misc.pairswhere(btags.counts > 1,
                                        btags.distincts(),
                                        btags.cross(jetsnob))
-        bs = proc_utils.concatenate(b0, b1)
-        bbars = proc_utils.concatenate(b1, b0)
+        bs = utils.misc.concatenate(b0, b1)
+        bbars = utils.misc.concatenate(b1, b0)
         hist_mlb = uproot.open(self.config["genhist_path"])["Mlb"]
         alb = bs.cross(antilep)
         lbbar = bbars.cross(lep)

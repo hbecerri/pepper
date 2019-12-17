@@ -12,7 +12,7 @@ from glob import glob
 from collections import defaultdict
 from uproot_methods.classes.TH3 import Methods as TH3Methods
 
-import config_utils
+from utils.config import Config
 
 
 def get_event_files(eventdir, eventext, datasets):
@@ -180,7 +180,7 @@ parser.add_argument(
     "Defaults to \".hdf5\"")
 args = parser.parse_args()
 
-config = config_utils.Config(args.config)
+config = Config(args.config)
 num_cuts = args.cut.bit_length()
 cut = unpack_cuts(np.array([args.cut], dtype=np.uint64), num_cuts)
 

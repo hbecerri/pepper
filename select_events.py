@@ -8,7 +8,7 @@ import parsl
 from parsl.addresses import address_by_hostname
 from argparse import ArgumentParser
 
-import config_utils
+import utils.config
 from processor import Processor
 
 
@@ -32,7 +32,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 
-config = config_utils.Config(args.config)
+config = utils.config.Config(args.config)
 store = config["store"]
 
 
@@ -54,7 +54,7 @@ else:
         else:
             datasets[dataset[0]] = [dataset[1]]
 
-datasets, paths2dsname = config_utils.expand_datasetdict(datasets, store)
+datasets, paths2dsname = utils.config.expand_datasetdict(datasets, store)
 num_files = len(paths2dsname)
 num_mc_files = sum(len(datasets[dsname])
                    for dsname in config["mc_datasets"].keys())
@@ -126,5 +126,8 @@ export PATH=~/.local/bin:$PATH
 else:
     executor = coffea.processor.iterative_executor
     executor_args = {}
+
+if args.condor is not None:
+    print("Spawning jobs. This can take a while")
 output = coffea.processor.run_uproot_job(
     datasets, "Events", processor, executor, executor_args)
