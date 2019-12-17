@@ -621,6 +621,7 @@ class Processor(processor.ProcessorABC):
 
         lep_dist = self.config["good_jet_lepton_distance"]
 
+        # Check if there are leptons close by
         j_eta = data["Jet_eta"]
         j_phi = data["Jet_phi"]
         l_eta = awkward.concatenate(
@@ -651,24 +652,25 @@ class Processor(processor.ProcessorABC):
             arr = data["Jet_" + key][gj]
             offsets = arr.offsets
             jet_dict[key] = arr.flatten()
+
+        # Evaluate b-tagging
         tagger, wp = self.config["btag"].split(":")
         if tagger == "deepcsv":
             disc = data["Jet_btagDeepB"][gj]
-            wps = {"loose": 0.1241, "medium": 0.4184, "tight": 0.7527}
-            if wp not in wps:
-                raise utils.config.ConfigError(
-                    "Invalid DeepCSV working point: {}".format(wp))
         elif tagger == "deepjet":
             disc = data["Jet_btagDeepFlavB"][gj]
-            wps = {"loose": 0.0494, "medium": 0.2770, "tight": 0.7264}
-            if wp not in wps:
-                raise utils.config.ConfigError(
-                    "Invalid DeepJet working point: {}".format(wp))
         else:
             raise utils.config.ConfigError(
                 "Invalid tagger name: {}".format(tagger))
+        year = self.config["year"]
+        wptuple = btagging.BTAG_WP_CUTS[tagger][year]
+        if not hasattr(wptuple, wp):
+            raise utils.config.ConfigError(
+                "Invalid working point \"{}\" for {} in year {}".format(
+                    wp, tagger, year))
         jet_dict["btag"] = disc.flatten()
-        jet_dict["btagged"] = (disc > wps[wp]).flatten()
+        jet_dict["btagged"] = (disc > getattr(wptuple, wp)).flatten()
+
         jets = Jca.candidatesfromoffsets(offsets, **jet_dict)
 
         # Sort jets by pt
