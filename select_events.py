@@ -9,6 +9,7 @@ from parsl.addresses import address_by_hostname
 from argparse import ArgumentParser
 
 import utils.config
+from utils.datasets import expand_datasetdict
 from processor import Processor
 
 
@@ -54,7 +55,7 @@ else:
         else:
             datasets[dataset[0]] = [dataset[1]]
 
-datasets, paths2dsname = utils.config.expand_datasetdict(datasets, store)
+datasets, paths2dsname = expand_datasetdict(datasets, store)
 num_files = len(paths2dsname)
 num_mc_files = sum(len(datasets[dsname])
                    for dsname in config["mc_datasets"].keys())
