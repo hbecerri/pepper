@@ -13,6 +13,7 @@ import h5py
 
 import utils.config
 import utils.misc
+from utils.accumulator import PackedSelectionAccumulator
 import btagging
 from kin_reco.sonnenschein import kinreco
 
@@ -85,7 +86,7 @@ class Selector(object):
         table -- An `awkward.Table` or `LazyTable` holding the events' data
         """
         self.table = table
-        self._cuts = utils.misc.PackedSelectionAccumulator()
+        self._cuts = PackedSelectionAccumulator()
         self._current_cuts = []
         self._frozen = False
 
