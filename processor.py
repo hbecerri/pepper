@@ -13,6 +13,7 @@ import h5py
 
 import config_utils
 import proc_utils
+import btagging
 from reconstructionUtils.KinRecoSonnenschein import kinreco
 
 
@@ -300,6 +301,15 @@ class Processor(processor.ProcessorABC):
         else:
             print("No muon scale factors specified")
             self.muon_sf = []
+        if "btag_sf" in self.config and len(self.config["btag_sf"]) > 0:
+            tagger = self.config["btag"].split(":")[0]
+            self.btagweighter = btagging.BTagWeighter(config["btag_sf"][0],
+                                                      config["btag_sf"][1],
+                                                      tagger,
+                                                      config["year"])
+        else:
+            print("No btag scale factor specified")
+            self.btagweighter = None
 
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
@@ -744,6 +754,7 @@ class Processor(processor.ProcessorABC):
             weight *= data["genWeight"]
             electrons = data["Lepton"][abs(data["Lepton"].pdgId) == 11]
             muons = data["Lepton"][abs(data["Lepton"].pdgId) == 13]
+            jets = data["Jet"]
             for sf in self.electron_sf:
                 factors_flat = sf(eta=electrons.eta.flatten(),
                                   pt=electrons.pt.flatten())
@@ -753,6 +764,13 @@ class Processor(processor.ProcessorABC):
                 factors_flat = sf(abseta=abs(muons.eta.flatten()),
                                   pt=muons.pt.flatten())
                 weight *= proc_utils.jaggedlike(muons.eta, factors_flat).prod()
+            if self.btagweighter is not None:
+                wp = self.config["btag"].split(":", 1)[1]
+                flav = jets["hadronFlavour"]
+                eta = jets.eta
+                pt = jets.pt
+                discr = jets["btag"]
+                weight *= self.btagweighter(wp, flav, eta, pt, discr)
         return weight
 
     def pick_leps(self, data):
