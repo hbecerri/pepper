@@ -3,6 +3,7 @@
 import os
 from glob import glob
 
+
 def dataset_to_paths(dataset, store, ext=".root"):
     """Get the paths of the files belonging to a dataset
 
