@@ -3,61 +3,11 @@
 import os
 import numpy as np
 import coffea
-import copy
 from argparse import ArgumentParser
-import h5py
-import uproot
-import awkward
-from glob import glob
-from collections import defaultdict
 from uproot_methods.classes.TH3 import Methods as TH3Methods
 
 from utils.config import Config
-
-
-def get_event_files(eventdir, eventext, datasets):
-    out = {}
-    for dsname in datasets:
-        out[dsname] = glob(os.path.join(eventdir, dsname, "*" + eventext))
-    return out
-
-
-def treeopen(path, treepath, branches):
-    treedata = {}
-    if path.endswith(".root"):
-        f = uproot.open(path)
-        tree = f[treepath]
-        for branch in branches:
-            treedata[branch] = tree[branch].array()
-    elif path.endswith(".hdf5") or path.endswith(".h5"):
-        f = h5py.File(path, "r")
-        tree = awkward.hdf5(f)
-        for branch in branches:
-            treedata[branch] = tree[branch]
-    else:
-        raise RuntimeError("Cannot open {}. Unknown extension".format(path))
-    return awkward.Table(treedata)
-
-
-def montecarlo_iterate(datasets, factors, branches, treepath="Events"):
-    for group, group_paths in datasets.items():
-        chunks = defaultdict(list)
-        weight_chunks = []
-        weight = np.array([])
-        for path in group_paths:
-            tree = treeopen(path, treepath, list(branches) + ["weight"])
-            for branch in branches:
-                if tree[branch].size == 0:
-                    continue
-                chunks[branch].append(tree[branch])
-            weight_chunks.append(tree["weight"] * factors[group])
-        if len(weight_chunks) == 0:
-            continue
-        data = {}
-        for branch in chunks.keys():
-            data[branch] = awkward.concatenate(chunks[branch])
-
-        yield group, np.concatenate(weight_chunks), awkward.Table(data)
+from utils.misc import get_event_files, montecarlo_iterate
 
 
 def hist_divide(num, denom):

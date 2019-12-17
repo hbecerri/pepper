@@ -4,76 +4,13 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from argparse import ArgumentParser
-from collections import defaultdict
-import uproot
-import h5py
-import awkward
 import coffea
-from glob import glob
 import json
 from functools import partial
 import itertools
 
 from utils.config import Config
-
-
-def get_event_files(eventdir, eventext, datasets):
-    out = {}
-    for dsname in datasets:
-        out[dsname] = glob(os.path.join(eventdir, dsname, "*" + eventext))
-    return out
-
-
-def treeopen(path, treepath, branches):
-    treedata = {}
-    if path.endswith(".root"):
-        f = uproot.open(path)
-        tree = f[treepath]
-        for branch in branches:
-            treedata[branch] = tree[branch].array()
-    elif path.endswith(".hdf5") or path.endswith(".h5"):
-        f = h5py.File(path, "r")
-        tree = awkward.hdf5(f)
-        for branch in branches:
-            treedata[branch] = tree[branch]
-    else:
-        raise RuntimeError("Cannot open {}. Unknown extension".format(path))
-    return awkward.Table(treedata)
-
-
-def expdata_iterate(datasets, branches, treepath="Events"):
-    for paths in datasets.values():
-        chunks = defaultdict(list)
-        for path in paths:
-            print("Processing {}".format(path))
-            data = treeopen(path, treepath, branches)
-            if data.size == 0:
-                continue
-            for branch in branches:
-                chunks[branch].append(data[branch])
-        data = {}
-        for branch in branches:
-            data[branch] = awkward.concatenate(chunks[branch])
-        yield awkward.Table(data)
-
-
-def montecarlo_iterate(datasets, factors, branches, treepath="Events"):
-    for group, group_paths in datasets.items():
-        chunks = defaultdict(list)
-        weight_chunks = []
-        weight = np.array([])
-        for path in group_paths:
-            tree = treeopen(path, treepath, list(branches) + ["weight"])
-            for branch in branches:
-                if tree[branch].size == 0:
-                    continue
-                chunks[branch].append(tree[branch])
-            weight_chunks.append(tree["weight"] * factors[group])
-        data = {}
-        for branch in chunks.keys():
-            data[branch] = awkward.concatenate(chunks[branch])
-
-        yield group, np.concatenate(weight_chunks), awkward.Table(data)
+from utils.misc import get_event_files, montecarlo_iterate, expdata_iterate
 
 
 class ComparisonHistogram1D(object):

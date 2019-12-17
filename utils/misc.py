@@ -1,6 +1,8 @@
-from collections import OrderedDict
-from copy import copy
-
+import os
+from glob import glob
+import h5py
+import uproot
+from collections import defaultdict
 from coffea import hist
 from coffea.analysis_objects import JaggedCandidateArray as Jca
 import awkward
@@ -112,3 +114,64 @@ def jagged_reduce(jarr):
     cls = awkward.array.objects.Methods.maybemixin(type(jarr),
                                                    awkward.JaggedArray)
     return cls.fromcounts(jarr.counts, jarr.flatten())
+
+
+def get_event_files(eventdir, eventext, datasets):
+    out = {}
+    for dsname in datasets:
+        out[dsname] = glob(os.path.join(eventdir, dsname, "*" + eventext))
+    return out
+
+
+def treeopen(path, treepath, branches):
+    treedata = {}
+    if path.endswith(".root"):
+        f = uproot.open(path)
+        tree = f[treepath]
+        for branch in branches:
+            treedata[branch] = tree[branch].array()
+    elif path.endswith(".hdf5") or path.endswith(".h5"):
+        f = h5py.File(path, "r")
+        tree = awkward.hdf5(f)
+        for branch in branches:
+            treedata[branch] = tree[branch]
+    else:
+        raise RuntimeError("Cannot open {}. Unknown extension".format(path))
+    return awkward.Table(treedata)
+
+
+def montecarlo_iterate(datasets, factors, branches, treepath="Events"):
+    for group, group_paths in datasets.items():
+        chunks = defaultdict(list)
+        weight_chunks = []
+        weight = np.array([])
+        for path in group_paths:
+            tree = treeopen(path, treepath, list(branches) + ["weight"])
+            for branch in branches:
+                if tree[branch].size == 0:
+                    continue
+                chunks[branch].append(tree[branch])
+            weight_chunks.append(tree["weight"] * factors[group])
+        if len(weight_chunks) == 0:
+            continue
+        data = {}
+        for branch in chunks.keys():
+            data[branch] = awkward.concatenate(chunks[branch])
+
+        yield group, np.concatenate(weight_chunks), awkward.Table(data)
+
+
+def expdata_iterate(datasets, branches, treepath="Events"):
+    for paths in datasets.values():
+        chunks = defaultdict(list)
+        for path in paths:
+            print("Processing {}".format(path))
+            data = treeopen(path, treepath, branches)
+            if data.size == 0:
+                continue
+            for branch in branches:
+                chunks[branch].append(data[branch])
+        data = {}
+        for branch in branches:
+            data[branch] = awkward.concatenate(chunks[branch])
+        yield awkward.Table(data)
