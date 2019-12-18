@@ -91,14 +91,14 @@ processor = Processor(config, os.path.realpath(args.dest))
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
     conor_config = ("requirements = (OpSysAndVer == \"SL6\" || OpSysAndVer =="
-                   " \"CentOS7\")")
+                    " \"CentOS7\")")
     # Need to unset PYTHONPATH because of cmssw setting it incorrectly
     # Need to put own directory into PYTHONPATH for unpickling processor to
     # work. Should be unncessecary, one this we have correct module structure
     # Need to extend PATH to be able to execute the main parsle script
     condor_init = """
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-if lsb_release -r | grep -q 7\.; then
+if lsb_release -r | grep -q 7\\.; then
 cd /cvmfs/cms.cern.ch/slc7_amd64_gcc700/cms/cmssw-patch/CMSSW_10_2_4_patch1/src
 else
 cd /cvmfs/cms.cern.ch/slc6_amd64_gcc700/cms/cmssw-patch/CMSSW_10_2_4_patch1/src
