@@ -240,7 +240,7 @@ os.makedirs(args.outdir, exist_ok=True)
 lep_hists.save(os.path.join(args.outdir, "hist_l_data.coffea"),
                os.path.join(args.outdir, "hist_l_mc.coffea"))
 lep_hists.plotratio("ee", os.path.join(args.outdir, "ratio_ee"))
-lep_hists.plotratio("mm", os.path.join(args.outdir, "ratio_ee"))
+lep_hists.plotratio("mm", os.path.join(args.outdir, "ratio_mm"))
 lep_hists.plotratio("em", os.path.join(args.outdir, "ratio_em"))
 lep_hists.plot2ddiff("pt", "ee", os.path.join(args.outdir, "diff_ee"))
 lep_hists.plot2ddiff("pt", "mm", os.path.join(args.outdir, "diff_mm"))
