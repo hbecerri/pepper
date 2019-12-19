@@ -162,7 +162,7 @@ def montecarlo_iterate(datasets, factors, branches, treepath="Events"):
 
 
 def expdata_iterate(datasets, branches, treepath="Events"):
-    for paths in datasets.values():
+    for dsname, paths in datasets.items():
         chunks = defaultdict(list)
         for path in paths:
             data = treeopen(path, treepath, branches)
@@ -173,4 +173,4 @@ def expdata_iterate(datasets, branches, treepath="Events"):
         data = {}
         for branch in branches:
             data[branch] = awkward.concatenate(chunks[branch])
-        yield awkward.Table(data)
+        yield dsname, awkward.Table(data)

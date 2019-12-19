@@ -84,8 +84,13 @@ class ComparisonHistogram1D(object):
 
 
 class ParticleComparisonHistograms(object):
-    def __init__(self, particle_name):
+    def __init__(self, particle_name, data_hist, pred_hist):
         self._particle_name = particle_name
+        self.data_hist = data_hist
+        self.pred_hist = pred_hist
+
+    @classmethod
+    def create_empty(cls, particle_name):
         bins = (
             coffea.hist.Cat("proc", "Process", "integral"),
             coffea.hist.Cat("chan", "Channel"),
@@ -96,8 +101,9 @@ class ParticleComparisonHistograms(object):
             coffea.hist.Bin(
                 "phi", r"{} $\varphi$".format(particle_name), 38, -3.8, 3.8)
         )
-        self.data_hist = coffea.hist.Hist("Counts", *bins)
-        self.pred_hist = coffea.hist.Hist("Counts", *bins)
+        data_hist = coffea.hist.Hist("Counts", *bins)
+        pred_hist = coffea.hist.Hist("Counts", *bins)
+        return cls(particle_name, data_hist, pred_hist)
 
     def fill(self, proc, chan, pt, eta, phi, weight=1):
         if proc.lower() == "data":
@@ -167,7 +173,7 @@ if args.labels:
 else:
     labels_map = None
 
-lep_hists = ParticleComparisonHistograms("Lepton")
+lep_hists = ParticleComparisonHistograms.create_empty("Lepton")
 branches = ["Lepton_pt",
             "Lepton_eta",
             "Lepton_phi",
@@ -207,14 +213,14 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
                        data["Lepton_phi"][sel].flatten(),
                        np.repeat(weight[sel], 2))
 
-for data in expdata_iterate(exp_datasets, branches):
+for dsname, data in expdata_iterate(exp_datasets, branches):
     if args.cuts is not None:
         cutsel = ((data["cutflags"] & args.cuts) == args.cuts).astype(bool)
         print("Data: {} events passing cuts, {} total".format(cutsel.sum(),
                                                               data.size))
         data = data[cutsel]
     else:
-        print("Read {} experimental data events".format(data.size))
+        print("{}: {} events".format(dsname, data.size))
 
     p0 = abs(data["Lepton_pdgId"][:, 0])
     p1 = abs(data["Lepton_pdgId"][:, 1])
