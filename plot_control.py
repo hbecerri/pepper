@@ -179,10 +179,14 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
                                              branches):
     if args.cuts is not None:
         cutsel = ((data["cutflags"] & args.cuts) == args.cuts).astype(bool)
+        print("{}: {} events passing cuts, {} total".format(name,
+                                                            cutsel.sum(),
+                                                            data.size))
         data = data[cutsel]
         weight = weight[cutsel]
+    else:
+        print("{}: {} events".format(name, data.size))
 
-    print("{}: {} events".format(name, data.size))
     if labels_map:
         if name in labels_map:
             name = labels_map[name]
@@ -206,7 +210,11 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
 for data in expdata_iterate(exp_datasets, branches):
     if args.cuts is not None:
         cutsel = ((data["cutflags"] & args.cuts) == args.cuts).astype(bool)
+        print("Data: {} events passing cuts, {} total".format(cutsel.sum(),
+                                                              data.size))
         data = data[cutsel]
+    else:
+        print("Read {} experimental data events".format(data.size))
 
     p0 = abs(data["Lepton_pdgId"][:, 0])
     p1 = abs(data["Lepton_pdgId"][:, 1])

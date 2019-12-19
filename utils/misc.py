@@ -165,7 +165,6 @@ def expdata_iterate(datasets, branches, treepath="Events"):
     for paths in datasets.values():
         chunks = defaultdict(list)
         for path in paths:
-            print("Processing {}".format(path))
             data = treeopen(path, treepath, branches)
             if data.size == 0:
                 continue
