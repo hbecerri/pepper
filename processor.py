@@ -5,6 +5,7 @@ from functools import partial
 import numpy as np
 import awkward
 import coffea
+import coffea.lumi_tools
 from coffea import hist
 from coffea.analysis_objects import JaggedCandidateArray as Jca
 import coffea.processor as processor
