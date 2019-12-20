@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from argparse import ArgumentParser
@@ -40,7 +41,7 @@ class ComparisonHistogram1D(object):
             fig.savefig(fname)
             plt.close()
 
-    def plotratio(self, namebase):
+    def plotratio(self, namebase, colors={}):
         fig, (ax1, ax2) = plt.subplots(
             nrows=2, sharex=True, gridspec_kw={"height_ratios": [3, 1]})
         coffea.hist.plot1d(self.pred_hist,
@@ -65,6 +66,9 @@ class ComparisonHistogram1D(object):
                               error_opts={"fmt": "ok", "markersize": 4},
                               denom_fill_opts={},
                               unc="num")
+        for handle, label in zip(*ax1.get_legend_handles_labels()):
+            if label in colors:
+                handle.set_color(colors[label])
         ax1.legend(ncol=2)
         ax1.set_xlabel("")
         ax1.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
@@ -112,7 +116,7 @@ class ParticleComparisonHistograms(object):
             hist = self.pred_hist
         hist.fill(proc=proc, chan=chan, pt=pt, eta=eta, phi=phi, weight=weight)
 
-    def plotratio(self, chan, namebase):
+    def plotratio(self, chan, namebase, colors={}):
         axes = ["pt", "eta", "phi"]
         for sumax in itertools.combinations(axes, len(axes) - 1):
             data_hist = (self.data_hist.integrate("chan", int_range=chan)
@@ -121,7 +125,7 @@ class ParticleComparisonHistograms(object):
                                        .sum(*sumax, overflow="all"))
             cmphist = ComparisonHistogram1D(data_hist, pred_hist)
             new_namebase = namebase + "_" + next(iter(set(axes) - set(sumax)))
-            cmphist.plotratio(new_namebase)
+            cmphist.plotratio(new_namebase, colors)
 
     def plot2ddiff(self, outaxis, chan, namebase):
         data_hist = (self.data_hist.integrate("chan", int_range=chan)
@@ -157,7 +161,15 @@ parser.add_argument(
 parser.add_argument(
     "--cuts", type=int, help="Plot only events that have the given number as "
     "their entry in the cut_arrays")
+parser.add_argument(
+    "--debug", nargs=2, metavar=("data_hist", "pred_hist"))
 args = parser.parse_args()
+
+if args.debug is not None:
+    data_hist = coffea.util.load(args.debug[0])
+    pred_hist = coffea.util.load(args.debug[1])
+    lep_hists = ParticleComparisonHistograms("Lepton", data_hist, pred_hist)
+    sys.exit(0)
 
 config = Config(args.config)
 
@@ -180,6 +192,7 @@ branches = ["Lepton_pt",
             "Lepton_pdgId",
             "cutflags"]
 
+mc_colors = {}
 for name, weight, data in montecarlo_iterate(mc_datasets,
                                              montecarlo_factors,
                                              branches):
@@ -198,6 +211,8 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
             name = labels_map[name]
         else:
             print("No label given for {}".format(name))
+    if name not in mc_colors:
+        mc_colors[name] = "C" + str(len(mc_colors))
     p0 = abs(data["Lepton_pdgId"][:, 0])
     p1 = abs(data["Lepton_pdgId"][:, 1])
     channels = {
@@ -239,9 +254,9 @@ for dsname, data in expdata_iterate(exp_datasets, branches):
 os.makedirs(args.outdir, exist_ok=True)
 lep_hists.save(os.path.join(args.outdir, "hist_l_data.coffea"),
                os.path.join(args.outdir, "hist_l_mc.coffea"))
-lep_hists.plotratio("ee", os.path.join(args.outdir, "ratio_ee"))
-lep_hists.plotratio("mm", os.path.join(args.outdir, "ratio_mm"))
-lep_hists.plotratio("em", os.path.join(args.outdir, "ratio_em"))
+lep_hists.plotratio("ee", os.path.join(args.outdir, "ratio_ee"), mc_colors)
+lep_hists.plotratio("mm", os.path.join(args.outdir, "ratio_mm"), mc_colors)
+lep_hists.plotratio("em", os.path.join(args.outdir, "ratio_em"), mc_colors)
 lep_hists.plot2ddiff("pt", "ee", os.path.join(args.outdir, "diff_ee"))
 lep_hists.plot2ddiff("pt", "mm", os.path.join(args.outdir, "diff_mm"))
 lep_hists.plot2ddiff("pt", "em", os.path.join(args.outdir, "diff_em"))
