@@ -170,6 +170,8 @@ def expdata_iterate(datasets, branches, treepath="Events"):
                 continue
             for branch in branches:
                 chunks[branch].append(data[branch])
+        if len(chunks) == 0:
+            continue
         data = {}
         for branch in branches:
             data[branch] = awkward.concatenate(chunks[branch])
