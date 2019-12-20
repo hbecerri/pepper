@@ -26,6 +26,9 @@ parser.add_argument(
     "submitted. The number can be changed by supplying it to this option"
 )
 parser.add_argument(
+    "--chunksize", type=int, default=500000, help="Number of events to "
+    "process at once. Defaults to 5*10^5")
+parser.add_argument(
     "--mc", action="store_true", help="Only process MC files")
 parser.add_argument(
     "--debug", action="store_true", help="Only process a small amount of files"
@@ -136,4 +139,5 @@ else:
 if args.condor is not None:
     print("Spawning jobs. This can take a while")
 output = coffea.processor.run_uproot_job(
-    datasets, "Events", processor, executor, executor_args)
+    datasets, "Events", processor, executor, executor_args,
+    chunksize=args.chunksize)
