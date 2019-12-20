@@ -89,7 +89,7 @@ class ComparisonHistogram1D(object):
 
 class ParticleComparisonHistograms(object):
     def __init__(self, particle_name, data_hist, pred_hist):
-        self._particle_name = particle_name
+        self.particle_name = particle_name
         self.data_hist = data_hist
         self.pred_hist = pred_hist
 
@@ -115,6 +115,15 @@ class ParticleComparisonHistograms(object):
         else:
             hist = self.pred_hist
         hist.fill(proc=proc, chan=chan, pt=pt, eta=eta, phi=phi, weight=weight)
+
+    def fill_from_data(self, proc, chan, data, weight=1):
+        pt = data[self.particle_name + "_pt"].flatten()
+        eta = data[self.particle_name + "_eta"].flatten()
+        phi = data[self.particle_name + "_phi"].flatten()
+        if isinstance(weight, np.ndarray):
+            counts = data[self.particle_name + "_pt"].counts
+            weight = np.repeat(weight, counts)
+        self.fill(proc, chan, pt, eta, phi, weight)
 
     def plotratio(self, chan, namebase, colors={}):
         axes = ["pt", "eta", "phi"]
@@ -142,6 +151,16 @@ class ParticleComparisonHistograms(object):
     def save(self, fname_data, fname_pred):
         coffea.util.save(self.data_hist, fname_data)
         coffea.util.save(self.pred_hist, fname_pred)
+
+
+def get_channel_masks(data):
+    p0 = abs(data["Lepton_pdgId"][:, 0])
+    p1 = abs(data["Lepton_pdgId"][:, 1])
+    return {
+        "ee": (p0 == 11) & (p1 == 11),
+        "mm": (p0 == 13) & (p1 == 13),
+        "em": p0 != p1,
+    }
 
 
 parser = ArgumentParser()
@@ -213,20 +232,8 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
             print("No label given for {}".format(name))
     if name not in mc_colors:
         mc_colors[name] = "C" + str(len(mc_colors))
-    p0 = abs(data["Lepton_pdgId"][:, 0])
-    p1 = abs(data["Lepton_pdgId"][:, 1])
-    channels = {
-        "ee": (p0 == 11) & (p1 == 11),
-        "mm": (p0 == 13) & (p1 == 13),
-        "em": p0 != p1,
-    }
-    for chan_name, sel in channels.items():
-        lep_hists.fill(name,
-                       chan_name,
-                       data["Lepton_pt"][sel].flatten(),
-                       data["Lepton_eta"][sel].flatten(),
-                       data["Lepton_phi"][sel].flatten(),
-                       np.repeat(weight[sel], 2))
+    for chan_name, sel in get_channel_masks(data).items():
+        lep_hists.fill_from_data(name, chan_name, data[sel], weight[sel])
 
 for dsname, data in expdata_iterate(exp_datasets, branches):
     if args.cuts is not None:
@@ -237,19 +244,8 @@ for dsname, data in expdata_iterate(exp_datasets, branches):
     else:
         print("{}: {} events".format(dsname, data.size))
 
-    p0 = abs(data["Lepton_pdgId"][:, 0])
-    p1 = abs(data["Lepton_pdgId"][:, 1])
-    channels = {
-        "ee": (p0 == 11) & (p1 == 11),
-        "mm": (p0 == 13) & (p1 == 13),
-        "em": p0 != p1,
-    }
-    for chan_name, sel in channels.items():
-        lep_hists.fill("Data",
-                       chan_name,
-                       data["Lepton_pt"][sel].flatten(),
-                       data["Lepton_eta"][sel].flatten(),
-                       data["Lepton_phi"][sel].flatten())
+    for chan_name, sel in get_channel_masks(data).items():
+        lep_hists.fill_from_data("Data", chan_name, data[sel])
 
 os.makedirs(args.outdir, exist_ok=True)
 lep_hists.save(os.path.join(args.outdir, "hist_l_data.coffea"),
