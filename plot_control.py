@@ -205,10 +205,15 @@ else:
     labels_map = None
 
 lep_hists = ParticleComparisonHistograms.create_empty("Lepton")
+jet_hists = ParticleComparisonHistograms.create_empty("Jet")
 branches = ["Lepton_pt",
             "Lepton_eta",
             "Lepton_phi",
             "Lepton_pdgId",
+            "Jet_pt",
+            "Jet_eta",
+            "Jet_phi",
+            "MET_sumEt",
             "cutflags"]
 
 mc_colors = {}
@@ -234,6 +239,7 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
         mc_colors[name] = "C" + str(len(mc_colors))
     for chan_name, sel in get_channel_masks(data).items():
         lep_hists.fill_from_data(name, chan_name, data[sel], weight[sel])
+        jet_hists.fill_from_data(name, chan_name, data[sel], weight[sel])
 
 for dsname, data in expdata_iterate(exp_datasets, branches):
     if args.cuts is not None:
@@ -246,13 +252,17 @@ for dsname, data in expdata_iterate(exp_datasets, branches):
 
     for chan_name, sel in get_channel_masks(data).items():
         lep_hists.fill_from_data("Data", chan_name, data[sel])
+        jet_hists.fill_from_data("Data", chan_name, data[sel])
 
 os.makedirs(args.outdir, exist_ok=True)
 lep_hists.save(os.path.join(args.outdir, "hist_l_data.coffea"),
                os.path.join(args.outdir, "hist_l_mc.coffea"))
-lep_hists.plotratio("ee", os.path.join(args.outdir, "ratio_ee"), mc_colors)
-lep_hists.plotratio("mm", os.path.join(args.outdir, "ratio_mm"), mc_colors)
-lep_hists.plotratio("em", os.path.join(args.outdir, "ratio_em"), mc_colors)
+lep_hists.plotratio("ee", os.path.join(args.outdir, "ee_lepton"), mc_colors)
+lep_hists.plotratio("mm", os.path.join(args.outdir, "mm_lepton"), mc_colors)
+lep_hists.plotratio("em", os.path.join(args.outdir, "em_lepton"), mc_colors)
+jet_hists.plotratio("ee", os.path.join(args.outdir, "ee_jet"), mc_colors)
+jet_hists.plotratio("mm", os.path.join(args.outdir, "mm_jet"), mc_colors)
+jet_hists.plotratio("em", os.path.join(args.outdir, "em_jet"), mc_colors)
 lep_hists.plot2ddiff("pt", "ee", os.path.join(args.outdir, "diff_ee"))
 lep_hists.plot2ddiff("pt", "mm", os.path.join(args.outdir, "diff_mm"))
 lep_hists.plot2ddiff("pt", "em", os.path.join(args.outdir, "diff_em"))
