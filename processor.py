@@ -33,7 +33,7 @@ class LazyTable(object):
 
     def __getitem__(self, key):
         if isinstance(key, slice):
-            idx = np.arange(key.indices(self.size))
+            idx = np.arange(*key.indices(self.size))
         elif isinstance(key, np.ndarray):
             if key.ndim > 1:
                 raise IndexError("too many indices for table")
