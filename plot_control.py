@@ -14,7 +14,7 @@ from utils.config import Config
 from utils.misc import get_event_files, montecarlo_iterate, expdata_iterate
 
 
-class ComparisonHistogram1D(object):
+class ComparisonHistogram(object):
     def __init__(self, data_hist, pred_hist):
         self.data_hist = data_hist
         self.pred_hist = pred_hist
@@ -22,29 +22,33 @@ class ComparisonHistogram1D(object):
     @classmethod
     def frombin(cls, cofbin, ylabel):
         data_hist = coffea.hist.Hist(
-            ylabel, coffea.hist.Cat("proc", "Process", "integral"), cofbin)
-        pred_hist = coffea.hist.Hist(
-            ylabel, coffea.hist.Cat("proc", "Process", "integral"), cofbin)
-        return ComparisonHistogram1D(data_hist, pred_hist)
+            ylabel,
+            coffea.hist.Cat("chan", "Channel"),
+            coffea.hist.Cat("proc", "Process", "integral"),
+            cofbin)
+        pred_hist = data_hist.copy(content=False)
+        return cls(data_hist, pred_hist)
 
-    def fill(self, proc, **kwargs):
+    def fill(self, proc, chan, **kwargs):
         if proc.lower() == "data":
-            self.data_hist.fill(proc=proc, **kwargs)
+            self.data_hist.fill(chan=chan, proc=proc, **kwargs)
         else:
-            self.pred_hist.fill(proc=proc, **kwargs)
+            self.pred_hist.fill(chan=chan, proc=proc, **kwargs)
 
-    def plot1d(self, fname_data, fname_pred):
+    def plot1d(self, chan, fname_data, fname_pred):
         for hist, fname in zip([self.data_hist, self.pred_hist],
                                [fname_data, fname_pred]):
-            fig, ax, p = coffea.hist.plot1d(
-                self.data_hist, overlay="proc", stack=True)
+            hist = hist.integrate("chan", int_range=chan)
+            fig, ax, p = coffea.hist.plot1d(hist, overlay="proc", stack=True)
             fig.savefig(fname)
             plt.close()
 
-    def plotratio(self, namebase, colors={}):
+    def plotratio(self, chan, namebase, colors={}):
+        data_hist = self.data_hist.integrate("chan", int_range=chan)
+        pred_hist = self.pred_hist.integrate("chan", int_range=chan)
         fig, (ax1, ax2) = plt.subplots(
             nrows=2, sharex=True, gridspec_kw={"height_ratios": [3, 1]})
-        coffea.hist.plot1d(self.pred_hist,
+        coffea.hist.plot1d(pred_hist,
                            ax=ax1,
                            overlay="proc",
                            stack=True,
@@ -52,7 +56,7 @@ class ComparisonHistogram1D(object):
                                "hatch": "////",
                                "facecolor": "#00000000",
                                "label": "Uncertainty"})
-        coffea.hist.plot1d(self.data_hist,
+        coffea.hist.plot1d(data_hist,
                            ax=ax1,
                            overlay="proc",
                            clear=False,
@@ -60,8 +64,8 @@ class ComparisonHistogram1D(object):
                                "color": "black",
                                "marker": "o",
                                "markersize": 4})
-        coffea.hist.plotratio(self.data_hist.sum("proc"),
-                              self.pred_hist.sum("proc"),
+        coffea.hist.plotratio(data_hist.sum("proc"),
+                              pred_hist.sum("proc"),
                               ax=ax2,
                               error_opts={"fmt": "ok", "markersize": 4},
                               denom_fill_opts={},
@@ -128,13 +132,11 @@ class ParticleComparisonHistograms(object):
     def plotratio(self, chan, namebase, colors={}):
         axes = ["pt", "eta", "phi"]
         for sumax in itertools.combinations(axes, len(axes) - 1):
-            data_hist = (self.data_hist.integrate("chan", int_range=chan)
-                                       .sum(*sumax, overflow="all"))
-            pred_hist = (self.pred_hist.integrate("chan", int_range=chan)
-                                       .sum(*sumax, overflow="all"))
-            cmphist = ComparisonHistogram1D(data_hist, pred_hist)
+            data_hist = self.data_hist.sum(*sumax, overflow="all")
+            pred_hist = self.pred_hist.sum(*sumax, overflow="all")
+            cmphist = ComparisonHistogram(data_hist, pred_hist)
             new_namebase = namebase + "_" + next(iter(set(axes) - set(sumax)))
-            cmphist.plotratio(new_namebase, colors)
+            cmphist.plotratio(chan, new_namebase, colors)
 
     def plot2ddiff(self, outaxis, chan, namebase):
         data_hist = (self.data_hist.integrate("chan", int_range=chan)
