@@ -211,9 +211,11 @@ jet_hists = ParticleComparisonHistograms.create_empty("Jet")
 njets_hist = ComparisonHistogram.frombin(
     coffea.hist.Bin("njets", "Number of jets", np.arange(10)), "Counts")
 met_hist = ComparisonHistogram.frombin(
-    coffea.hist.Bin("met", "Missing transverse momentum", 20, 0, 200), "Counts")
+    coffea.hist.Bin(
+        "met", "Missing transverse momentum", 20, 0, 200), "Counts")
 mll_hist = ComparisonHistogram.frombin(
-    coffea.hist.Bin("mll", "Invariant mass of the lepton system", 20, 0, 200), "Counts")
+    coffea.hist.Bin(
+        "mll", "Invariant mass of the lepton system", 20, 0, 200), "Counts")
 branches = ["Lepton_pt",
             "Lepton_eta",
             "Lepton_phi",
@@ -250,9 +252,9 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
         lep_hists.fill_from_data(name, chan_name, data[sel], weight[sel])
         jet_hists.fill_from_data(name, chan_name, data[sel], weight[sel])
         njets_hist.fill(proc=name,
-                       chan=chan_name,
-                       njets=data[sel]["Jet_pt"].counts,
-                       weight=weight[sel])
+                        chan=chan_name,
+                        njets=data[sel]["Jet_pt"].counts,
+                        weight=weight[sel])
         met_hist.fill(proc=name,
                       chan=chan_name,
                       met=data[sel]["MET_pt"],
