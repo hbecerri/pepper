@@ -23,8 +23,8 @@ class ComparisonHistogram(object):
     def frombin(cls, cofbin, ylabel):
         data_hist = coffea.hist.Hist(
             ylabel,
-            coffea.hist.Cat("chan", "Channel"),
             coffea.hist.Cat("proc", "Process", "integral"),
+            coffea.hist.Cat("chan", "Channel"),
             cofbin)
         pred_hist = data_hist.copy(content=False)
         return cls(data_hist, pred_hist)
@@ -208,6 +208,12 @@ else:
 
 lep_hists = ParticleComparisonHistograms.create_empty("Lepton")
 jet_hists = ParticleComparisonHistograms.create_empty("Jet")
+njets_hist = ComparisonHistogram.frombin(
+    coffea.hist.Bin("njets", "Number of jets", np.arange(10)), "Counts")
+met_hist = ComparisonHistogram.frombin(
+    coffea.hist.Bin("met", "Missing transverse momentum", 20, 0, 200), "Counts")
+mll_hist = ComparisonHistogram.frombin(
+    coffea.hist.Bin("mll", "Invariant mass of the lepton system", 20, 0, 200), "Counts")
 branches = ["Lepton_pt",
             "Lepton_eta",
             "Lepton_phi",
@@ -215,7 +221,8 @@ branches = ["Lepton_pt",
             "Jet_pt",
             "Jet_eta",
             "Jet_phi",
-            "MET_sumEt",
+            "MET_pt",
+            "mll",
             "cutflags"]
 
 mc_colors = {}
@@ -242,6 +249,18 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
     for chan_name, sel in get_channel_masks(data).items():
         lep_hists.fill_from_data(name, chan_name, data[sel], weight[sel])
         jet_hists.fill_from_data(name, chan_name, data[sel], weight[sel])
+        njets_hist.fill(proc=name,
+                       chan=chan_name,
+                       njets=data[sel]["Jet_pt"].counts,
+                       weight=weight[sel])
+        met_hist.fill(proc=name,
+                      chan=chan_name,
+                      met=data[sel]["MET_pt"],
+                      weight=weight[sel])
+        mll_hist.fill(proc=name,
+                      chan=chan_name,
+                      mll=data[sel]["mll"],
+                      weight=weight[sel])
 
 for dsname, data in expdata_iterate(exp_datasets, branches):
     if args.cuts is not None:
@@ -255,16 +274,23 @@ for dsname, data in expdata_iterate(exp_datasets, branches):
     for chan_name, sel in get_channel_masks(data).items():
         lep_hists.fill_from_data("Data", chan_name, data[sel])
         jet_hists.fill_from_data("Data", chan_name, data[sel])
+        njets_hist.fill("Data",
+                        chan=chan_name,
+                        njets=data[sel]["Jet_pt"].counts)
+        met_hist.fill("Data",
+                      chan=chan_name,
+                      met=data[sel]["MET_pt"])
+        mll_hist.fill("Data",
+                      chan=chan_name,
+                      mll=data[sel]["mll"])
 
 os.makedirs(args.outdir, exist_ok=True)
-lep_hists.save(os.path.join(args.outdir, "hist_l_data.coffea"),
-               os.path.join(args.outdir, "hist_l_mc.coffea"))
-lep_hists.plotratio("ee", os.path.join(args.outdir, "ee_lepton"), mc_colors)
-lep_hists.plotratio("mm", os.path.join(args.outdir, "mm_lepton"), mc_colors)
-lep_hists.plotratio("em", os.path.join(args.outdir, "em_lepton"), mc_colors)
-jet_hists.plotratio("ee", os.path.join(args.outdir, "ee_jet"), mc_colors)
-jet_hists.plotratio("mm", os.path.join(args.outdir, "mm_jet"), mc_colors)
-jet_hists.plotratio("em", os.path.join(args.outdir, "em_jet"), mc_colors)
-lep_hists.plot2ddiff("pt", "ee", os.path.join(args.outdir, "diff_ee"))
-lep_hists.plot2ddiff("pt", "mm", os.path.join(args.outdir, "diff_mm"))
-lep_hists.plot2ddiff("pt", "em", os.path.join(args.outdir, "diff_em"))
+getout = partial(os.path.join, args.outdir)
+lep_hists.save(getout("hist_l_data.coffea"), getout("hist_l_mc.coffea"))
+for chan in ("ee", "mm", "em"):
+    lep_hists.plotratio(chan, getout(f"{chan}_lepton"), mc_colors)
+    lep_hists.plot2ddiff("pt", chan, getout(f"diff_{chan}_lep"))
+    jet_hists.plotratio(chan, getout(f"{chan}_jet"), mc_colors)
+    njets_hist.plotratio(chan, getout(f"{chan}_jet_n"), mc_colors)
+    met_hist.plotratio(chan, getout(f"{chan}_met"), mc_colors)
+    mll_hist.plotratio(chan, getout(f"{chan}_mll"), mc_colors)
