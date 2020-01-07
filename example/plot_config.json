@@ -36,5 +36,14 @@
         "WW_TuneCP5_13TeV-pythia8": "$\\mathrm{VV}$",
         "WZ_TuneCP5_13TeV-pythia8": "$\\mathrm{VV}$",
         "ZZ_TuneCP5_13TeV-pythia8": "$\\mathrm{VV}$"
+    },
+    "colours": {
+        "$\\mathrm{t}\\bar{\\mathrm{t}}$ dilep": "tab:blue",
+        "$\\mathrm{t}\\bar{\\mathrm{t}}$ semilep": "tab:green",
+        "Single top": "tab:red",
+        "$\\mathrm{t}\\bar{\\mathrm{t}}\\mathrm{V}$": "tab:cyan",
+        "Drell Yan": "tab:purple",
+        "$\\mathrm{W}+\\mathrm{jets}$": "tab:orange",
+        "$\\mathrm{VV}$": "tab:pink"
     }
 }

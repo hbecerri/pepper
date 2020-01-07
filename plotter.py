@@ -15,6 +15,7 @@ from parsl.providers import CondorProvider
 from parsl.addresses import address_by_hostname
 from parsl.channels import LocalChannel
 import h5py
+import mplhep
 
 from collections import defaultdict
 import os
@@ -55,38 +56,35 @@ parsl_config = Config(
                         worker_init=wrk_init))],
         lazy_errors=False
 )
-dfk = load(parsl_config)
+#dfk = load(parsl_config)
 
 config = config_utils.Config("example/config.json")
 store = config["store"]
 fileset, _ = config_utils.expand_datasetdict(config["mc_datasets"], store)
-smallfileset = {"TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8":
-                [fileset["TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8"][0]],
-                "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8":
-                [fileset["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"][0]],
-                "WZ_TuneCP5_13TeV-pythia8":
-                [fileset["WZ_TuneCP5_13TeV-pythia8"][0]],
-                "ZZ_TuneCP5_13TeV-pythia8":
-                [fileset["ZZ_TuneCP5_13TeV-pythia8"][0]]}
+smallfileset = {"TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8":
+                ["/pnfs/desy.de/cms/tier2/store/mc/RunIIAutumn18NanoAODv5/TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/Nano1June2019_102X_upgrade2018_realistic_v19-v1/250000/14933F79-95FB-354D-A917-E19B5C005037.root"]}
 destdir="/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
-"""output = coffea.processor.run_uproot_job(
-    fileset,
+output = coffea.processor.run_uproot_job(
+    smallfileset,
     treename="Events",
     processor_instance=Processor(config, "selected_columns"),
     executor=coffea.processor.iterative_executor,
     executor_args={"workers": 4},
-    chunksize=500000)
+    chunksize=100000)
 """
 output = coffea.processor.run_uproot_job(
     fileset,
     treename="Events",
     processor_instance=Processor(config, destdir),
     executor=parsl_executor,
-    chunksize=500000)
+    chunksize=500000)"""
 
 plot_config = config_utils.Config("example/plot_config.json")
 labels = plot_config["labels"]
+colours = plot_config["colours"]
 xsecs = plot_config["cross-sections"]
+
+#plt.style.use(mplhep.cms.style.ROOT)
 
 cutvalues = dict((k, np.zeros(
     len(output["cutflow"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"])))
@@ -115,7 +113,7 @@ ax = plt.gca()
 for n, label in enumerate(labelsset):
     cuteffs[label] = 100*cutvalues[label][1:]/cutvalues[label][:-1]
     ax.bar(np.arange(len(cuteffs[label])) + (2*n-nlabels)*0.4/nlabels,
-           cuteffs[label], 0.8/nlabels, label=label)
+           cuteffs[label], 0.8/nlabels, label=label, color=colours[label])
 
 ax.set_xticks(np.arange(len(
     cuteffs[labels["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]])))
@@ -147,10 +145,11 @@ sortedlabels = sorted(labelsset, key=(
                   for y in labelmap[x]])))
 for key in sortedlabels:
     labelmap[key] = labelmap.pop(key)
+    colours[key] = colours.pop(key)
 
 labels_axis = hist.Cat("labels", "", sorting="placement")
 mttbar = output["Mttbar"].group("dataset", labels_axis, labelmap)
 
-hist.plot1d(mttbar, overlay="labels", stack=True)
+ax = hist.plot1d(mttbar, overlay="labels", stack=True)
 
 plt.show(block=True)

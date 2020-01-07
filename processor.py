@@ -77,7 +77,7 @@ class LazyTable(object):
 class Selector(object):
     """Keeps track of the current event selection and data"""
 
-    def __init__(self, table, weight_col=None):
+    def __init__(self, table, is_mc=False):
         """Create a new Selector
 
         Arguments:
@@ -89,7 +89,10 @@ class Selector(object):
         self._frozen = False
 
         self._cutflow = processor.defaultdict_accumulator(int)
-        self._weight_col = weight_col
+        if is_mc == True:
+            self._weight_col = "genWeight"
+        else:
+            self._weight_col = None
 
         # Add a dummy cut to inform about event number and circumvent error
         # when calling all or require before adding actual cuts
@@ -271,7 +274,7 @@ class Processor(processor.ProcessorABC):
 
         Arguments:
         config -- A Config instance, defining the configuration to use
-        destdir -- Destination directory, where the event HDF5s are saved
+        destdir -- Destination directory, where the event HDF5s are to be saved
 
         """
         self.config = config
@@ -352,10 +355,10 @@ class Processor(processor.ProcessorABC):
 
     def process(self, df):
         output = self.accumulator.identity()
-        selector = Selector(LazyTable(df), "genWeight")
-
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
+        selector = Selector(LazyTable(df), is_mc)
+
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
         pos_triggers, neg_triggers = proc_utils.get_trigger_paths_for(
@@ -588,7 +591,13 @@ class Processor(processor.ProcessorABC):
         keys = ["pt", "eta", "phi", "mass", "pdgId"]
         lep_dict = {}
         ge = data["is_good_electron"]
+        print("eles:", ge)
+        print(len(ge.flatten()))
+        print((ge.sum()>1).sum())
         gm = data["is_good_muon"]
+        print("mus:", gm.sum())
+        print(gm.counts)
+        print((gm.sum()>1).sum())
         for key in keys:
             arr = awkward.concatenate([data["Electron_" + key][ge],
                                        data["Muon_" + key][gm]], axis=1)
@@ -598,6 +607,9 @@ class Processor(processor.ProcessorABC):
 
         # Sort leptons by pt
         leptons = leptons[leptons.pt.argsort()]
+        print(len(leptons))
+        print(leptons.counts)
+        print((leptons.counts>1).sum())
 
         return leptons
 
