@@ -386,6 +386,7 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.exactly_lepton_pair, "#Lep = 2")
         selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
         selector.set_column(self.same_flavor, "is_same_flavor")
+        selector.set_column(self.mll, "mll")
 
         selector.freeze_selection()
 
@@ -603,6 +604,9 @@ class Processor(processor.ProcessorABC):
         return (abs(data["Lepton"][:, 0].pdgId)
                 == abs(data["Lepton"][:, 1].pdgId))
 
+    def mll(self, data):
+        return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
+
     def good_jet(self, data):
         j_id, lep_dist, eta_min, eta_max, pt_min, pt_max = self.config[[
             "good_jet_id", "good_jet_lepton_distance", "good_jet_eta_min",
@@ -711,8 +715,7 @@ class Processor(processor.ProcessorABC):
         return n >= self.config["lep_pt_num_satisfied"]
 
     def good_mll(self, data):
-        return ((data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
-                > self.config["mll_min"])
+        return data["mll"] > self.config["mll_min"]
 
     def no_additional_leptons(self, data):
         e_sel = ~data["is_good_electron"]
