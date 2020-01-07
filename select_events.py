@@ -125,7 +125,7 @@ export PATH=~/.local/bin:$PATH
     )
     parsl_config = parsl.config.Config(
         executors=[parsl_executor],
-        lazy_errors=False
+        retries=100,
     )
 
     # Load config now instead of putting it into executor_args to be able to
