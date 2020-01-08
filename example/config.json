@@ -199,8 +199,7 @@
     "good_muon_cut_hem": false,
     "good_muon_cut_transreg": false,
     "good_muon_id": "cut:medium",
-    "good_muon_iso": "cut_based",
-    "good_muon_iso_value": "loose",
+    "good_muon_iso": "cut:loose",
     "good_muon_eta_min": -2.4,
     "good_muon_eta_max": 2.4,
     "good_muon_pt_min": 20.0,
@@ -215,8 +214,7 @@
 
     "additional_ele_id": "mva:Iso90",
     "additional_muon_id": "cut:medium",
-    "additional_muon_iso": "cut_based",
-    "additional_muon_iso_value": "loose",
+    "additional_muon_iso": "cut:loose",
 
     "mll_min": 20.0,
     "lep_pt_min": [
@@ -227,7 +225,11 @@
     "z_boson_window_start": 76,
     "z_boson_window_end": 106,
     "num_jets_atleast": 2,
-    "2_lead_jet_pt_min": 30,
+    "jet_pt_min": [
+        30,
+        30
+    ],
+    "jet_pt_num_satisfied": 2,
     "btag": "deepjet:medium",
     "num_atleast_btagged": 1,
     "ee/mm_min_met": 40

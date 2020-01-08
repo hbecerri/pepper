@@ -400,11 +400,13 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.z_window, "Z window")
 
         selector.set_column(self.build_jet_column, "Jet")
-        selector.add_cut(self.has_jets, "#Jets >= n")
-        selector.add_cut(self.two_good_jets, "2 jets pt>30")
+        selector.add_cut(self.has_jets, "#Jets >= %d"
+                         % self.config["num_jets_atleast"])
+        selector.add_cut(self.jet_pt_requirement, "Jet pt req")
         selector.add_cut(self.btag_cut, "At least %d btag"
                          % self.config["num_atleast_btagged"])
-        selector.add_cut(self.met_requirement, "MET > 40 GeV")
+        selector.add_cut(self.met_requirement, "MET > %d GeV"
+                         % self.config["ee/mm_min_met"])
 
         selector.set_column(partial(self.compute_weight, is_mc), "weight")
 
@@ -558,26 +560,29 @@ class Processor(processor.ProcessorABC):
             raise ValueError("Invalid muon id string")
         return has_id
 
-    def muon_iso(self, iso, iso_value, data):
-        if iso == "cut_based":
-            if iso_value == "very_loose":
-                return data["Muon_pfIsoId"] > 0
-            if iso_value == "loose":
-                return data["Muon_pfIsoId"] > 1
-            if iso_value == "medium":
-                return data["Muon_pfIsoId"] > 2
-            if iso_value == "tight":
-                return data["Muon_pfIsoId"] > 3
-            if iso_value == "very_tight":
-                return data["Muon_pfIsoId"] > 4
-            if iso_value == "very_very_tight":
-                return data["Muon_pfIsoId"] > 5
-        elif iso == "dR<0.3_chg":
-            return data["Muon_pfRelIso03_chg"] < value
-        elif iso == "dR<0.4_all":
-            return data["Muon_pfRelIso03_all"] < value
-        elif iso == "dR<0.3_chg":
-            return data["Muon_pfRelIso04_all"] < value
+    def muon_iso(self, iso, data):
+        if iso == "cut:very_loose":
+            return data["Muon_pfIsoId"] > 0
+        elif iso == "cut:loose":
+            return data["Muon_pfIsoId"] > 1
+        elif iso == "cut:medium":
+            return data["Muon_pfIsoId"] > 2
+        elif iso == "cut:tight":
+            return data["Muon_pfIsoId"] > 3
+        elif iso == "cut:very_tight":
+            return data["Muon_pfIsoId"] > 4
+        elif iso == "cut:very_very_tight":
+            return data["Muon_pfIsoId"] > 5
+        else:
+            iso, iso_value = iso.split(":")
+            value = float(iso_value)
+            if iso == "dR<0.3_chg":
+                return data["Muon_pfRelIso03_chg"] < value
+            elif iso == "dR<0.3_all":
+                return data["Muon_pfRelIso03_all"] < value
+            elif iso == "dR<0.4_all":
+                return data["Muon_pfRelIso04_all"] < value
+        raise ValueError("Invalid muon iso string")
 
     def good_muon(self, data):
         if self.config["good_muon_cut_hem"]:
@@ -588,12 +593,11 @@ class Processor(processor.ProcessorABC):
             is_in_transreg = self.in_transreg(abs(data["Muon_eta"]))
         else:
             is_in_transreg = np.array(False)
-        m_id, eta_min, eta_max, pt_min, pt_max, iso, iso_value = self.config[[
+        m_id, eta_min, eta_max, pt_min, pt_max, iso = self.config[[
             "good_muon_id", "good_muon_eta_min", "good_muon_eta_max",
-            "good_muon_pt_min", "good_muon_pt_max", "good_muon_iso",
-            "good_muon_iso_value"]]
+            "good_muon_pt_min", "good_muon_pt_max", "good_muon_iso"]]
         return (self.muon_id(m_id, data)
-                & self.muon_iso(iso, iso_value, data)
+                & self.muon_iso(iso, data)
                 & (~is_in_hem1516)
                 & (~is_in_transreg)
                 & (eta_min < data["Muon_eta"])
@@ -749,16 +753,15 @@ class Processor(processor.ProcessorABC):
                    & (eta_min < data["Electron_eta"])
                    & (data["Electron_eta"] < eta_max)
                    & (pt_min < data["Electron_pt"]))
-        m_id, m_iso, m_iso_value, eta_min, eta_max, pt_min, pt_max =\
+        m_id, m_iso, eta_min, eta_max, pt_min, pt_max =\
             self.config[["additional_muon_id",
                          "additional_muon_iso",
-                         "additional_muon_iso_value",
                          "good_muon_eta_min",
                          "good_muon_eta_max",
                          "good_muon_pt_min",
                          "good_muon_pt_max"]]
         add_muon = (self.muon_id(m_id, data)
-                    & self.muon_iso(m_iso, m_iso_value, data)
+                    & self.muon_iso(m_iso, data)
                     & (eta_min < data["Muon_eta"])
                     & (data["Muon_eta"] < eta_max)
                     & (pt_min < data["Muon_pt"])
@@ -775,8 +778,12 @@ class Processor(processor.ProcessorABC):
     def has_jets(self, data):
         return self.config["num_jets_atleast"] <= data["Jet"].counts
 
-    def two_good_jets(self, data):
-        return (data["Jet"].pt > self.config["2_lead_jet_pt_min"]).sum() > 1
+    def jet_pt_requirement(self, data):
+        n = np.zeros(data.size)
+        for i, pt_min in enumerate(self.config["jet_pt_min"]):
+            mask = data["Jet"].counts > i
+            n[mask] += (pt_min < data["Jet"].pt[mask, i]).astype(int)
+        return n >= self.config["jet_pt_num_satisfied"]
 
     def btag_cut(self, data):
         num_btagged = data["Jet"]["btagged"].sum()
