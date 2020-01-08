@@ -523,9 +523,9 @@ class Processor(processor.ProcessorABC):
         else:
             is_in_hem1516 = np.array(False)
         if self.config["ele_cut_transreg"]:
-            SC_eta_abs = abs(data["Electron_eta"]
+            sc_eta_abs = abs(data["Electron_eta"]
                              + data["Electron_deltaEtaSC"])
-            is_in_transreg = self.in_transreg(SC_eta_abs)
+            is_in_transreg = self.in_transreg(sc_eta_abs)
         else:
             is_in_transreg = np.array(False)
         if good_lep:
