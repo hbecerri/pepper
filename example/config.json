@@ -1,14 +1,27 @@
 {
+    "year": "2018",
     "store": "/pnfs/desy.de/cms/tier2/store",
     "genhist_path": "/nfs/dust/cms/user/ruebenaj/analysis/data/GenHists.root",
     "lumimask": "/afs/cern.ch/cms/CAF/CMSCOMM/COMM_DQM/certification/Collisions18/13TeV/PromptReco/Cert_314472-325175_13TeV_PromptReco_Collisions18_JSON.txt",
     "electron_sf": [
-        ["/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root", "EGamma_SF2D"],
-        ["/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/2018_ElectronTight.root", "EGamma_SF2D"]
+        [
+            "/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root",
+            "EGamma_SF2D"
+        ],
+        [
+            "/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/2018_ElectronTight.root",
+            "EGamma_SF2D"
+        ]
     ],
     "muon_sf": [
-        ["/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/Muon2018_RunABCD_SF_ID.root", "NUM_TightID_DEN_TrackerMuons_pt_abseta"],
-        ["/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/Muon2018_RunABCD_SF_ISO.root", "NUM_LooseRelIso_DEN_TightIDandIPCut_pt_abseta"]
+        [
+            "/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/Muon2018_RunABCD_SF_ID.root",
+            "NUM_TightID_DEN_TrackerMuons_pt_abseta"
+        ],
+        [
+            "/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/Muon2018_RunABCD_SF_ISO.root",
+            "NUM_LooseRelIso_DEN_TightIDandIPCut_pt_abseta"
+        ]
     ],
     "exp_datasets": {
         "MuonEG": [
@@ -92,6 +105,10 @@
             "/ZZ_TuneCP5_13TeV-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM"
         ]
     },
+    "testdataset": {
+        "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8":
+                ["/pnfs/desy.de/cms/tier2/store/mc/RunIIAutumn18NanoAODv5/TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/Nano1June2019_102X_upgrade2018_realistic_v19-v1/250000/14933F79-95FB-354D-A917-E19B5C005037.root"]
+    },
     "dataset_trigger_map": {
         "MuonEG": [
             "HLT_Mu8_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ",
@@ -142,18 +159,31 @@
             "HLT_IsoMu24"
         ]
     },
-    "selector_cols_to_save":{
-        "part_props":{},
-        "other_cols":{},
-        "cuts":"Current"
+    "selector_cols_to_save": {
+        "part_props": {},
+        "other_cols": {},
+        "cuts": "Current"
     },
-    "reco_cols_to_save":{
-        "part_props":{"lep":["p4"], "antilep":["p4"], "b":["p4"], "bbar":["p4"]},
-        "other_cols":{},
-        "cuts":"All"
+    "reco_cols_to_save": {
+        "part_props": {
+            "lep": [
+                "p4"
+            ],
+            "antilep": [
+                "p4"
+            ],
+            "b": [
+                "p4"
+            ],
+            "bbar": [
+                "p4"
+            ]
+        },
+        "other_cols": {},
+        "cuts": "All"
     },
-    
-    "filter_year": "2018",
+
+    "apply_met_filters": true,
     "mc_lumifactors": "/nfs/dust/cms/user/ruebenaj/analysis/mc_lumifactors.json",
 
     "Mlb_hist_file": "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/data/GenHists.root",
@@ -189,7 +219,10 @@
     "additional_muon_iso_value": "loose",
 
     "mll_min": 20.0,
-    "lep_pt_min": [30, 20],
+    "lep_pt_min": [
+        25,
+        20
+    ],
     "lep_pt_num_satisfied": 2,
     "z_boson_window_start": 76,
     "z_boson_window_end": 106,

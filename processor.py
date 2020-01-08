@@ -5,15 +5,18 @@ from functools import partial
 import numpy as np
 import awkward
 import coffea
+import coffea.lumi_tools
 from coffea import hist
 from coffea.analysis_objects import JaggedCandidateArray as Jca
 import coffea.processor as processor
 import uproot
 import h5py
 
-import config_utils
-import proc_utils
-from reconstructionUtils.KinRecoSonnenschein import KinReco
+import utils.config
+import utils.misc
+from utils.accumulator import PackedSelectionAccumulator
+import btagging
+from kin_reco.sonnenschein import kinreco
 
 
 class LazyTable(object):
@@ -30,7 +33,7 @@ class LazyTable(object):
 
     def __getitem__(self, key):
         if isinstance(key, slice):
-            idx = np.arange(key.indices(self.size))
+            idx = np.arange(*key.indices(self.size))
         elif isinstance(key, np.ndarray):
             if key.ndim > 1:
                 raise IndexError("too many indices for table")
@@ -84,12 +87,12 @@ class Selector(object):
         table -- An `awkward.Table` or `LazyTable` holding the events' data
         """
         self.table = table
-        self._cuts = proc_utils.PackedSelectionAccumulator()
+        self._cuts = PackedSelectionAccumulator()
         self._current_cuts = []
         self._frozen = False
 
         self._cutflow = processor.defaultdict_accumulator(int)
-        if is_mc == True:
+        if is_mc is True:
             self._weight_col = "genWeight"
         else:
             self._weight_col = None
@@ -208,7 +211,8 @@ class Selector(object):
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
 
-    def get_columns(self, part_props={}, other_cols=[], cuts="Current"):
+    def get_columns(self, part_props={}, other_cols=set(), cuts="Current",
+                    prefix=""):
         """Get columns of events passing cuts
 
         Arguments:
@@ -219,6 +223,7 @@ class Selector(object):
         cuts      - "Current", "All" or a list of cuts - the list of cuts to
                      apply before saving- The default, "Current", only applies
                      the cuts before freeze_selection
+        prefix    - A string that gets prepended to every key in return_dict
 
         Returns:
         return_dict - A dict containing JaggedArrays or numpy arrays of the
@@ -234,21 +239,24 @@ class Selector(object):
         data = self.table[self._cuts.all(*cuts)]
         return_dict = {}
         for part in part_props.keys():
-            for prop in part_props[part]:
-                if prop == "p4":
-                    return_dict[part + "_pt"] = data[part].pt
-                    return_dict[part + "_eta"] = data[part].eta
-                    return_dict[part + "_phi"] = data[part].phi
-                    return_dict[part + "_mass"] = data[part].mass
-                else:
-                    return_dict[part + "_" + prop] = data[part][prop]
+            props = set(part_props[part])
+            if "p4" in props:
+                props |= {"pt", "eta", "phi", "mass"}
+            props -= {"p4"}
+            for prop in props:
+                if not hasattr(data[part], prop):
+                    continue
+                arr = utils.misc.jagged_reduce(getattr(data[part], prop))
+                return_dict[part + "_" + prop] = arr
         for col in other_cols:
-            return_dict[col] = data[col]
+            return_dict[prefix + col] = utils.misc.jagged_reduce(data[col])
         return return_dict
 
-    def get_columns_from_config(self, to_save):
+    def get_columns_from_config(self, to_save, prefix=""):
         return self.get_columns(to_save["part_props"],
-                                to_save["other_cols"], to_save["cuts"])
+                                to_save["other_cols"],
+                                to_save["cuts"],
+                                prefix=prefix)
 
     def get_cuts(self, cuts="Current"):
         """Get information on what events pass which cuts
@@ -274,8 +282,9 @@ class Processor(processor.ProcessorABC):
 
         Arguments:
         config -- A Config instance, defining the configuration to use
-        destdir -- Destination directory, where the event HDF5s are to be saved
-
+        destdir -- Destination directory, where the event HDF5s are saved.
+                   Every chunk will be saved in its own file. If `None`,
+                   nothing will be saved.
         """
         self.config = config
         self.destdir = destdir
@@ -296,6 +305,15 @@ class Processor(processor.ProcessorABC):
         else:
             print("No muon scale factors specified")
             self.muon_sf = []
+        if "btag_sf" in self.config and len(self.config["btag_sf"]) > 0:
+            tagger = self.config["btag"].split(":")[0]
+            self.btagweighter = btagging.BTagWeighter(config["btag_sf"][0],
+                                                      config["btag_sf"][1],
+                                                      tagger,
+                                                      config["year"])
+        else:
+            print("No btag scale factor specified")
+            self.btagweighter = None
 
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
@@ -304,20 +322,16 @@ class Processor(processor.ProcessorABC):
     def accumulator(self):
         dataset_axis = hist.Cat("dataset", "")
         ttbarmass_axis = hist.Bin("Mttbar", "Mttbar [GeV]", 100, 0, 1000)
-        Wmass_axis = hist.Bin("MW", "MW [GeV]", 100, 0, 200)
+        wmass_axis = hist.Bin("MW", "MW [GeV]", 100, 0, 200)
         tmass_axis = hist.Bin("Mt", "Mt [GeV]", 100, 0, 300)
 
         self._accumulator = processor.dict_accumulator({
             "Mttbar": hist.Hist("Counts", dataset_axis, ttbarmass_axis),
-            "MWplus": hist.Hist("Counts", dataset_axis, Wmass_axis),
+            "MWplus": hist.Hist("Counts", dataset_axis, wmass_axis),
             "Mt": hist.Hist("Counts", dataset_axis, tmass_axis),
             "cutflow": processor.defaultdict_accumulator(
                 partial(processor.defaultdict_accumulator, int)),
-            "cols to save": processor.defaultdict_accumulator(partial(
-                processor.defaultdict_accumulator,
-                proc_utils.ArrayAccumulator)),
-            "cut arrays": processor.defaultdict_accumulator(
-                proc_utils.PackedSelectionAccumulator)
+
         })
         return self._accumulator
 
@@ -346,8 +360,8 @@ class Processor(processor.ProcessorABC):
             out_dict = selector.get_columns_from_config(
                 self.config["selector_cols_to_save"])
             out_dict.update(reco_selector.get_columns_from_config(
-                self.config["reco_cols_to_save"]))
-            out_dict["cut_arrays"] = selector.get_cuts()
+                self.config["reco_cols_to_save"], "reco"))
+            out_dict["cutflags"] = selector.get_cuts()
             out_dict["cutflow"] = selector.cutflow
 
             for key in out_dict.keys():
@@ -361,7 +375,7 @@ class Processor(processor.ProcessorABC):
 
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
-        pos_triggers, neg_triggers = proc_utils.get_trigger_paths_for(
+        pos_triggers, neg_triggers = utils.misc.get_trigger_paths_for(
             dsname, is_mc, self.trigger_paths, self.trigger_order)
         selector.add_cut(partial(
             self.passing_trigger, pos_triggers, neg_triggers), "Trigger")
@@ -374,16 +388,19 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.lepton_pair, "At least 2 leps")
         selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
 
+        selector.set_column(self.same_flavor, "is_same_flavor")
+        selector.set_column(self.mll, "mll")
+
         selector.freeze_selection()
 
         selector.add_cut(self.no_additional_leptons, "No add. leps")
-        selector.set_column(self.same_flavor, "is_same_flavor")
         selector.add_cut(self.channel_trigger_matching, "Chn. trig. match")
         selector.add_cut(self.lep_pt_requirement, "Req lep pT")
         selector.add_cut(self.good_mll, "M_ll")
         selector.add_cut(self.z_window, "Z window")
 
         selector.set_column(self.build_jet_column, "Jet")
+        selector.add_cut(self.has_jets, "#Jets >= n")
         selector.add_cut(self.two_good_jets, "2 jets pt>30")
         selector.add_cut(self.btag_cut, "At least %d btag"
                          % self.config["num_atleast_btagged"])
@@ -393,7 +410,7 @@ class Processor(processor.ProcessorABC):
 
         lep, antilep = self.pick_leps(selector.final)
         b, bbar = self.choose_bs(selector.final, lep, antilep)
-        neutrino, antineutrino = KinReco(lep["p4"], antilep["p4"],
+        neutrino, antineutrino = kinreco(lep["p4"], antilep["p4"],
                                          b["p4"], bbar["p4"],
                                          selector.final["MET_pt"],
                                          selector.final["MET_phi"])
@@ -403,24 +420,24 @@ class Processor(processor.ProcessorABC):
                                               antineutrino=antineutrino,
                                               weight=selector.final["weight"]))
         reco_objects.add_cut(self.passing_reco, "Reco")
-        reco_objects.set_column(self.Wminus, "Wminus")
-        reco_objects.set_column(self.Wplus, "Wplus")
+        reco_objects.set_column(self.wminus, "Wminus")
+        reco_objects.set_column(self.wplus, "Wplus")
         reco_objects.set_column(self.top, "top")
         reco_objects.set_column(self.antitop, "antitop")
         reco_objects.set_column(self.ttbar, "ttbar")
 
         best = reco_objects.masked["ttbar"].mass.argmin()
-        Mttbar = reco_objects.masked["ttbar"][best].mass.content
-        MWplus = reco_objects.masked["Wplus"][best].mass.content
-        Mtop = reco_objects.masked["top"][best].mass.content
+        m_ttbar = reco_objects.masked["ttbar"][best].mass.content
+        m_wplus = reco_objects.masked["Wplus"][best].mass.content
+        m_top = reco_objects.masked["top"][best].mass.content
 
-        output["cutflow"][dsname] = selector.cutflow
-        output["Mttbar"].fill(dataset=dsname, Mttbar=Mttbar,
+        output["Mttbar"].fill(dataset=dsname, Mttbar=m_ttbar,
                               weight=reco_objects.masked["weight"])
-        output["Mt"].fill(dataset=dsname, Mt=Mtop,
+        output["Mt"].fill(dataset=dsname, Mt=m_top,
                           weight=reco_objects.masked["weight"])
-        output["MWplus"].fill(dataset=dsname, MW=MWplus,
+        output["MWplus"].fill(dataset=dsname, MW=m_wplus,
                               weight=reco_objects.masked["weight"])
+        output["cutflow"][dsname] = selector.cutflow
 
         if self.destdir is not None:
             self._save_per_event_info(dsname, selector, reco_objects)
@@ -432,9 +449,9 @@ class Processor(processor.ProcessorABC):
             return np.full(len(data["genWeight"]), True)
         else:
             run = np.array(data["run"])
-            luminosityBlock = np.array(data["luminosityBlock"])
+            luminosity_block = np.array(data["luminosityBlock"])
             lumimask = coffea.lumi_tools.LumiMask(self.lumimask)
-            return lumimask(run, luminosityBlock)
+            return lumimask(run, luminosity_block)
 
     def passing_trigger(self, pos_triggers, neg_triggers, data):
         trigger = (
@@ -454,10 +471,10 @@ class Processor(processor.ProcessorABC):
                 & (R <= 2))
 
     def met_filters(self, is_mc, data):
-        filter_year = str(self.config["filter_year"]).lower()
-        if filter_year == "none":
+        year = str(self.config["year"]).lower()
+        if not self.config["apply_met_filters"]:
             return np.full(data.shape, True)
-        elif filter_year in ("2018", "2017", "2016"):
+        else:
             passing_filters =\
                 (data["Flag_goodVertices"]
                  & data["Flag_globalSuperTightHalo2016Filter"]
@@ -467,10 +484,7 @@ class Processor(processor.ProcessorABC):
                  & data["Flag_BadPFMuonFilter"])
             if not is_mc:
                 passing_filters &= data["Flag_eeBadScFilter"]
-        else:
-            raise config_utils.ConfigError("Invalid filter year: {}".format(
-                filter_year))
-        if filter_year in ("2018", "2017"):
+        if year in ("2018", "2017"):
             passing_filters &= data["Flag_ecalBadCalibFilterV2"]
 
         return passing_filters
@@ -558,11 +572,11 @@ class Processor(processor.ProcessorABC):
                 return data["Muon_pfIsoId"] > 4
             if iso_value == "very_very_tight":
                 return data["Muon_pfIsoId"] > 5
-        elif iso =="dR<0.3_chg":
+        elif iso == "dR<0.3_chg":
             return data["Muon_pfRelIso03_chg"] < value
-        elif iso =="dR<0.4_all":
+        elif iso == "dR<0.4_all":
             return data["Muon_pfRelIso03_all"] < value
-        elif iso =="dR<0.3_chg":
+        elif iso == "dR<0.3_chg":
             return data["Muon_pfRelIso04_all"] < value
 
     def good_muon(self, data):
@@ -596,7 +610,7 @@ class Processor(processor.ProcessorABC):
             arr = awkward.concatenate([data["Electron_" + key][ge],
                                        data["Muon_" + key][gm]], axis=1)
             offsets = arr.offsets
-            lep_dict[key] = arr.flatten() #Could use concatenate here
+            lep_dict[key] = arr.flatten()  # Could use concatenate here
         leptons = Jca.candidatesfromoffsets(offsets, **lep_dict)
 
         # Sort leptons by pt
@@ -617,28 +631,78 @@ class Processor(processor.ProcessorABC):
         return (abs(data["Lepton"][:, 0].pdgId)
                 == abs(data["Lepton"][:, 1].pdgId))
 
-    def no_additional_leptons(self, data):
-        e_id, eta_min, eta_max, pt_min, pt_max = self.config[[
-            "additional_ele_id", "good_ele_eta_min", "good_ele_eta_max",
-            "good_ele_pt_min", "good_ele_pt_max"]]
-        SC_eta_abs = abs(data["Electron_eta"]
-                    + data["Electron_deltaEtaSC"])
-        add_ele = (self.electron_id(e_id, data)
-            & ~self.in_transreg(SC_eta_abs)
-            & (eta_min < data["Electron_eta"])
-            & (data["Electron_eta"] < eta_max)
-            & (pt_min < data["Electron_pt"]))
-        m_id, m_iso, m_iso_value, eta_min, eta_max, pt_min, pt_max, = self.config[[
-            "additional_muon_id", "additional_muon_iso",
-            "additional_muon_iso_value", "good_muon_eta_min", "good_muon_eta_max",
-            "good_muon_pt_min", "good_muon_pt_max"]]
-        add_muon = (self.muon_id(m_id, data)
-                    & self.muon_iso(m_iso, m_iso_value, data)
-                    & (eta_min < data["Muon_eta"])
-                    & (data["Muon_eta"] < eta_max)
-                    & (pt_min < data["Muon_pt"])
-                    & (data["Muon_pt"] < pt_max))
-        return add_ele.sum() + add_muon.sum() <= 2
+    def mll(self, data):
+        return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
+
+    def good_jet(self, data):
+        j_id, lep_dist, eta_min, eta_max, pt_min, pt_max = self.config[[
+            "good_jet_id", "good_jet_lepton_distance", "good_jet_eta_min",
+            "good_jet_eta_max", "good_jet_pt_min", "good_jet_pt_max"]]
+        if j_id == "skip":
+            has_id = True
+        elif j_id == "cut:loose":
+            has_id = (data["Jet_jetId"] & 0b1).astype(bool)
+            # Always False in 2017 and 2018
+        elif j_id == "cut:tight":
+            has_id = (data["Jet_jetId"] & 0b10).astype(bool)
+        elif j_id == "cut:tightlepveto":
+            has_id = (data["Jet_jetId"] & 0b100).astype(bool)
+        else:
+            raise utils.config.ConfigError(
+                    "Invalid good_jet_id: {}".format(j_id))
+
+        j_eta = data["Jet_eta"]
+        j_phi = data["Jet_phi"]
+        l_eta = data["Lepton"].eta
+        l_phi = data["Lepton"].phi
+        j_eta, l_eta = j_eta.cross(l_eta, nested=True).unzip()
+        j_phi, l_phi = j_phi.cross(l_phi, nested=True).unzip()
+        delta_eta = j_eta - l_eta
+        delta_phi = j_phi - l_phi
+        delta_r = np.hypot(delta_eta, delta_phi)
+        has_lepton_close = (delta_r < lep_dist).any()
+
+        return (has_id
+                & (~has_lepton_close)
+                & (eta_min < data["Jet_eta"])
+                & (data["Jet_eta"] < eta_max)
+                & (pt_min < data["Jet_pt"])
+                & (data["Jet_pt"] < pt_max))
+
+    def build_jet_column(self, data):
+        keys = ["pt", "eta", "phi", "mass", "hadronFlavour"]
+        jet_dict = {}
+        gj = self.good_jet(data)
+        for key in keys:
+            if "Jet_" + key not in data:
+                continue
+            arr = data["Jet_" + key][gj]
+            offsets = arr.offsets
+            jet_dict[key] = arr.flatten()
+
+        # Evaluate b-tagging
+        tagger, wp = self.config["btag"].split(":")
+        if tagger == "deepcsv":
+            disc = data["Jet_btagDeepB"][gj]
+        elif tagger == "deepjet":
+            disc = data["Jet_btagDeepFlavB"][gj]
+        else:
+            raise utils.config.ConfigError(
+                "Invalid tagger name: {}".format(tagger))
+        year = self.config["year"]
+        wptuple = btagging.BTAG_WP_CUTS[tagger][year]
+        if not hasattr(wptuple, wp):
+            raise utils.config.ConfigError(
+                "Invalid working point \"{}\" for {} in year {}".format(
+                    wp, tagger, year))
+        jet_dict["btag"] = disc.flatten()
+        jet_dict["btagged"] = (disc > getattr(wptuple, wp)).flatten()
+
+        jets = Jca.candidatesfromoffsets(offsets, **jet_dict)
+
+        # Sort jets by pt
+        jets = jets[jets.pt.argsort()]
+        return jets
 
     def channel_trigger_matching(self, data):
         p0 = abs(data["Lepton"].pdgId[:, 0])
@@ -672,8 +736,34 @@ class Processor(processor.ProcessorABC):
         return n >= self.config["lep_pt_num_satisfied"]
 
     def good_mll(self, data):
-        return ((data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
-                > self.config["mll_min"])
+        return data["mll"] > self.config["mll_min"]
+
+    def no_additional_leptons(self, data):
+        e_id, eta_min, eta_max, pt_min, pt_max = self.config[[
+            "additional_ele_id", "good_ele_eta_min", "good_ele_eta_max",
+            "good_ele_pt_min", "good_ele_pt_max"]]
+        SC_eta_abs = abs(data["Electron_eta"]
+                         + data["Electron_deltaEtaSC"])
+        add_ele = (self.electron_id(e_id, data)
+                   & ~self.in_transreg(SC_eta_abs)
+                   & (eta_min < data["Electron_eta"])
+                   & (data["Electron_eta"] < eta_max)
+                   & (pt_min < data["Electron_pt"]))
+        m_id, m_iso, m_iso_value, eta_min, eta_max, pt_min, pt_max =\
+            self.config[["additional_muon_id",
+                         "additional_muon_iso",
+                         "additional_muon_iso_value",
+                         "good_muon_eta_min",
+                         "good_muon_eta_max",
+                         "good_muon_pt_min",
+                         "good_muon_pt_max"]]
+        add_muon = (self.muon_id(m_id, data)
+                    & self.muon_iso(m_iso, m_iso_value, data)
+                    & (eta_min < data["Muon_eta"])
+                    & (data["Muon_eta"] < eta_max)
+                    & (pt_min < data["Muon_pt"])
+                    & (data["Muon_pt"] < pt_max))
+        return add_ele.sum() + add_muon.sum() <= 2
 
     def z_window(self, data):
         m_min = self.config["z_boson_window_start"]
@@ -682,77 +772,15 @@ class Processor(processor.ProcessorABC):
         invmass = (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
         return ~is_sf | ((invmass <= m_min) | (m_max <= invmass))
 
-    def good_jet(self, data):
-        j_id, lep_dist, eta_min, eta_max, pt_min, pt_max = self.config[[
-            "good_jet_id", "good_jet_lepton_distance", "good_jet_eta_min",
-            "good_jet_eta_max", "good_jet_pt_min", "good_jet_pt_max"]]
-        if j_id == "skip":
-            has_id = True
-        elif j_id == "cut:loose":
-            has_id = (data["Jet_jetId"] & 0b1).astype(bool)
-            # Always False in 2017 and 2018
-        elif j_id == "cut:tight":
-            has_id = (data["Jet_jetId"] & 0b10).astype(bool)
-        elif j_id == "cut:tightlepveto":
-            has_id = (data["Jet_jetId"] & 0b100).astype(bool)
-        else:
-            raise config_utils.ConfigError(
-                    "Invalid good_jet_id: {}".format(j_id))
-
-        j_eta = data["Jet_eta"]
-        j_phi = data["Jet_phi"]
-        l_eta = data["Lepton"].eta
-        l_phi = data["Lepton"].phi
-        j_eta, l_eta = j_eta.cross(l_eta, nested=True).unzip()
-        j_phi, l_phi = j_phi.cross(l_phi, nested=True).unzip()
-        delta_eta = j_eta - l_eta
-        delta_phi = j_phi - l_phi
-        delta_R = np.hypot(delta_eta, delta_phi)
-        has_lepton_close = (delta_R < lep_dist).any()
-
-        return (has_id
-                & (~has_lepton_close)
-                & (eta_min < data["Jet_eta"])
-                & (data["Jet_eta"] < eta_max)
-                & (pt_min < data["Jet_pt"])
-                & (data["Jet_pt"] < pt_max))
-
-    def build_jet_column(self, data):
-        keys = ["pt", "eta", "phi", "mass"]
-        jet_dict = {}
-        gj = self.good_jet(data)
-        for key in keys:
-            arr = data["Jet_" + key][gj]
-            offsets = arr.offsets
-            jet_dict[key] = arr.flatten()
-        tagger, wp = self.config["btag"].split(":")
-        if tagger == "deepcsv":
-            disc = data["Jet_btagDeepB"][gj]
-            wps = {"loose": 0.1241, "medium": 0.4184, "tight": 0.7527}
-            if wp not in wps:
-                raise config_utils.ConfigError(
-                    "Invalid DeepCSV working point: {}".format(wp))
-        elif tagger == "deepjet":
-            disc = data["Jet_btagDeepFlavB"][gj]
-            wps = {"loose": 0.0494, "medium": 0.2770, "tight": 0.7264}
-            if wp not in wps:
-                raise config_utils.ConfigError(
-                    "Invalid DeepJet working point: {}".format(wp))
-        else:
-            raise config_utils.ConfigError(
-                "Invalid tagger name: {}".format(tagger))
-        jet_dict["btag"] = (disc > wps[wp]).flatten()
-        jets = Jca.candidatesfromoffsets(offsets, **jet_dict)
-
-        # Sort jets by pt
-        jets = jets[jets.pt.argsort()]
-        return jets
+    def has_jets(self, data):
+        return self.config["num_jets_atleast"] <= data["Jet"].counts
 
     def two_good_jets(self, data):
         return (data["Jet"].pt > self.config["2_lead_jet_pt_min"]).sum() > 1
 
     def btag_cut(self, data):
-        return data["Jet"].btag.sum() >= self.config["num_atleast_btagged"]
+        num_btagged = data["Jet"]["btagged"].sum()
+        return num_btagged >= self.config["num_atleast_btagged"]
 
     def met_requirement(self, data):
         is_sf = data["is_same_flavor"]
@@ -765,51 +793,58 @@ class Processor(processor.ProcessorABC):
             weight *= data["genWeight"]
             electrons = data["Lepton"][abs(data["Lepton"].pdgId) == 11]
             muons = data["Lepton"][abs(data["Lepton"].pdgId) == 13]
+            jets = data["Jet"]
             for sf in self.electron_sf:
                 factors_flat = sf(eta=electrons.eta.flatten(),
                                   pt=electrons.pt.flatten())
-                weight *= proc_utils.jaggedlike(
+                weight *= utils.misc.jaggedlike(
                     electrons.eta, factors_flat).prod()
             for sf in self.muon_sf:
                 factors_flat = sf(abseta=abs(muons.eta.flatten()),
                                   pt=muons.pt.flatten())
-                weight *= proc_utils.jaggedlike(muons.eta, factors_flat).prod()
+                weight *= utils.misc.jaggedlike(muons.eta, factors_flat).prod()
+            if self.btagweighter is not None:
+                wp = self.config["btag"].split(":", 1)[1]
+                flav = jets["hadronFlavour"]
+                eta = jets.eta
+                pt = jets.pt
+                discr = jets["btag"]
+                weight *= self.btagweighter(wp, flav, eta, pt, discr)
         return weight
 
     def pick_leps(self, data):
-        lepPair = data["Lepton"][:, :2]
-        lep = lepPair[lepPair.pdgId > 0]
-        antilep = lepPair[lepPair.pdgId < 0]
+        lep_pair = data["Lepton"][:, :2]
+        lep = lep_pair[lep_pair.pdgId > 0]
+        antilep = lep_pair[lep_pair.pdgId < 0]
         return lep, antilep
 
     def choose_bs(self, data, lep, antilep):
-        btags = data["Jet"][data["Jet"].btag]
-        jetsnob = data["Jet"][~data["Jet"].btag]
-        b0, b1 = proc_utils.Pairswhere(btags.counts > 1,
+        btags = data["Jet"][data["Jet"].btagged]
+        jetsnob = data["Jet"][~data["Jet"].btagged]
+        b0, b1 = utils.misc.pairswhere(btags.counts > 1,
                                        btags.distincts(),
                                        btags.cross(jetsnob))
-        bs = proc_utils.concatenate(b0, b1)
-        bbars = proc_utils.concatenate(b1, b0)
-        GenHistFile = uproot.open(self.config["genhist_path"])
-        HistMlb = GenHistFile["Mlb"]
+        bs = utils.misc.concatenate(b0, b1)
+        bbars = utils.misc.concatenate(b1, b0)
+        hist_mlb = uproot.open(self.config["genhist_path"])["Mlb"]
         alb = bs.cross(antilep)
         lbbar = bbars.cross(lep)
-        PMalb = awkward.JaggedArray.fromcounts(
-            bs.counts, HistMlb.allvalues[np.searchsorted(
-                HistMlb.alledges, alb.mass.content)-1])
-        PMlbbar = awkward.JaggedArray.fromcounts(
-            bs.counts, HistMlb.allvalues[np.searchsorted(
-                HistMlb.alledges, lbbar.mass.content)-1])
-        bestbpairMlb = (PMalb*PMlbbar).argmax()
-        return bs[bestbpairMlb], bbars[bestbpairMlb]
+        p_m_alb = awkward.JaggedArray.fromcounts(
+            bs.counts, hist_mlb.allvalues[np.searchsorted(
+                hist_mlb.alledges, alb.mass.content)-1])
+        p_m_lbbar = awkward.JaggedArray.fromcounts(
+            bs.counts, hist_mlb.allvalues[np.searchsorted(
+                hist_mlb.alledges, lbbar.mass.content)-1])
+        bestbpair_mlb = (p_m_alb*p_m_lbbar).argmax()
+        return bs[bestbpair_mlb], bbars[bestbpair_mlb]
 
     def passing_reco(self, data):
         return data["neutrino"].counts > 0
 
-    def Wminus(self, data):
+    def wminus(self, data):
         return data["antineutrino"].cross(data["lep"])
 
-    def Wplus(self, data):
+    def wplus(self, data):
         return data["neutrino"].cross(data["antilep"])
 
     def top(self, data):

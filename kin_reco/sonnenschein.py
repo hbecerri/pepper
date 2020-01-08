@@ -4,7 +4,7 @@ from coffea.analysis_objects import JaggedCandidateArray
 from coffea.util import awkward
 
 
-def KinReco(lep, antilep, b, antib, MET_pt, MET_phi, verbosity=0):
+def kinreco(lep, antilep, b, antib, met_pt, met_phi, verbosity=0):
     '''note:inputs should be Lorentz vectors rather than jagged arrays'''
     lE = lep.E.flatten()
     lx = lep.x.flatten()
@@ -22,8 +22,8 @@ def KinReco(lep, antilep, b, antib, MET_pt, MET_phi, verbosity=0):
     abx = antib.x.flatten()
     aby = antib.y.flatten()
     abz = antib.z.flatten()
-    METx = MET_pt*np.cos(MET_phi)
-    METy = MET_pt*np.sin(MET_phi)
+    METx = met_pt*np.cos(met_phi)
+    METy = met_pt*np.sin(met_phi)
 
     mt = 172.5
     mtb = 172.5
@@ -204,6 +204,6 @@ if __name__ == '__main__':
         py=np.array([-3.844941]), pz=np.array([7.0419898]))
     MET_pt = (nu['p4'] + antinu['p4']).pt[0]
     MET_phi = (nu['p4'] + antinu['p4']).phi[0]
-    neutrino, antineutrino = KinReco(
+    neutrino, antineutrino = kinreco(
         lep['p4'], antilep['p4'], b['p4'], antib['p4'], MET_pt, MET_phi)
     print(neutrino['p4'])

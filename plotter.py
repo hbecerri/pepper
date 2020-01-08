@@ -20,7 +20,8 @@ import mplhep
 from collections import defaultdict
 import os
 
-import config_utils
+import utils.config as config_utils
+import utils.datasets as dataset_utils
 from processor import Processor
 
 matplotlib.interactive(True)
@@ -29,7 +30,8 @@ wrk_init = """
 export PATH=/afs/desy.de/user/s/stafford/.local/bin:$PATH
 export PYTHONPATH=\
 /afs/desy.de/user/s/stafford/.local/lib/python3.6/site-packages:$PYTHONPATH
-export PYTHONPATH=\/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea:$PYTHONPATH
+export PYTHONPATH=\
+/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea:$PYTHONPATH
 """
 
 nproc = 1
@@ -56,14 +58,14 @@ parsl_config = Config(
                         worker_init=wrk_init))],
         lazy_errors=False
 )
-#dfk = load(parsl_config)
+# dfk = load(parsl_config)
 
 config = config_utils.Config("example/config.json")
 store = config["store"]
-fileset, _ = config_utils.expand_datasetdict(config["mc_datasets"], store)
-smallfileset = {"TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8":
-                ["/pnfs/desy.de/cms/tier2/store/mc/RunIIAutumn18NanoAODv5/TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/Nano1June2019_102X_upgrade2018_realistic_v19-v1/250000/14933F79-95FB-354D-A917-E19B5C005037.root"]}
-destdir="/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
+fileset, _ = dataset_utils.expand_datasetdict(config["mc_datasets"], store)
+smallfileset = config["testdataset"]
+destdir = \
+    "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
 output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
@@ -84,7 +86,7 @@ labels = plot_config["labels"]
 colours = plot_config["colours"]
 xsecs = plot_config["cross-sections"]
 
-#plt.style.use(mplhep.cms.style.ROOT)
+# plt.style.use(mplhep.cms.style.ROOT)
 
 cutvalues = dict((k, np.zeros(
     len(output["cutflow"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"])))
