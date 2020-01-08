@@ -10,7 +10,8 @@ from collections import defaultdict
 import uproot
 from itertools import chain
 
-import utils
+from utils.config import Config
+from utils.datasets import expand_datasetdict
 
 
 parser = ArgumentParser(description="Compute factors from luminosity and "
@@ -23,9 +24,9 @@ parser.add_argument("config", help="Path to the JSON config file containing "
 parser.add_argument("out", help="Path to the output file")
 args = parser.parse_args()
 
-config = utils.Config(args.config)
+config = Config(args.config)
 store, datasets = config[["store", "mc_datasets"]]
-datasets = utils.expand_datasetdict(datasets, store)[0]
+datasets = expand_datasetdict(datasets, store)[0]
 crosssections = json.load(open(args.crosssections))
 counts = defaultdict(int)
 num_files = len(list(chain(*datasets.values())))
