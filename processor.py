@@ -382,8 +382,6 @@ class Processor(processor.ProcessorABC):
 
         selector.add_cut(partial(self.met_filters, is_mc), "MET filters")
 
-        selector.set_column(self.good_electron, "is_good_electron")
-        selector.set_column(self.good_muon, "is_good_muon")
         selector.set_column(self.build_lepton_column, "Lepton")
         selector.add_cut(self.lepton_pair, "At least 2 leps")
         selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
@@ -518,28 +516,31 @@ class Processor(processor.ProcessorABC):
             raise ValueError("Invalid electron id string")
         return has_id
 
-    def good_electron(self, data):
-        if self.config["good_ele_cut_hem"]:
+    def electron_cuts(self, data, good_lep):
+        if self.config["ele_cut_hem"]:
             is_in_hem1516 = self.in_hem1516(data["Electron_phi"],
                                             data["Electron_eta"])
         else:
             is_in_hem1516 = np.array(False)
-        if self.config["good_ele_cut_transreg"]:
+        if self.config["ele_cut_transreg"]:
             SC_eta_abs = abs(data["Electron_eta"]
                              + data["Electron_deltaEtaSC"])
             is_in_transreg = self.in_transreg(SC_eta_abs)
         else:
             is_in_transreg = np.array(False)
-        e_id, eta_min, eta_max, pt_min, pt_max = self.config[[
-            "good_ele_id", "good_ele_eta_min", "good_ele_eta_max",
-            "good_ele_pt_min", "good_ele_pt_max"]]
+        if good_lep:
+            e_id, pt_min = self.config[[
+                "good_ele_id", "good_ele_pt_min"]]
+        else:
+            e_id, pt_min = self.config[[
+                "additional_ele_id", "additional_ele_pt_min"]]
+        eta_min, eta_max = self.config[["ele_eta_min", "ele_eta_max"]]
         return (self.electron_id(e_id, data)
                 & (~is_in_hem1516)
                 & (~is_in_transreg)
                 & (eta_min < data["Electron_eta"])
                 & (data["Electron_eta"] < eta_max)
-                & (pt_min < data["Electron_pt"])
-                & (data["Electron_pt"] < pt_max))
+                & (pt_min < data["Electron_pt"]))
 
     def muon_id(self, m_id, data):
         if m_id == "skip":
@@ -584,32 +585,36 @@ class Processor(processor.ProcessorABC):
                 return data["Muon_pfRelIso04_all"] < value
         raise ValueError("Invalid muon iso string")
 
-    def good_muon(self, data):
-        if self.config["good_muon_cut_hem"]:
+    def muon_cuts(self, data, good_lep):
+        if self.config["muon_cut_hem"]:
             is_in_hem1516 = self.in_hem1516(data["Muon_phi"], data["Muon_eta"])
         else:
             is_in_hem1516 = np.array(False)
-        if self.config["good_muon_cut_transreg"]:
+        if self.config["muon_cut_transreg"]:
             is_in_transreg = self.in_transreg(abs(data["Muon_eta"]))
         else:
             is_in_transreg = np.array(False)
-        m_id, eta_min, eta_max, pt_min, pt_max, iso = self.config[[
-            "good_muon_id", "good_muon_eta_min", "good_muon_eta_max",
-            "good_muon_pt_min", "good_muon_pt_max", "good_muon_iso"]]
+        if good_lep:
+            m_id, pt_min, iso = self.config[[
+                "good_muon_id", "good_muon_pt_min", "good_muon_iso"]]
+        else:
+            m_id, pt_min, iso = self.config[[
+                "additional_muon_id", "additional_muon_pt_min",
+                "additional_muon_iso"]]
+        eta_min, eta_max = self.config[["muon_eta_min", "muon_eta_max"]]
         return (self.muon_id(m_id, data)
                 & self.muon_iso(iso, data)
                 & (~is_in_hem1516)
                 & (~is_in_transreg)
                 & (eta_min < data["Muon_eta"])
                 & (data["Muon_eta"] < eta_max)
-                & (pt_min < data["Muon_pt"])
-                & (data["Muon_pt"] < pt_max))
+                & (pt_min < data["Muon_pt"]))
 
     def build_lepton_column(self, data):
         keys = ["pt", "eta", "phi", "mass", "pdgId"]
         lep_dict = {}
-        ge = data["is_good_electron"]
-        gm = data["is_good_muon"]
+        ge = self.electron_cuts(data, good_lep=True)
+        gm = self.muon_cuts(data, good_lep=True)
         for key in keys:
             arr = awkward.concatenate([data["Electron_" + key][ge],
                                        data["Muon_" + key][gm]], axis=1)
@@ -639,9 +644,9 @@ class Processor(processor.ProcessorABC):
         return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
 
     def good_jet(self, data):
-        j_id, lep_dist, eta_min, eta_max, pt_min, pt_max = self.config[[
+        j_id, lep_dist, eta_min, eta_max, pt_min = self.config[[
             "good_jet_id", "good_jet_lepton_distance", "good_jet_eta_min",
-            "good_jet_eta_max", "good_jet_pt_min", "good_jet_pt_max"]]
+            "good_jet_eta_max", "good_jet_pt_min"]]
         if j_id == "skip":
             has_id = True
         elif j_id == "cut:loose":
@@ -670,8 +675,7 @@ class Processor(processor.ProcessorABC):
                 & (~has_lepton_close)
                 & (eta_min < data["Jet_eta"])
                 & (data["Jet_eta"] < eta_max)
-                & (pt_min < data["Jet_pt"])
-                & (data["Jet_pt"] < pt_max))
+                & (pt_min < data["Jet_pt"]))
 
     def build_jet_column(self, data):
         keys = ["pt", "eta", "phi", "mass", "hadronFlavour"]
@@ -743,29 +747,8 @@ class Processor(processor.ProcessorABC):
         return data["mll"] > self.config["mll_min"]
 
     def no_additional_leptons(self, data):
-        e_id, eta_min, eta_max, pt_min, pt_max = self.config[[
-            "additional_ele_id", "good_ele_eta_min", "good_ele_eta_max",
-            "good_ele_pt_min", "good_ele_pt_max"]]
-        SC_eta_abs = abs(data["Electron_eta"]
-                         + data["Electron_deltaEtaSC"])
-        add_ele = (self.electron_id(e_id, data)
-                   & ~self.in_transreg(SC_eta_abs)
-                   & (eta_min < data["Electron_eta"])
-                   & (data["Electron_eta"] < eta_max)
-                   & (pt_min < data["Electron_pt"]))
-        m_id, m_iso, eta_min, eta_max, pt_min, pt_max =\
-            self.config[["additional_muon_id",
-                         "additional_muon_iso",
-                         "good_muon_eta_min",
-                         "good_muon_eta_max",
-                         "good_muon_pt_min",
-                         "good_muon_pt_max"]]
-        add_muon = (self.muon_id(m_id, data)
-                    & self.muon_iso(m_iso, data)
-                    & (eta_min < data["Muon_eta"])
-                    & (data["Muon_eta"] < eta_max)
-                    & (pt_min < data["Muon_pt"])
-                    & (data["Muon_pt"] < pt_max))
+        add_ele = self.electron_cuts(data, good_lep=False)
+        add_muon = self.muon_cuts(data, good_lep=False)
         return add_ele.sum() + add_muon.sum() <= 2
 
     def z_window(self, data):
