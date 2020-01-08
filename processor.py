@@ -591,13 +591,7 @@ class Processor(processor.ProcessorABC):
         keys = ["pt", "eta", "phi", "mass", "pdgId"]
         lep_dict = {}
         ge = data["is_good_electron"]
-        print("eles:", ge)
-        print(len(ge.flatten()))
-        print((ge.sum()>1).sum())
         gm = data["is_good_muon"]
-        print("mus:", gm.sum())
-        print(gm.counts)
-        print((gm.sum()>1).sum())
         for key in keys:
             arr = awkward.concatenate([data["Electron_" + key][ge],
                                        data["Muon_" + key][gm]], axis=1)
@@ -607,10 +601,6 @@ class Processor(processor.ProcessorABC):
 
         # Sort leptons by pt
         leptons = leptons[leptons.pt.argsort()]
-        print(len(leptons))
-        print(leptons.counts)
-        print((leptons.counts>1).sum())
-
         return leptons
 
     def require_emu(self, data):
@@ -634,7 +624,7 @@ class Processor(processor.ProcessorABC):
         SC_eta_abs = abs(data["Electron_eta"]
                     + data["Electron_deltaEtaSC"])
         add_ele = (self.electron_id(e_id, data)
-            &~self.in_transreg(SC_eta_abs)
+            & ~self.in_transreg(SC_eta_abs)
             & (eta_min < data["Electron_eta"])
             & (data["Electron_eta"] < eta_max)
             & (pt_min < data["Electron_pt"]))
@@ -648,7 +638,7 @@ class Processor(processor.ProcessorABC):
                     & (data["Muon_eta"] < eta_max)
                     & (pt_min < data["Muon_pt"])
                     & (data["Muon_pt"] < pt_max))
-        return add_ele.counts + add_muon.counts <= 2
+        return add_ele.sum() + add_muon.sum() <= 2
 
     def channel_trigger_matching(self, data):
         p0 = abs(data["Lepton"].pdgId[:, 0])
@@ -709,8 +699,6 @@ class Processor(processor.ProcessorABC):
             raise config_utils.ConfigError(
                     "Invalid good_jet_id: {}".format(j_id))
 
-        lep_dist = self.config["good_jet_lepton_distance"]
-
         j_eta = data["Jet_eta"]
         j_phi = data["Jet_phi"]
         l_eta = data["Lepton"].eta
@@ -758,11 +746,10 @@ class Processor(processor.ProcessorABC):
 
         # Sort jets by pt
         jets = jets[jets.pt.argsort()]
-
         return jets
 
     def two_good_jets(self, data):
-        return (data["Jet"].pt > self.config["2_lead_jet_pt_min"]).counts > 2
+        return (data["Jet"].pt > self.config["2_lead_jet_pt_min"]).sum() > 1
 
     def btag_cut(self, data):
         return data["Jet"].btag.sum() >= self.config["num_atleast_btagged"]
