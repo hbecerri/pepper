@@ -626,9 +626,6 @@ class Processor(processor.ProcessorABC):
         leptons = leptons[leptons.pt.argsort()]
         return leptons
 
-    def require_emu(self, data):
-        return data["is_good_electron"].any() & data["is_good_muon"].any()
-
     def lepton_pair(self, data):
         return data["Lepton"].counts >= 2
 
