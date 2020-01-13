@@ -63,7 +63,8 @@ parsl_config = Config(
 config = config_utils.Config("example/config.json")
 store = config["store"]
 fileset, _ = dataset_utils.expand_datasetdict(config["mc_datasets"], store)
-smallfileset, _ = dataset_utils.expand_datasetdict(config["testdataset"], store)
+smallfileset, _ = \
+    dataset_utils.expand_datasetdict(config["testdataset"], store)
 destdir = \
     "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
 output = coffea.processor.run_uproot_job(
