@@ -1,7 +1,7 @@
 {
     "year": "2018",
     "store": "/pnfs/desy.de/cms/tier2/store",
-    "genhist_path": "/nfs/dust/cms/user/ruebenaj/analysis/data/GenHists.root",
+    "genhist_path": "data/GenHists.root",
     "lumimask": "/afs/cern.ch/cms/CAF/CMSCOMM/COMM_DQM/certification/Collisions18/13TeV/PromptReco/Cert_314472-325175_13TeV_PromptReco_Collisions18_JSON.txt",
     "electron_sf": [
         [
@@ -24,8 +24,8 @@
         ]
     ],
     "btag_sf": [
-        "/afs/desy.de/user/r/ruebenaj/analysis/desy-ttbarbsm-coffea/data/scale_factors/DeepJet_102XSF_WP_V1.csv",
-        "/afs/desy.de/user/r/ruebenaj/analysis/desy-ttbarbsm-coffea/data/scale_factors/deepjet_medium_efficiency.root"
+        "data/scale_factors/DeepJet_102XSF_WP_V1.csv",
+        "data/scale_factors/deepjet_medium_efficiency.root"
     ],
     "exp_datasets": {
         "MuonEG": [
@@ -189,8 +189,6 @@
 
     "apply_met_filters": true,
     "mc_lumifactors": "/nfs/dust/cms/user/ruebenaj/analysis/mc_lumifactors.json",
-
-    "Mlb_hist_file": "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/data/GenHists.root",
 
     "ele_cut_transreg": true,
     "ele_eta_min": -2.4,
