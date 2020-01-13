@@ -5,21 +5,21 @@
     "lumimask": "/afs/cern.ch/cms/CAF/CMSCOMM/COMM_DQM/certification/Collisions18/13TeV/PromptReco/Cert_314472-325175_13TeV_PromptReco_Collisions18_JSON.txt",
     "electron_sf": [
         [
-            "/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root",
+            "data/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root",
             "EGamma_SF2D"
         ],
         [
-            "/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/2018_ElectronTight.root",
+            "data/scale_factors/2018_ElectronTight.root",
             "EGamma_SF2D"
         ]
     ],
     "muon_sf": [
         [
-            "/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/Muon2018_RunABCD_SF_ID.root",
+            "data/scale_factors/Muon2018_RunABCD_SF_ID.root",
             "NUM_TightID_DEN_TrackerMuons_pt_abseta"
         ],
         [
-            "/nfs/dust/cms/user/ruebenaj/analysis/scale_factors/Muon2018_RunABCD_SF_ISO.root",
+            "data/scale_factors/Muon2018_RunABCD_SF_ISO.root",
             "NUM_LooseRelIso_DEN_TightIDandIPCut_pt_abseta"
         ]
     ],
@@ -188,7 +188,7 @@
     },
 
     "apply_met_filters": true,
-    "mc_lumifactors": "/nfs/dust/cms/user/ruebenaj/analysis/mc_lumifactors.json",
+    "mc_lumifactors": "data/mc_lumifactors.json",
 
     "ele_cut_transreg": true,
     "ele_eta_min": -2.4,
