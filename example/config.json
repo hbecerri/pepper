@@ -111,7 +111,7 @@
     },
     "testdataset": {
         "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8":
-                ["/pnfs/desy.de/cms/tier2/store/mc/RunIIAutumn18NanoAODv5/TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/Nano1June2019_102X_upgrade2018_realistic_v19-v1/250000/14933F79-95FB-354D-A917-E19B5C005037.root"]
+                ["mc/RunIIAutumn18NanoAODv5/TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/Nano1June2019_102X_upgrade2018_realistic_v19-v1/250000/14933F79-95FB-354D-A917-E19B5C005037.root"]
     },
     "dataset_trigger_map": {
         "MuonEG": [
@@ -188,7 +188,7 @@
     },
 
     "apply_met_filters": true,
-    "mc_lumifactors": "data/mc_lumifactors.json",
+    "mc_lumifactors": "data/2018ttbar_mc_lumifactors.json",
 
     "ele_cut_transreg": true,
     "ele_eta_min": -2.4,
