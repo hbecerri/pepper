@@ -28,17 +28,23 @@ def read_paths(source, store, ext=".root"):
 
     Parameters:
     source -- A glob pattern, dataset name or a path to a text file containing
-              any of the afore mentioned (one per line)
+              any of the afore mentioned (one per line). A relative path will
+              be looked for within store. If it ends with ext, it will be
+              considered as a glob pattern.
     store -- Path to the store directory, e.g. /pnfs/desy.de/cms/tier2/store/
     ext -- File extension the files have
 
     Returns a list of paths as strings
     """
     paths = []
+    is_dsname = (source.count("/") == 3
+                 and (source.endswith("NANOAOD")
+                      or source.endswith("NANOAODSIM")))
+    if not os.path.isabs(source) and not is_dsname:
+        source = os.path.join(store, source)
     if source.endswith(ext):
         paths = glob(source)
-    elif (source.count("/") == 3
-          and (source.endswith("NANOAOD") or source.endswith("NANOAODSIM"))):
+    elif is_dsname:
         paths.extend(dataset_to_paths(source, store, ext))
     else:
         with open(source) as f:
