@@ -398,6 +398,7 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.z_window, "Z window")
 
         selector.set_column(self.build_jet_column, "Jet")
+        selector.add_cut(self.hem_cut, "HEM cut")
         selector.add_cut(self.has_jets, "#Jets >= %d"
                          % self.config["num_jets_atleast"])
         selector.add_cut(self.jet_pt_requirement, "Jet pt req")
@@ -489,9 +490,6 @@ class Processor(processor.ProcessorABC):
 
         return passing_filters
 
-    def in_hem1516(self, phi, eta):
-        return ((-2.4 < eta) & (eta < -1.6) & (-1.4 < phi) & (phi < -1.0))
-
     def in_transreg(self, abs_eta):
         return (1.4442 < abs_eta) & (abs_eta < 1.566)
 
@@ -517,11 +515,6 @@ class Processor(processor.ProcessorABC):
         return has_id
 
     def electron_cuts(self, data, good_lep):
-        if self.config["ele_cut_hem"]:
-            is_in_hem1516 = self.in_hem1516(data["Electron_phi"],
-                                            data["Electron_eta"])
-        else:
-            is_in_hem1516 = np.array(False)
         if self.config["ele_cut_transreg"]:
             sc_eta_abs = abs(data["Electron_eta"]
                              + data["Electron_deltaEtaSC"])
@@ -536,7 +529,6 @@ class Processor(processor.ProcessorABC):
                 "additional_ele_id", "additional_ele_pt_min"]]
         eta_min, eta_max = self.config[["ele_eta_min", "ele_eta_max"]]
         return (self.electron_id(e_id, data)
-                & (~is_in_hem1516)
                 & (~is_in_transreg)
                 & (eta_min < data["Electron_eta"])
                 & (data["Electron_eta"] < eta_max)
@@ -586,10 +578,6 @@ class Processor(processor.ProcessorABC):
         raise ValueError("Invalid muon iso string")
 
     def muon_cuts(self, data, good_lep):
-        if self.config["muon_cut_hem"]:
-            is_in_hem1516 = self.in_hem1516(data["Muon_phi"], data["Muon_eta"])
-        else:
-            is_in_hem1516 = np.array(False)
         if self.config["muon_cut_transreg"]:
             is_in_transreg = self.in_transreg(abs(data["Muon_eta"]))
         else:
@@ -604,7 +592,6 @@ class Processor(processor.ProcessorABC):
         eta_min, eta_max = self.config[["muon_eta_min", "muon_eta_max"]]
         return (self.muon_id(m_id, data)
                 & self.muon_iso(iso, data)
-                & (~is_in_hem1516)
                 & (~is_in_transreg)
                 & (eta_min < data["Muon_eta"])
                 & (data["Muon_eta"] < eta_max)
@@ -708,6 +695,26 @@ class Processor(processor.ProcessorABC):
         # Sort jets by pt
         jets = jets[jets.pt.argsort()]
         return jets
+
+    def in_hem1516(self, phi, eta):
+        return ((-3.0 < eta) & (eta < -1.3) & (-1.57 < phi) & (phi < -0.87))
+
+    def hem_cut(self, data):
+        cut_ele = self.config["hem_cut_if_ele"]
+        cut_muon = self.config["hem_cut_if_muon"]
+        cut_jet = self.config["hem_cut_if_jet"]
+
+        keep = np.full(data.size, True)
+        if cut_ele:
+            ele = data["Lepton"][abs(data["Lepton"].pdgId) == 11]
+            keep &= ~self.in_hem1516(ele.phi, ele.eta).any()
+        if cut_muon:
+            muon = data["Lepton"][abs(data["Lepton"].pdgId) == 13]
+            keep &= ~self.in_hem1516(muon.phi, muon.eta).any()
+        if cut_jet:
+            jet = data["Jet"]
+            keep &= ~self.in_hem1516(jet.phi, jet.eta).any()
+        return keep
 
     def channel_trigger_matching(self, data):
         p0 = abs(data["Lepton"].pdgId[:, 0])

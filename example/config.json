@@ -192,7 +192,6 @@
 
     "Mlb_hist_file": "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/data/GenHists.root",
 
-    "ele_cut_hem": false,
     "ele_cut_transreg": true,
     "ele_eta_min": -2.4,
     "ele_eta_max": 2.4,
@@ -201,7 +200,6 @@
     "additional_ele_id": "mva:Iso90",
     "additional_ele_pt_min": 20.0,
 
-    "muon_cut_hem": false,
     "muon_cut_transreg": false,
     "muon_eta_min": -2.4,
     "muon_eta_max": 2.4,
@@ -217,6 +215,10 @@
     "good_jet_eta_min": -2.4,
     "good_jet_eta_max": 2.4,
     "good_jet_pt_min": 20,
+
+    "hem_cut_if_ele": false,
+    "hem_cut_if_muon": false,
+    "hem_cut_if_jet": false,
 
     "mll_min": 20.0,
     "lep_pt_min": [
