@@ -23,6 +23,10 @@
             "NUM_LooseRelIso_DEN_TightIDandIPCut_pt_abseta"
         ]
     ],
+    "btag_sf": [
+        "/afs/desy.de/user/r/ruebenaj/analysis/desy-ttbarbsm-coffea/data/scale_factors/DeepJet_102XSF_WP_V1.csv",
+        "/afs/desy.de/user/r/ruebenaj/analysis/desy-ttbarbsm-coffea/data/scale_factors/deepjet_medium_efficiency.root"
+    ],
     "exp_datasets": {
         "MuonEG": [
             "/MuonEG/Run2018A-Nano1June2019-v1/NANOAOD",
