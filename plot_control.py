@@ -155,11 +155,34 @@ class ParticleComparisonHistograms(object):
                                    .sum("proc", outaxis, overflow="all"))
         pred_hist = (self.pred_hist.integrate("chan", int_range=chan)
                                    .sum("proc", outaxis, overflow="all"))
-        for key in pred_hist._sumw.keys():
-            pred_hist._sumw[key] = -pred_hist._sumw[key]
-        data_hist.add(pred_hist)
-        coffea.hist.plot2d(data_hist, data_hist.axes()[0])
+        pred_count, pred_err = pred_hist.values(
+            sumw2=True, overflow="allnan")[()]
+        data_count, data_err = data_hist.values(
+            sumw2=True, overflow="allnan")[()]
+        err = np.sqrt(data_err + pred_err)
+        err[err == 0] = 1
+
+        sig = (data_count - pred_count) / err
+        sig_hist = pred_hist.copy(content=False)
+        sig_hist._sumw[()] = sig
+        sig_hist._sumw2 = None
+        sig_hist.label = "(Data - Pred) / Err"
+
+        display_max = abs(sig_hist.values()[()]).max()
+        patch_opts = {
+            "cmap": "RdBu",
+            "vmin": -display_max,
+            "vmax": display_max,
+        }
+        coffea.hist.plot2d(sig_hist, sig_hist.axes()[0], patch_opts=patch_opts)
         plt.savefig(namebase + ".svg")
+        plt.close()
+
+        coffea.hist.plot2d(data_hist, sig_hist.axes()[0])
+        plt.savefig(namebase + "_data.svg")
+        plt.close()
+        coffea.hist.plot2d(pred_hist, sig_hist.axes()[0])
+        plt.savefig(namebase + "_pred.svg")
         plt.close()
 
     def save(self, fname_data, fname_pred):
