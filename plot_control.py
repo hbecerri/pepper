@@ -218,6 +218,10 @@ parser.add_argument(
     "--cuts", type=int, help="Plot only events that have the given number as "
     "their entry in the cut_arrays")
 parser.add_argument(
+    "--dyscale", type=float, nargs=3,
+    metavar=("ee_scale", "em_scale", "mm_scale"), help="Scale DY samples "
+    "according to a channel-dependent factor")
+parser.add_argument(
     "--debug", nargs=2, metavar=("data_hist", "pred_hist"))
 args = parser.parse_args()
 
@@ -276,6 +280,7 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
     else:
         print("{}: {} events".format(name, data.size))
 
+    is_dy = name.startswith("DYJets")
     if labels_map:
         if name in labels_map:
             name = labels_map[name]
@@ -284,6 +289,9 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
     if name not in mc_colors:
         mc_colors[name] = "C" + str(len(mc_colors))
     for chan_name, sel in get_channel_masks(data).items():
+        if args.dyscale is not None and is_dy:
+            weight[sel] *= args.dyscale[["ee", "em", "mm"].index(chan_name)]
+
         lep_hists.fill_from_data(name, chan_name, data[sel], weight[sel])
         jet_hists.fill_from_data(name, chan_name, data[sel], weight[sel])
         njets_hist.fill(proc=name,
