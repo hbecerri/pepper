@@ -760,8 +760,7 @@ class Processor(processor.ProcessorABC):
         m_min = self.config["z_boson_window_start"]
         m_max = self.config["z_boson_window_end"]
         is_sf = data["is_same_flavor"]
-        invmass = (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
-        return ~is_sf | ((invmass <= m_min) | (m_max <= invmass))
+        return ~is_sf | ((data["mll"] <= m_min) | (m_max <= data["mll"]))
 
     def has_jets(self, data):
         return self.config["num_jets_atleast"] <= data["Jet"].counts

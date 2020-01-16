@@ -4,6 +4,7 @@ import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import mplhep as hep
 from argparse import ArgumentParser
 import coffea
 import json
@@ -12,6 +13,13 @@ import itertools
 
 from utils.config import Config
 from utils.misc import get_event_files, montecarlo_iterate, expdata_iterate
+
+
+LUMIS = {
+    "2016": "35.92",
+    "2017": "41.53",
+    "2018": "59.96",
+}
 
 
 class ComparisonHistogram(object):
@@ -43,14 +51,18 @@ class ComparisonHistogram(object):
             fig.savefig(fname)
             plt.close()
 
-    def plotratio(self, chan, namebase, colors={}):
+    def plotratio(self, chan, namebase, colors={}, cmsyear=None):
         data_hist = self.data_hist.integrate("chan", int_range=chan)
         pred_hist = self.pred_hist.integrate("chan", int_range=chan)
         fig, (ax1, ax2) = plt.subplots(
             nrows=2, sharex=True, gridspec_kw={"height_ratios": [3, 1]})
+        if cmsyear is not None:
+            ax1 = hep.cms.cmslabel(
+                ax1, data=True, paper=False, year=cmsyear, lumi=LUMIS[cmsyear])
         coffea.hist.plot1d(pred_hist,
                            ax=ax1,
                            overlay="proc",
+                           clear=False,
                            stack=True,
                            fill_opts={}, error_opts={
                                "hatch": "////",
@@ -129,14 +141,14 @@ class ParticleComparisonHistograms(object):
             weight = np.repeat(weight, counts)
         self.fill(proc, chan, pt, eta, phi, weight)
 
-    def plotratio(self, chan, namebase, colors={}):
+    def plotratio(self, chan, namebase, colors={}, cmsyear=None):
         axes = ["pt", "eta", "phi"]
         for sumax in itertools.combinations(axes, len(axes) - 1):
             data_hist = self.data_hist.sum(*sumax, overflow="all")
             pred_hist = self.pred_hist.sum(*sumax, overflow="all")
             cmphist = ComparisonHistogram(data_hist, pred_hist)
             new_namebase = namebase + "_" + next(iter(set(axes) - set(sumax)))
-            cmphist.plotratio(chan, new_namebase, colors)
+            cmphist.plotratio(chan, new_namebase, colors, cmsyear)
 
     def plot2ddiff(self, outaxis, chan, namebase):
         data_hist = (self.data_hist.integrate("chan", int_range=chan)
@@ -267,8 +279,8 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
 for dsname, data in expdata_iterate(exp_datasets, branches):
     if args.cuts is not None:
         cutsel = ((data["cutflags"] & args.cuts) == args.cuts).astype(bool)
-        print("Data: {} events passing cuts, {} total".format(cutsel.sum(),
-                                                              data.size))
+        print("{}: {} events passing cuts, {} total".format(
+            dsname, cutsel.sum(), data.size))
         data = data[cutsel]
     else:
         print("{}: {} events".format(dsname, data.size))
@@ -293,6 +305,7 @@ for chan in ("ee", "mm", "em"):
     lep_hists.plotratio(chan, getout(f"{chan}_lepton"), mc_colors)
     lep_hists.plot2ddiff("pt", chan, getout(f"diff_{chan}_lep"))
     jet_hists.plotratio(chan, getout(f"{chan}_jet"), mc_colors)
+    jet_hists.plot2ddiff("pt", chan, getout(f"diff_{chan}_jet"))
     njets_hist.plotratio(chan, getout(f"{chan}_jet_n"), mc_colors)
     met_hist.plotratio(chan, getout(f"{chan}_met"), mc_colors)
     mll_hist.plotratio(chan, getout(f"{chan}_mll"), mc_colors)
