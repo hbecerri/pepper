@@ -68,7 +68,7 @@ class Config(object):
 
         for name, configvar in SPECIAL_VARS.items():
             if name in s:
-                if not configvar in self._config:
+                if configvar not in self._config:
                     raise ConfigError("{} contained in {} but datadir was "
                                       "not specified in config".format(
                                           name, configvar))
