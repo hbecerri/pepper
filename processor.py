@@ -277,7 +277,7 @@ class Selector(object):
 
 
 class Processor(processor.ProcessorABC):
-    def __init__(self, config, destdir):
+    def __init__(self, config, destdir, project_dir):
         """Create a new Processor
 
         Arguments:
@@ -288,6 +288,7 @@ class Processor(processor.ProcessorABC):
         """
         self.config = config
         self.destdir = destdir
+        self.project_dir = project_dir
 
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]
@@ -819,7 +820,8 @@ class Processor(processor.ProcessorABC):
                                        btags.cross(jetsnob))
         bs = utils.misc.concatenate(b0, b1)
         bbars = utils.misc.concatenate(b1, b0)
-        hist_mlb = uproot.open(self.config["genhist_path"])["Mlb"]
+        hist_mlb = uproot.open(os.path.join(
+                self.project_dir, self.config["genhist_path"]))["Mlb"]
         alb = bs.cross(antilep)
         lbbar = bbars.cross(lep)
         p_m_alb = awkward.JaggedArray.fromcounts(

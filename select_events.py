@@ -90,7 +90,7 @@ if len(nonempty) != 0:
         elif answer == "n":
             break
 
-processor = Processor(config, os.path.realpath(args.dest))
+processor = Processor(config, os.path.realpath(args.dest), os.getcwd())
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
     conor_config = ("requirements = (OpSysAndVer == \"SL6\" || OpSysAndVer =="
@@ -116,7 +116,7 @@ export PATH=~/.local/bin:$PATH
         max_blocks=args.condor,
         scheduler_options=conor_config,
         worker_init=condor_init
-    )
+        )
     parsl_executor = parsl.executors.HighThroughputExecutor(
         label="HTCondor",
         address=address_by_hostname(),
@@ -131,7 +131,7 @@ export PATH=~/.local/bin:$PATH
     # Load config now instead of putting it into executor_args to be able to
     # use the same jobs for preprocessing and processing
     parsl.load(parsl_config)
-    executor_args = {}
+    executor_args = {"tailtimeout": None}
 else:
     executor = coffea.processor.iterative_executor
     executor_args = {}

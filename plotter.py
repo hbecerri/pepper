@@ -49,7 +49,7 @@ parsl_config = Config(
                    max_workers=nproc,
                    provider=CondorProvider(
                         channel=LocalChannel(),
-                        init_blocks=800,
+                        init_blocks=10,
                         min_blocks=5,
                         max_blocks=1000,
                         nodes_per_block=1,
@@ -58,7 +58,7 @@ parsl_config = Config(
                         worker_init=wrk_init))],
         lazy_errors=False
 )
-# dfk = load(parsl_config)
+dfk = load(parsl_config)
 
 config = config_utils.Config("example/config.json")
 store = config["store"]
@@ -67,20 +67,21 @@ smallfileset, _ = \
     dataset_utils.expand_datasetdict(config["testdataset"], store)
 destdir = \
     "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
-output = coffea.processor.run_uproot_job(
+"""output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
-    processor_instance=Processor(config, "selected_columns"),
+    processor_instance=Processor(config, "selected_columns", os.getcwd()),
     executor=coffea.processor.iterative_executor,
     executor_args={"workers": 4},
     chunksize=100000)
 """
 output = coffea.processor.run_uproot_job(
-    fileset,
+    smallfileset,
     treename="Events",
-    processor_instance=Processor(config, destdir),
+    processor_instance=Processor(config, destdir, os.getcwd()),
     executor=parsl_executor,
-    chunksize=500000)"""
+    executor_args={"tailtimeout": None},
+    chunksize=500000)
 
 plot_config = config_utils.Config("example/plot_config.json")
 labels = plot_config["labels"]
