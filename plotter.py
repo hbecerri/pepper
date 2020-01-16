@@ -70,7 +70,7 @@ destdir = \
 """output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
-    processor_instance=Processor(config, "selected_columns", os.getcwd()),
+    processor_instance=Processor(config, "selected_columns"),
     executor=coffea.processor.iterative_executor,
     executor_args={"workers": 4},
     chunksize=100000)
@@ -78,7 +78,7 @@ destdir = \
 output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
-    processor_instance=Processor(config, destdir, os.getcwd()),
+    processor_instance=Processor(config, destdir),
     executor=parsl_executor,
     executor_args={"tailtimeout": None},
     chunksize=500000)

@@ -90,7 +90,7 @@ if len(nonempty) != 0:
         elif answer == "n":
             break
 
-processor = Processor(config, os.path.realpath(args.dest), os.getcwd())
+processor = Processor(config, os.path.realpath(args.dest))
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
     conor_config = ("requirements = (OpSysAndVer == \"SL6\" || OpSysAndVer =="
