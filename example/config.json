@@ -1,31 +1,32 @@
 {
     "year": "2018",
+    "datadir": "/afs/desy.de/user/r/ruebenaj/analysis/desy-ttbarbsm-coffea/data",
     "store": "/pnfs/desy.de/cms/tier2/store",
-    "genhist_path": "data/GenHists.root",
+    "genhist_path": "$DATADIR/GenHists.root",
     "lumimask": "/afs/cern.ch/cms/CAF/CMSCOMM/COMM_DQM/certification/Collisions18/13TeV/PromptReco/Cert_314472-325175_13TeV_PromptReco_Collisions18_JSON.txt",
     "electron_sf": [
         [
-            "data/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root",
+            "$DATADIR/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root",
             "EGamma_SF2D"
         ],
         [
-            "data/scale_factors/2018_ElectronTight.root",
+            "$DATADIR/scale_factors/2018_ElectronTight.root",
             "EGamma_SF2D"
         ]
     ],
     "muon_sf": [
         [
-            "data/scale_factors/Muon2018_RunABCD_SF_ID.root",
+            "$DATADIR/scale_factors/Muon2018_RunABCD_SF_ID.root",
             "NUM_TightID_DEN_TrackerMuons_pt_abseta"
         ],
         [
-            "data/scale_factors/Muon2018_RunABCD_SF_ISO.root",
+            "$DATADIR/scale_factors/Muon2018_RunABCD_SF_ISO.root",
             "NUM_LooseRelIso_DEN_TightIDandIPCut_pt_abseta"
         ]
     ],
     "btag_sf": [
-        "data/scale_factors/DeepJet_102XSF_WP_V1.csv",
-        "data/scale_factors/deepjet_medium_efficiency.root"
+        "$DATADIR/scale_factors/DeepJet_102XSF_WP_V1.csv",
+        "$DATADIR/scale_factors/deepjet_medium_efficiency.root"
     ],
     "exp_datasets": {
         "MuonEG": [
@@ -188,7 +189,7 @@
     },
 
     "apply_met_filters": true,
-    "mc_lumifactors": "data/2018ttbar_mc_lumifactors.json",
+    "mc_lumifactors": "$DATADIR/2018ttbar_mc_lumifactors.json",
 
     "ele_cut_transreg": true,
     "ele_eta_min": -2.4,

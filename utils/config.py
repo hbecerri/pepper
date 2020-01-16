@@ -3,6 +3,7 @@
 import numpy as np
 import uproot
 import json
+import os
 
 
 class ScaleFactors(object):
@@ -52,12 +53,30 @@ class Config(object):
                 raise ConfigError("scale factors needs to be list of"
                                   " 2-element-lists in form of"
                                   " [rootfile, histname]")
-            hist = uproot.open(sfpath[0])[sfpath[1]]
+            fpath = self._replace_special_vars(sfpath[0])
+            hist = uproot.open(fpath)[sfpath[1]]
             sf = ScaleFactors.from_hist(hist,
                                         "abseta" if is_abseta else "eta",
                                         "pt")
             sfs.append(sf)
         return sfs
+
+    def _replace_special_vars(self, s):
+        SPECIAL_VARS = {
+            "$DATADIR": "datadir",
+        }
+
+        for name, configvar in SPECIAL_VARS.items():
+            if name in s:
+                if not configvar in self._config:
+                    raise ConfigError("{} contained in {} but datadir was "
+                                      "not specified in config".format(
+                                          name, configvar))
+                s = s.replace(name, self._config[configvar])
+        return s
+
+    def _get_path(self, key):
+        return os.path.realpath(self._replace_special_vars(self._config[key]))
 
     def _get(self, key):
         if key in self._cache:
@@ -79,6 +98,11 @@ class Config(object):
         elif key == "muon_sf":
             self._cache["muon_sf"] = self._get_scalefactors("muon_sf", True)
             return self._cache["muon_sf"]
+        elif key == "btag_sf":
+            paths = [self._replace_special_vars(path)
+                     for path in self._config[key]]
+            self._cache[key] = paths
+            return paths
         elif key == "mc_lumifactors":
             factors = self._config[key]
             if isinstance(factors, str):
@@ -89,6 +113,9 @@ class Config(object):
                                   " to JSON file containing a dict")
             self._cache[key] = factors
             return factors
+        elif key in ("genhist_path", "store", "lumimask", "mc_lumifactors"):
+            self._cache[key] = self._get_path(key)
+            return self._cache[key]
 
         return self._config[key]
 
