@@ -215,8 +215,11 @@ parser.add_argument(
     "--labels", help="Path to a JSON file mapping the MC dataset names to "
     "proper names for plotting")
 parser.add_argument(
-    "--cuts", type=int, help="Plot only events that have the given number as "
-    "their entry in the cut_arrays")
+    "--cuts", type=int, help="Plot only events that pass the cuts "
+    "corresponding to this number")
+parser.add_argument(
+    "--negcuts", type=int, help="Plot only events that do not pass the cuts "
+    "corresponding to this number")
 parser.add_argument(
     "--dyscale", type=float, nargs=3,
     metavar=("ee_scale", "em_scale", "mm_scale"), help="Scale DY samples "
@@ -270,8 +273,14 @@ mc_colors = {}
 for name, weight, data in montecarlo_iterate(mc_datasets,
                                              montecarlo_factors,
                                              branches):
+    cutsel = None
     if args.cuts is not None:
-        cutsel = ((data["cutflags"] & args.cuts) == args.cuts).astype(bool)
+        cutsel = (data["cutflags"] & args.cuts) == args.cuts
+    if args.negcuts is not None:
+        if cutsel is None:
+            cutsel = np.full(data["cutflags"].size, True)
+        cutsel &= (~data["cutflags"] & args.negcuts) == args.negcuts
+    if cutsel is not None:
         print("{}: {} events passing cuts, {} total".format(name,
                                                             cutsel.sum(),
                                                             data.size))
@@ -307,14 +316,21 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
                       mll=data[sel]["mll"],
                       weight=weight[sel])
 
-for dsname, data in expdata_iterate(exp_datasets, branches):
+for name, data in expdata_iterate(exp_datasets, branches):
+    cutsel = None
     if args.cuts is not None:
-        cutsel = ((data["cutflags"] & args.cuts) == args.cuts).astype(bool)
-        print("{}: {} events passing cuts, {} total".format(
-            dsname, cutsel.sum(), data.size))
+        cutsel = (data["cutflags"] & args.cuts) == args.cuts
+    if args.negcuts is not None:
+        if cutsel is None:
+            cutsel = np.full(data["cutflags"].size, True)
+        cutsel &= (~data["cutflags"] & args.negcuts) == args.negcuts
+    if cutsel is not None:
+        print("{}: {} events passing cuts, {} total".format(name,
+                                                            cutsel.sum(),
+                                                            data.size))
         data = data[cutsel]
     else:
-        print("{}: {} events".format(dsname, data.size))
+        print("{}: {} events".format(name, data.size))
 
     for chan_name, sel in get_channel_masks(data).items():
         lep_hists.fill_from_data("Data", chan_name, data[sel])
