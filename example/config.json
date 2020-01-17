@@ -210,7 +210,7 @@
     "additional_muon_pt_min": 20.0,
 
     "good_jet_id": "cut:tightlepveto",
-    "good_jet_puId": "cut:tight"
+    "good_jet_puId": "cut:tight",
     "good_jet_lepton_distance": 0.4,
     "good_jet_eta_min": -2.4,
     "good_jet_eta_max": 2.4,
