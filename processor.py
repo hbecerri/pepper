@@ -628,9 +628,9 @@ class Processor(processor.ProcessorABC):
         return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
 
     def good_jet(self, data):
-        j_id, lep_dist, eta_min, eta_max, pt_min = self.config[[
-            "good_jet_id", "good_jet_lepton_distance", "good_jet_eta_min",
-            "good_jet_eta_max", "good_jet_pt_min"]]
+        j_id, j_puId, lep_dist, eta_min, eta_max, pt_min = self.config[[
+            "good_jet_id", "good_jet_puId", "good_jet_lepton_distance",
+            "good_jet_eta_min", "good_jet_eta_max", "good_jet_pt_min"]]
         if j_id == "skip":
             has_id = True
         elif j_id == "cut:loose":
@@ -643,6 +643,17 @@ class Processor(processor.ProcessorABC):
         else:
             raise utils.config.ConfigError(
                     "Invalid good_jet_id: {}".format(j_id))
+        if j_puId == "skip":
+            has_puId = True
+        elif j_puId == "cut:loose":
+            has_puId = (data["Jet_puId"] & 0b100).astype(bool)
+        elif j_puId == "cut:medium":
+            has_puId = (data["Jet_puId"] & 0b10).astype(bool)
+        elif j_puId == "cut:tight":
+            has_puId = (data["Jet_puId"] & 0b1).astype(bool)
+        else:
+            raise utils.config.ConfigError(
+                    "Invalid good_jet_id: {}".format(j_puId))
 
         j_eta = data["Jet_eta"]
         j_phi = data["Jet_phi"]
@@ -655,7 +666,7 @@ class Processor(processor.ProcessorABC):
         delta_r = np.hypot(delta_eta, delta_phi)
         has_lepton_close = (delta_r < lep_dist).any()
 
-        return (has_id
+        return (has_id & has_puId
                 & (~has_lepton_close)
                 & (eta_min < data["Jet_eta"])
                 & (data["Jet_eta"] < eta_max)
