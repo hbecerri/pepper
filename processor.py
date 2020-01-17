@@ -249,6 +249,8 @@ class Selector(object):
                 arr = utils.misc.jagged_reduce(getattr(data[part], prop))
                 return_dict[part + "_" + prop] = arr
         for col in other_cols:
+            if col not in data:
+                continue
             return_dict[prefix + col] = utils.misc.jagged_reduce(data[col])
         return return_dict
 
@@ -407,7 +409,8 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.met_requirement, "MET > %d GeV"
                          % self.config["ee/mm_min_met"])
 
-        selector.set_column(partial(self.compute_weight, is_mc), "weight")
+        if is_mc:
+            selector.set_column(self.compute_weight, "weight")
 
         lep, antilep = self.pick_leps(selector.final)
         b, bbar = self.choose_bs(selector.final, lep, antilep)
@@ -415,11 +418,15 @@ class Processor(processor.ProcessorABC):
                                          b["p4"], bbar["p4"],
                                          selector.final["MET_pt"],
                                          selector.final["MET_phi"])
+        if is_mc:
+            weight = selector.final["weight"]
+        else:
+            weight = np.full(selector.final.size, 1.)
         reco_objects = Selector(awkward.Table(lep=lep, antilep=antilep,
                                               b=b, bbar=bbar,
                                               neutrino=neutrino,
                                               antineutrino=antineutrino,
-                                              weight=selector.final["weight"]))
+                                              weight=weight))
         reco_objects.add_cut(self.passing_reco, "Reco")
         reco_objects.set_column(self.wminus, "Wminus")
         reco_objects.set_column(self.wplus, "Wplus")
@@ -791,29 +798,29 @@ class Processor(processor.ProcessorABC):
         met = data["MET_pt"]
         return ~is_sf | (met > self.config["ee/mm_min_met"])
 
-    def compute_weight(self, is_mc, data):
+    def compute_weight(self, data):
         weight = np.ones(data.size)
-        if is_mc:
-            weight *= data["genWeight"]
-            electrons = data["Lepton"][abs(data["Lepton"].pdgId) == 11]
-            muons = data["Lepton"][abs(data["Lepton"].pdgId) == 13]
-            jets = data["Jet"]
-            for sf in self.electron_sf:
-                factors_flat = sf(eta=electrons.eta.flatten(),
-                                  pt=electrons.pt.flatten())
-                weight *= utils.misc.jaggedlike(
-                    electrons.eta, factors_flat).prod()
-            for sf in self.muon_sf:
-                factors_flat = sf(abseta=abs(muons.eta.flatten()),
-                                  pt=muons.pt.flatten())
-                weight *= utils.misc.jaggedlike(muons.eta, factors_flat).prod()
-            if self.btagweighter is not None:
-                wp = self.config["btag"].split(":", 1)[1]
-                flav = jets["hadronFlavour"]
-                eta = jets.eta
-                pt = jets.pt
-                discr = jets["btag"]
-                weight *= self.btagweighter(wp, flav, eta, pt, discr)
+
+        weight *= data["genWeight"]
+        electrons = data["Lepton"][abs(data["Lepton"].pdgId) == 11]
+        muons = data["Lepton"][abs(data["Lepton"].pdgId) == 13]
+        jets = data["Jet"]
+        for sf in self.electron_sf:
+            factors_flat = sf(eta=electrons.eta.flatten(),
+                              pt=electrons.pt.flatten())
+            weight *= utils.misc.jaggedlike(
+                electrons.eta, factors_flat).prod()
+        for sf in self.muon_sf:
+            factors_flat = sf(abseta=abs(muons.eta.flatten()),
+                              pt=muons.pt.flatten())
+            weight *= utils.misc.jaggedlike(muons.eta, factors_flat).prod()
+        if self.btagweighter is not None:
+            wp = self.config["btag"].split(":", 1)[1]
+            flav = jets["hadronFlavour"]
+            eta = jets.eta
+            pt = jets.pt
+            discr = jets["btag"]
+            weight *= self.btagweighter(wp, flav, eta, pt, discr)
         return weight
 
     def pick_leps(self, data):
