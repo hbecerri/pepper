@@ -410,6 +410,8 @@ class Processor(processor.ProcessorABC):
                          % self.config["ee/mm_min_met"])
 
         if is_mc:
+            if self.btagweighter is not None:
+                selector.set_column(self.compute_weight_btag, "weight_btag")
             selector.set_column(self.compute_weight, "weight")
 
         lep, antilep = self.pick_leps(selector.final)
@@ -798,13 +800,23 @@ class Processor(processor.ProcessorABC):
         met = data["MET_pt"]
         return ~is_sf | (met > self.config["ee/mm_min_met"])
 
+    def compute_weight_btag(self, data):
+        if self.config["num_atleast_btagged"] == 0:
+            return np.full(data.size, 1.)
+        jets = data["Jet"]
+        wp = self.config["btag"].split(":", 1)[1]
+        flav = jets["hadronFlavour"]
+        eta = jets.eta
+        pt = jets.pt
+        discr = jets["btag"]
+        return self.btagweighter(wp, flav, eta, pt, discr)
+
     def compute_weight(self, data):
         weight = np.ones(data.size)
 
         weight *= data["genWeight"]
         electrons = data["Lepton"][abs(data["Lepton"].pdgId) == 11]
         muons = data["Lepton"][abs(data["Lepton"].pdgId) == 13]
-        jets = data["Jet"]
         for sf in self.electron_sf:
             factors_flat = sf(eta=electrons.eta.flatten(),
                               pt=electrons.pt.flatten())
@@ -815,12 +827,8 @@ class Processor(processor.ProcessorABC):
                               pt=muons.pt.flatten())
             weight *= utils.misc.jaggedlike(muons.eta, factors_flat).prod()
         if self.btagweighter is not None:
-            wp = self.config["btag"].split(":", 1)[1]
-            flav = jets["hadronFlavour"]
-            eta = jets.eta
-            pt = jets.pt
-            discr = jets["btag"]
-            weight *= self.btagweighter(wp, flav, eta, pt, discr)
+            weight *= data["weight_btag"]
+
         return weight
 
     def pick_leps(self, data):
