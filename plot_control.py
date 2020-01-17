@@ -56,9 +56,6 @@ class ComparisonHistogram(object):
         pred_hist = self.pred_hist.integrate("chan", int_range=chan)
         fig, (ax1, ax2) = plt.subplots(
             nrows=2, sharex=True, gridspec_kw={"height_ratios": [3, 1]})
-        if cmsyear is not None:
-            ax1 = hep.cms.cmslabel(
-                ax1, data=True, paper=False, year=cmsyear, lumi=LUMIS[cmsyear])
         coffea.hist.plot1d(pred_hist,
                            ax=ax1,
                            overlay="proc",
@@ -91,6 +88,9 @@ class ComparisonHistogram(object):
         ax2.set_ylabel("Data / Pred.")
         ax2.set_ylim(0.75, 1.25)
         fig.subplots_adjust(hspace=0)
+        if cmsyear is not None:
+            ax1 = hep.cms.cmslabel(
+                ax1, data=True, paper=False, year=cmsyear, lumi=LUMIS[cmsyear])
         ax1.autoscale(axis="y")
         fig.savefig(namebase + ".svg")
         ax1.autoscale(axis="y")
