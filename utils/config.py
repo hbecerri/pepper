@@ -45,6 +45,14 @@ class Config(object):
         with open(path) as f:
             self._config = json.load(f)
         self._cache = {}
+        self.SPECIAL_VARS = {
+                "$DATADIR": "datadir",
+            }
+        self.SPECIAL_VAR_PATHS = {}
+        for name, config_var in self.SPECIAL_VARS.items():
+            if config_var in self._config:
+                self.SPECIAL_VAR_PATHS[name] = \
+                    os.path.realpath(self._config[config_var])
 
     def _get_scalefactors(self, key, is_abseta):
         sfs = []
@@ -62,17 +70,13 @@ class Config(object):
         return sfs
 
     def _replace_special_vars(self, s):
-        SPECIAL_VARS = {
-            "$DATADIR": "datadir",
-        }
-
-        for name, configvar in SPECIAL_VARS.items():
+        for name in self.SPECIAL_VARS.keys():
             if name in s:
-                if configvar not in self._config:
-                    raise ConfigError("{} contained in {} but datadir was "
+                if name not in self.SPECIAL_VAR_PATHS:
+                    raise ConfigError("{} contained in {} but {} was "
                                       "not specified in config".format(
-                                          name, configvar))
-                s = s.replace(name, self._config[configvar])
+                                          name, s, self.SPECIAL_VARS[name]))
+                s = s.replace(name, self.SPECIAL_VAR_PATHS[name])
         return s
 
     def _get_path(self, key):
