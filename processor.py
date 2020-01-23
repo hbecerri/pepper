@@ -663,6 +663,8 @@ class Processor(processor.ProcessorABC):
         else:
             raise utils.config.ConfigError(
                     "Invalid good_jet_id: {}".format(j_puId))
+        # Only apply PUID if pT < 50 GeV
+        has_puId = has_puId | (data["Jet_pt"] >= 50)
 
         j_eta = data["Jet_eta"]
         j_phi = data["Jet_phi"]
