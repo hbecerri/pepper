@@ -386,13 +386,12 @@ class Processor(processor.ProcessorABC):
 
         selector.set_column(self.build_lepton_column, "Lepton")
         selector.add_cut(self.lepton_pair, "At least 2 leps")
-        selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
-
         selector.set_column(self.same_flavor, "is_same_flavor")
         selector.set_column(self.mll, "mll")
 
         selector.freeze_selection()
 
+        selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
         selector.add_cut(self.no_additional_leptons, "No add. leps")
         selector.add_cut(self.channel_trigger_matching, "Chn. trig. match")
         selector.add_cut(self.lep_pt_requirement, "Req lep pT")
