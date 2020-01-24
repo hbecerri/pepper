@@ -316,9 +316,12 @@ class Processor(processor.ProcessorABC):
         else:
             print("No btag scale factor specified")
             self.btagweighter = None
-
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
+        if "genhist_path" in self.config:
+            self.hist_mlb_path = self.config["genhist_path"]
+        else:
+            print("No Mlb hist for picking b jets specified")
 
     @property
     def accumulator(self):
@@ -847,9 +850,9 @@ class Processor(processor.ProcessorABC):
                                        btags.cross(jetsnob))
         bs = utils.misc.concatenate(b0, b1)
         bbars = utils.misc.concatenate(b1, b0)
-        hist_mlb = uproot.open(self.config["genhist_path"])["Mlb"]
         alb = bs.cross(antilep)
         lbbar = bbars.cross(lep)
+        hist_mlb = uproot.open(self.hist_mlb_path)["Mlb"]
         p_m_alb = awkward.JaggedArray.fromcounts(
             bs.counts, hist_mlb.allvalues[np.searchsorted(
                 hist_mlb.alledges, alb.mass.content)-1])
