@@ -615,6 +615,12 @@ class Processor(processor.ProcessorABC):
                                        data["Muon_" + key][gm]], axis=1)
             offsets = arr.offsets
             lep_dict[key] = arr.flatten()  # Could use concatenate here
+        # Add supercluster eta, which only is given for electrons
+        arr = awkward.concatenate([(data["Electron_eta"][ge]
+                                    + data["Electron_deltaEtaSC"][ge]),
+                                   data["Muon_eta"][gm]], axis=1)
+        lep_dict["sc_eta"] = arr.flatten()
+
         leptons = Jca.candidatesfromoffsets(offsets, **lep_dict)
 
         # Sort leptons by pt
@@ -819,7 +825,7 @@ class Processor(processor.ProcessorABC):
         electrons = data["Lepton"][abs(data["Lepton"].pdgId) == 11]
         muons = data["Lepton"][abs(data["Lepton"].pdgId) == 13]
         for sf in self.electron_sf:
-            factors_flat = sf(eta=electrons.eta.flatten(),
+            factors_flat = sf(eta=electrons.sc_eta.flatten(),
                               pt=electrons.pt.flatten())
             weight *= utils.misc.jaggedlike(
                 electrons.eta, factors_flat).prod()
