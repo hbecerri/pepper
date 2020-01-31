@@ -10,14 +10,14 @@
             "EGamma_SF2D"
         ],
         [
-            "$DATADIR/scale_factors/2018_ElectronTight.root",
+            "$DATADIR/scale_factors/2018_ElectronMVA90.root",
             "EGamma_SF2D"
         ]
     ],
     "muon_sf": [
         [
             "$DATADIR/scale_factors/Muon2018_RunABCD_SF_ID.root",
-            "NUM_TightID_DEN_TrackerMuons_pt_abseta"
+            "NUM_MediumID_DEN_TrackerMuons_pt_abseta"
         ],
         [
             "$DATADIR/scale_factors/Muon2018_RunABCD_SF_ISO.root",
