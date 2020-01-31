@@ -35,7 +35,8 @@ class ScaleFactors(object):
 
     def __call__(self, variation="central", **kwargs):
         if variation not in ("central", "up", "down"):
-            raise ValueError("variation must be one of 'central', 'up', 'down'")
+            raise ValueError("variation must be one of 'central', 'up', "
+                             "'down'")
         factors = self._factors
         if variation == "up":
             factors = self._factors_up
