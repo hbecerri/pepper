@@ -7,13 +7,20 @@ import os
 
 
 class ScaleFactors(object):
-    def __init__(self, factors, **bins):
+    def __init__(self, factors, factors_up, factors_down, bins):
+        if "variation" in bins:
+            raise ValueError("'variation' must not be in bins")
         self._factors = factors
+        self._factors_up = factors_up
+        self._factors_down = factors_down
         self._bins = bins
 
     @classmethod
-    def from_hist(cls, hist, *dimlabels):
+    def from_hist(cls, hist, dimlabels):
         factors, (edges,) = hist.allnumpy()
+        sigmas = np.sqrt(hist.allvariances)
+        factors_up = factors + sigmas
+        factors_down = factors - sigmas
         if len(edges) != len(dimlabels):
             raise ValueError("Got {} dimenions but {} labels"
                              .format(len(edges), len(dimlabels)))
@@ -24,9 +31,17 @@ class ScaleFactors(object):
             factors[tuple([slice(None)] * i + [slice(0, 1)])] = 1
             factors[tuple([slice(None)] * i + [slice(-1, None)])] = 1
         bins = dict(zip(dimlabels, edges))
-        return cls(factors, **bins)
+        return cls(factors, factors_up, factors_down, bins)
 
-    def __call__(self, **kwargs):
+    def __call__(self, variation="central", **kwargs):
+        if variation not in ("central", "up", "down"):
+            raise ValueError("variation must be one of 'central', 'up', 'down'")
+        factors = self._factors
+        if variation == "up":
+            factors = self._factors_up
+        elif variation == "down":
+            factors = self._factors_down
+
         binIdxs = []
         for key, val in kwargs.items():
             try:
@@ -35,7 +50,7 @@ class ScaleFactors(object):
                 raise ValueError("Scale factor does not depend on \"{}\""
                                  .format(key))
             binIdxs.append(np.digitize(val, bins_for_key) - 1)
-        return self._factors[tuple(binIdxs)]
+        return factors[tuple(binIdxs)]
 
 
 class ConfigError(RuntimeError):
@@ -48,18 +63,25 @@ class Config(object):
             self._config = json.load(f)
         self._cache = {}
 
-    def _get_scalefactors(self, key, is_abseta):
+    def _get_scalefactors(self, key, dimlabels):
         sfs = []
         for sfpath in self._config[key]:
-            if not isinstance(sfpath, list) or len(sfpath) != 2:
+            if not isinstance(sfpath, list) or len(sfpath) < 2:
                 raise ConfigError("scale factors needs to be list of"
-                                  " 2-element-lists in form of"
-                                  " [rootfile, histname]")
+                                  " at least 2-element-lists in form of"
+                                  " [rootfile, histname, uncert1, uncert2]")
             fpath = self._replace_special_vars(sfpath[0])
-            hist = uproot.open(fpath)[sfpath[1]]
-            sf = ScaleFactors.from_hist(hist,
-                                        "abseta" if is_abseta else "eta",
-                                        "pt")
+            rootf = uproot.open(fpath)
+            hist = rootf[sfpath[1]]
+            if len(sfpath) > 2:
+                sumw2 = np.zeros(len(hist._fSumw2))
+                import pdb
+                pdb.set_trace()
+                for path in sfpath[2:]:
+                    hist_err = rootf[path]
+                    sumw2 += hist_err.allvariances.T.flatten() ** 2
+                hist._fSumw2 = sumw2
+            sf = ScaleFactors.from_hist(hist, dimlabels)
             sfs.append(sf)
         return sfs
 
@@ -95,10 +117,11 @@ class Config(object):
             return self._cache["year"]
         if key == "electron_sf":
             self._cache["electron_sf"] = self._get_scalefactors("electron_sf",
-                                                                False)
+                                                                ["eta", "pt"])
             return self._cache["electron_sf"]
         elif key == "muon_sf":
-            self._cache["muon_sf"] = self._get_scalefactors("muon_sf", True)
+            self._cache["muon_sf"] = self._get_scalefactors("muon_sf",
+                                                            ["pt", "abseta"])
             return self._cache["muon_sf"]
         elif key == "btag_sf":
             paths = [self._replace_special_vars(path)
