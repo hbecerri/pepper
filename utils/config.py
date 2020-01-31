@@ -15,6 +15,12 @@ class ScaleFactors(object):
         self._factors_down = factors_down
         self._bins = bins
 
+    @staticmethod
+    def _setoverflow(factors, value):
+        for i in range(factors.ndim):
+            factors[tuple([slice(None)] * i + [slice(0, 1)])] = 1
+            factors[tuple([slice(None)] * i + [slice(-1, None)])] = 1
+
     @classmethod
     def from_hist(cls, hist, dimlabels):
         factors, (edges,) = hist.allnumpy()
@@ -27,9 +33,11 @@ class ScaleFactors(object):
         edges_new = []
         # Set overflow bins to 1 so that events outside the histogram
         # get scaled by 1
-        for i in range(factors.ndim):
-            factors[tuple([slice(None)] * i + [slice(0, 1)])] = 1
-            factors[tuple([slice(None)] * i + [slice(-1, None)])] = 1
+        cls._setoverflow(factors, 1)
+        if factors_up is not None:
+            cls._setoverflow(factors_up, 1)
+        if factors_down is not None:
+            cls._setoverflow(factors_down, 1)
         bins = dict(zip(dimlabels, edges))
         return cls(factors, factors_up, factors_down, bins)
 
