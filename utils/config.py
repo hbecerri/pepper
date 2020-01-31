@@ -29,10 +29,12 @@ class ScaleFactors(object):
     def __call__(self, **kwargs):
         binIdxs = []
         for key, val in kwargs.items():
-            if key not in self._bins:
+            try:
+                bins_for_key = self._bins[key]
+            except KeyError:
                 raise ValueError("Scale factor does not depend on \"{}\""
                                  .format(key))
-            binIdxs.append(np.digitize(val, self._bins[key]) - 1)
+            binIdxs.append(np.digitize(val, bins_for_key) - 1)
         return self._factors[tuple(binIdxs)]
 
 
