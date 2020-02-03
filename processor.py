@@ -622,7 +622,7 @@ class Processor(processor.ProcessorABC):
         arr = awkward.concatenate([(data["Electron_eta"][ge]
                                     + data["Electron_deltaEtaSC"][ge]),
                                    data["Muon_eta"][gm]], axis=1)
-        lep_dict["sc_eta"] = arr.flatten()
+        lep_dict["sceta"] = arr.flatten()
 
         leptons = Jca.candidatesfromoffsets(offsets, **lep_dict)
 
@@ -828,7 +828,7 @@ class Processor(processor.ProcessorABC):
         electrons = data["Lepton"][abs(data["Lepton"].pdgId) == 11]
         muons = data["Lepton"][abs(data["Lepton"].pdgId) == 13]
         for sf in self.electron_sf:
-            factors_flat = sf(eta=electrons.sc_eta.flatten(),
+            factors_flat = sf(eta=electrons.sceta.flatten(),
                               pt=electrons.pt.flatten())
             weight *= utils.misc.jaggedlike(
                 electrons.eta, factors_flat).prod()
