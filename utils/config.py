@@ -5,6 +5,8 @@ import uproot
 import json
 import os
 
+from . import btagging
+
 
 class ScaleFactors(object):
     def __init__(self, factors, factors_up, factors_down, bins):
@@ -133,10 +135,19 @@ class Config(object):
                                                             ["pt", "abseta"])
             return self._cache["muon_sf"]
         elif key == "btag_sf":
-            paths = [self._replace_special_vars(path)
-                     for path in self._config[key]]
-            self._cache[key] = paths
-            return paths
+            weighters = []
+            tagger = self["btag"].split(":")[0]
+            year = self["year"]
+            for weighter_paths in self._config[key]:
+                paths = [self._replace_special_vars(path)
+                         for path in weighter_paths]
+                btagweighter = btagging.BTagWeighter(paths[0],
+                                                     paths[1],
+                                                     tagger,
+                                                     year)
+                weighters.append(btagweighter)
+            self._cache[key] = weighters
+            return weighters
         elif key == "mc_lumifactors":
             factors = self._config[key]
             if isinstance(factors, str):

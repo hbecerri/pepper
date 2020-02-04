@@ -15,7 +15,7 @@ import h5py
 import utils.config
 import utils.misc
 from utils.accumulator import PackedSelectionAccumulator
-import btagging
+import utils.btagging
 from kin_reco.sonnenschein import kinreco
 
 
@@ -308,14 +308,10 @@ class Processor(processor.ProcessorABC):
             print("No muon scale factors specified")
             self.muon_sf = []
         if "btag_sf" in self.config and len(self.config["btag_sf"]) > 0:
-            tagger = self.config["btag"].split(":")[0]
-            self.btagweighter = btagging.BTagWeighter(config["btag_sf"][0],
-                                                      config["btag_sf"][1],
-                                                      tagger,
-                                                      config["year"])
+            self.btagweighters = config["btag_sf"]
         else:
             print("No btag scale factor specified")
-            self.btagweighter = None
+            self.btagweighters = None
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
         if "genhist_path" in self.config:
@@ -412,7 +408,7 @@ class Processor(processor.ProcessorABC):
                          % self.config["ee/mm_min_met"])
 
         if is_mc:
-            if self.btagweighter is not None:
+            if self.btagweighters is not None:
                 selector.set_column(self.compute_weight_btag, "weight_btag")
             selector.set_column(self.compute_weight, "weight")
 
@@ -712,7 +708,7 @@ class Processor(processor.ProcessorABC):
             raise utils.config.ConfigError(
                 "Invalid tagger name: {}".format(tagger))
         year = self.config["year"]
-        wptuple = btagging.BTAG_WP_CUTS[tagger][year]
+        wptuple = utils.btagging.BTAG_WP_CUTS[tagger][year]
         if not hasattr(wptuple, wp):
             raise utils.config.ConfigError(
                 "Invalid working point \"{}\" for {} in year {}".format(
@@ -819,7 +815,8 @@ class Processor(processor.ProcessorABC):
         eta = jets.eta
         pt = jets.pt
         discr = jets["btag"]
-        return self.btagweighter(wp, flav, eta, pt, discr)
+        return np.prod(list(weighter(wp, flav, eta, pt, discr)
+                       for weighter in self.btagweighters), axis=0)
 
     def compute_weight(self, data):
         weight = np.ones(data.size)
@@ -836,7 +833,7 @@ class Processor(processor.ProcessorABC):
             factors_flat = sf(abseta=abs(muons.eta.flatten()),
                               pt=muons.pt.flatten())
             weight *= utils.misc.jaggedlike(muons.eta, factors_flat).prod()
-        if self.btagweighter is not None:
+        if self.btagweighters is not None:
             weight *= data["weight_btag"]
 
         return weight
