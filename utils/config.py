@@ -54,11 +54,12 @@ class ScaleFactors(object):
             factors = self._factors_down
 
         binIdxs = []
-        for key, val in kwargs.items():
+        for key, bins_for_key in self._bins.items():
             try:
-                bins_for_key = self._bins[key]
+                val = kwargs[key]
             except KeyError:
-                raise ValueError("Scale factor does not depend on \"{}\""
+                raise ValueError("Scale factor depends on \"{}\" but no such"
+                                 "a argument was not provided"
                                  .format(key))
             binIdxs.append(np.digitize(val, bins_for_key) - 1)
         return factors[tuple(binIdxs)]
