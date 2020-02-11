@@ -187,6 +187,7 @@ class Config(object):
         elif key == "mc_lumifactors":
             factors = self._config[key]
             if isinstance(factors, str):
+                factors = self._replace_special_vars(factors)
                 with open(factors) as f:
                     factors = json.load(f)
             if not isinstance(factors, dict):
