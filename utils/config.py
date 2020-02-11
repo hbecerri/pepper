@@ -4,6 +4,8 @@ import numpy as np
 import uproot
 import json
 import os
+import coffea
+from coffea.lookup_tools.extractor import file_converters
 
 from . import btagging
 
@@ -63,6 +65,21 @@ class ScaleFactors(object):
                                  .format(key))
             binIdxs.append(np.digitize(val, bins_for_key) - 1)
         return factors[tuple(binIdxs)]
+
+
+def get_evaluator(filename, fileform, filetype=None):
+    if filetype is None:
+        filetype = "default"
+    converter = file_converters[fileform][filetype]
+    extractor = coffea.lookup_tools.extractor()
+    for key, value in converter(filename).items():
+        extractor.add_weight_set(key[0], key[1], value)
+    extractor.finalize()
+    return extractor.make_evaluator()
+
+
+def get_evaluator_single(filename, fileform, filetype=None):
+    return next(iter(get_evaluator(filename, fileform, filetype)))
 
 
 class ConfigError(RuntimeError):
@@ -149,6 +166,24 @@ class Config(object):
                 weighters.append(btagweighter)
             self._cache[key] = weighters
             return weighters
+        elif key == "jet_uncertainty":
+            path = self._replace_special_vars(self._config[key])
+            evaluator = get_evaluator(path, "txt", "junc")
+            junc = coffea.jetmet_tools.JetCorrectionUncertainty(**evaluator)
+            self._cache[key] = junc
+            return junc
+        elif key == "jet_resolution":
+            path = self._replace_special_vars(self._config[key])
+            evaluator = get_evaluator(path, "txt", "jr")
+            jer = coffea.jetmet_tools.JetResolution(**evaluator)
+            self._cache[key] = jer
+            return jer
+        elif key == "jet_ressf":
+            path = self._replace_special_vars(self._config[key])
+            evaluator = get_evaluator(path, "txt", "jersf")
+            jersf = coffea.jetmet_tools.JetResolutionScaleFactor(**evaluator)
+            self._cache[key] = jersf
+            return jersf
         elif key == "mc_lumifactors":
             factors = self._config[key]
             if isinstance(factors, str):

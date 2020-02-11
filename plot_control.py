@@ -309,7 +309,7 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
                         weight=weight[sel])
         met_hist.fill(proc=name,
                       chan=chan_name,
-                      met=data[sel]["MET_pt"],
+                      met=data[sel]["MET_pt"].flatten(),
                       weight=weight[sel])
         mll_hist.fill(proc=name,
                       chan=chan_name,
@@ -340,7 +340,7 @@ for name, data in expdata_iterate(exp_datasets, branches):
                         njets=data[sel]["Jet_pt"].counts)
         met_hist.fill("Data",
                       chan=chan_name,
-                      met=data[sel]["MET_pt"])
+                      met=data[sel]["MET_pt"].flatten())
         mll_hist.fill("Data",
                       chan=chan_name,
                       mll=data[sel]["mll"])

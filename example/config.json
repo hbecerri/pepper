@@ -30,6 +30,8 @@
 	    "$DATADIR/scale_factors/deepjet_medium_efficiency.root"
 	]
     ],
+    "jet_resolution": "$DATADIR/scale_factors/Autumn18_V7b_MC_PtResolution_AK4PFchs.txt",
+    "jet_ressf": "$DATADIR/scale_factors/Autumn18_V7b_MC_SF_AK4PFchs.txt",
     "exp_datasets": {
         "MuonEG": [
             "/MuonEG/Run2018A-Nano1June2019-v1/NANOAOD",

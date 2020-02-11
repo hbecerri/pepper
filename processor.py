@@ -10,6 +10,7 @@ from coffea import hist
 from coffea.analysis_objects import JaggedCandidateArray as Jca
 import coffea.processor as processor
 import uproot
+from uproot_methods import TLorentzVectorArray
 import h5py
 
 import utils.config
@@ -312,6 +313,16 @@ class Processor(processor.ProcessorABC):
         else:
             print("No btag scale factor specified")
             self.btagweighters = None
+
+        if "jet_resolution" in self.config and "jet_ressf" in self.config:
+            self._jer = self.config["jet_resolution"]
+            self._jersf = self.config["jet_ressf"]
+        else:
+            print("No jet resolution or no jet resolution scale factor "
+                  "specified")
+            self._jer = None
+            self._jersf = None
+
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
         if "genhist_path" in self.config:
@@ -397,7 +408,10 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.good_mll, "M_ll")
         selector.add_cut(self.z_window, "Z window")
 
+        if is_mc and self._jer is not None and self._jersf is not None:
+            selector.set_column(self.compute_jer_factor, "jerfac")
         selector.set_column(self.build_jet_column, "Jet")
+        selector.set_column(self.build_met_column, "MET")
         selector.add_cut(self.hem_cut, "HEM cut")
         selector.add_cut(self.has_jets, "#Jets >= %d"
                          % self.config["num_jets_atleast"])
@@ -640,6 +654,35 @@ class Processor(processor.ProcessorABC):
     def mll(self, data):
         return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
 
+    def compute_jer_factor(self, data, variation="central"):
+        # Coffea offers a class named JetTransformer for this. Unfortunately
+        # it is more inconvinient and bugged than useful.
+        counts = data["Jet_pt"].counts
+        pt = awkward.JaggedArray.fromcounts(counts, data["Jet_pt"].flatten())
+        eta = awkward.JaggedArray.fromcounts(counts, data["Jet_eta"].flatten())
+        rho = np.repeat(data["fixedGridRhoFastjetAll"], counts)
+        rho = awkward.JaggedArray.fromcounts(counts, rho)
+        genidx = data["Jet_genJetIdx"]
+        hasgen = ((0 <= genidx) & (genidx < data["GenJet_pt"].counts))
+        genpt = pt.zeros_like()
+        genpt[hasgen] = data["GenJet_pt"][genidx[hasgen]]
+        jer = self._jer.getResolution(JetPt=pt, JetEta=eta, Rho=rho)
+        jersmear = jer * np.random.normal(size=jer.size)
+        jersf = self._jersf.getScaleFactor(JetPt=pt, JetEta=eta, Rho=rho)
+        if variation == "central":
+            jersf = jersf[:, :, 0]
+        elif variation == "up":
+            jersf = jersf[:, :, 1]
+        elif variation == "down":
+            jersf = jersf[:, :, 2]
+        else:
+            raise ValueError("variation must be one of 'central', 'up' or "
+                             "'down'")
+        # Hybrid method: compute stochastic smearing, apply scaling if possible
+        factor = 1 + np.sqrt(np.maximum(jersf**2 - 1, 0)) * jersmear
+        factor[hasgen] = (1 + (jersf - 1) * (pt - genpt) / pt)[hasgen]
+        return factor
+
     def good_jet(self, data):
         j_id, j_puId, lep_dist, eta_min, eta_max, pt_min = self.config[[
             "good_jet_id", "good_jet_puId", "good_jet_lepton_distance",
@@ -670,6 +713,11 @@ class Processor(processor.ProcessorABC):
         # Only apply PUID if pT < 50 GeV
         has_puId = has_puId | (data["Jet_pt"] >= 50)
 
+        if "jerfac" in data:
+            j_pt = data["Jet_pt"] * data["jerfac"]
+        else:
+            j_pt = data["Jet_pt"]
+
         j_eta = data["Jet_eta"]
         j_phi = data["Jet_phi"]
         l_eta = data["Lepton"].eta
@@ -685,7 +733,7 @@ class Processor(processor.ProcessorABC):
                 & (~has_lepton_close)
                 & (eta_min < data["Jet_eta"])
                 & (data["Jet_eta"] < eta_max)
-                & (pt_min < data["Jet_pt"]))
+                & (pt_min < j_pt))
 
     def build_jet_column(self, data):
         keys = ["pt", "eta", "phi", "mass", "hadronFlavour"]
@@ -694,7 +742,11 @@ class Processor(processor.ProcessorABC):
         for key in keys:
             if "Jet_" + key not in data:
                 continue
-            arr = data["Jet_" + key][gj]
+            if key in ("pt", "mass") and "jerfac" in data:
+                # Scale pt and mass according to smearing
+                arr = (data["Jet_" + key] * data["jerfac"])[gj]
+            else:
+                arr = data["Jet_" + key][gj]
             offsets = arr.offsets
             jet_dict[key] = arr.flatten()
 
@@ -721,6 +773,28 @@ class Processor(processor.ProcessorABC):
         # Sort jets by pt
         jets = jets[jets.pt.argsort()]
         return jets
+
+    def build_met_column(self, data):
+        met = TLorentzVectorArray.from_ptetaphim(data["MET_pt"],
+                                                 np.zeros(data.size),
+                                                 data["MET_pt"],
+                                                 np.zeros(data.size))
+        if "jerfac" in data:
+            jets = TLorentzVectorArray.from_ptetaphim(data["Jet_pt"],
+                                                      data["Jet_eta"],
+                                                      data["Jet_phi"],
+                                                      data["Jet_mass"])
+            newx = met.x - (jets.x * (data["jerfac"] - 1)).sum()
+            newy = met.y - (jets.y * (data["jerfac"] - 1)).sum()
+            met = TLorentzVectorArray.from_ptetaphim(np.hypot(newx, newy),
+                                                     np.zeros(data.size),
+                                                     np.arctan2(newy, newx),
+                                                     np.zeros(data.size))
+        return Jca.candidatesfromoffsets(np.arange(data.size + 1),
+                                         pt=met.pt,
+                                         eta=met.eta,
+                                         phi=met.phi,
+                                         mass=met.mass)
 
     def in_hem1516(self, phi, eta):
         return ((-3.0 < eta) & (eta < -1.3) & (-1.57 < phi) & (phi < -0.87))
