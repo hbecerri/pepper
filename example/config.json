@@ -240,5 +240,8 @@
     "jet_pt_num_satisfied": 2,
     "btag": "deepjet:medium",
     "num_atleast_btagged": 1,
-    "ee/mm_min_met": 40
+    "ee/mm_min_met": 40,
+
+    "compute_systematics": false,
+    "crosssection_uncertainty": "$DATADIR/2018ttbar_xsunc.json"
 }
