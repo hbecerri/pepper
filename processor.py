@@ -167,7 +167,7 @@ class Selector(object):
         name -- A label to assoiate within the cutflow
         """
         if name in self._cutflow:
-            raise ValueError("A cut with name {} exists already".format(name))
+            raise ValueError("A cut with name {} already exists".format(name))
         accepted = accept(self.masked)
         if len(self._current_cuts) > 0:
             cut = np.full(self.table.size, False)
@@ -332,18 +332,9 @@ class Processor(processor.ProcessorABC):
 
     @property
     def accumulator(self):
-        dataset_axis = hist.Cat("dataset", "")
-        ttbarmass_axis = hist.Bin("Mttbar", "Mttbar [GeV]", 100, 0, 1000)
-        wmass_axis = hist.Bin("MW", "MW [GeV]", 100, 0, 200)
-        tmass_axis = hist.Bin("Mt", "Mt [GeV]", 100, 0, 300)
-
         self._accumulator = processor.dict_accumulator({
-            "Mttbar": hist.Hist("Counts", dataset_axis, ttbarmass_axis),
-            "MWplus": hist.Hist("Counts", dataset_axis, wmass_axis),
-            "Mt": hist.Hist("Counts", dataset_axis, tmass_axis),
             "cutflow": processor.defaultdict_accumulator(
                 partial(processor.defaultdict_accumulator, int)),
-
         })
         return self._accumulator
 

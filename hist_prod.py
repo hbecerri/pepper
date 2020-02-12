@@ -26,6 +26,39 @@ import utils.datasets as dataset_utils
 from processor import Processor    
 
 
+class hist_set():
+    def __init__(self, hist_dict):
+        self.accumulator = processor.dict_accumulator({})
+        self.hist_dict = hist_dict
+    
+    def fill(self, data, cut, dsname, sys=None):
+        for hist, fill_func in self.hist_dict.items():
+            if sys is None:
+                self.accumulator[(cut, hist)] = fill_func(data, dsname)
+            else:
+                self.accumulator[(cut, hist, sys)] = fill_func(data, dsname, sys)
+
+def fill_MET(data, dsname):
+    dataset_axis = hist.Cat("dataset", "")
+    MET_axis = hist.Bin("MET", "MET [GeV]", 100, 0, 400)
+    MET_hist = hist.Hist("Counts", dataset_axis, MET_axis)
+    if is_mc:
+        MET_hist.fill(dataset=dsname, MET=data["MET_pt"], weight=data["genWeight"])
+    else:
+        MET_hist.fill(dataset=dsname, MET=data["MET_pt"])
+    return MET_hist
+
+def fill_Mll(data, dsname):
+    dataset_axis = hist.Cat("dataset", "")
+    Mll_axis = hist.Bin("Mll", "Mll [GeV]", 100, 0, 400)
+    Mll_hist = hist.Hist("Counts", dataset_axis, Mll_axis)
+    if "Mll" in data:
+        if is_mc:
+            Mll_hist.fill(dataset=dsname, Mll=data["Mll"], weight=data["genWeight"])
+        else:
+            Mll_hist.fill(dataset=dsname, Mll=data["Mll"])
+    return Mll_hist
+
 # https://stackoverflow.com/questions/50916422/python-typeerror-object-of-type-int64-is-not-json-serializable/50916741
 class NpEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -87,6 +120,10 @@ fileset = data_fileset
 smallfileset = {key: [val[0]] for key, val in fileset.items()}
 destdir = \
     "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
+
+selector_hist_set = hist_set({"MET": fill_MET,
+                              "Mll": fill_Mll})
+
 """output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
