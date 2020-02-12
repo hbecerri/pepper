@@ -81,7 +81,7 @@ class LazyTable(object):
 class Selector(object):
     """Keeps track of the current event selection and data"""
 
-    def __init__(self, table, is_mc=False):
+    def __init__(self, table, is_mc=False, hist_set=None):
         """Create a new Selector
 
         Arguments:
@@ -91,6 +91,7 @@ class Selector(object):
         self._cuts = PackedSelectionAccumulator()
         self._current_cuts = []
         self._frozen = False
+        self.hist_set = hist_set
 
         self._cutflow = processor.defaultdict_accumulator(int)
         if is_mc is True:
@@ -178,6 +179,8 @@ class Selector(object):
         self._add_cutflow(name)
         if not self._frozen:
             self._current_cuts.append(name)
+        if self.hist_set is not None:
+            self.hist_set.fill(data, cut, dsname)
 
     def set_column(self, column, column_name):
         """Sets a column of the table
@@ -280,7 +283,7 @@ class Selector(object):
 
 
 class Processor(processor.ProcessorABC):
-    def __init__(self, config, destdir):
+    def __init__(self, config, destdir, selector_hist_set=None, reco_hist_set=None):
         """Create a new Processor
 
         Arguments:
@@ -291,6 +294,8 @@ class Processor(processor.ProcessorABC):
         """
         self.config = config
         self.destdir = destdir
+        self.selector_hist_set = selector_hist_set
+        self.reco_hist_set = reco_hist_set
 
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]
@@ -374,7 +379,7 @@ class Processor(processor.ProcessorABC):
         output = self.accumulator.identity()
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
-        selector = Selector(LazyTable(df), is_mc)
+        selector = Selector(LazyTable(df), is_mc, self.selector_hist_set)
 
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
@@ -434,7 +439,7 @@ class Processor(processor.ProcessorABC):
                                               b=b, bbar=bbar,
                                               neutrino=neutrino,
                                               antineutrino=antineutrino,
-                                              weight=weight))
+                                              weight=weight), is_mc, self.reco_hist_set)
         reco_objects.add_cut(self.passing_reco, "Reco")
         reco_objects.set_column(self.wminus, "Wminus")
         reco_objects.set_column(self.wplus, "Wplus")
@@ -447,12 +452,8 @@ class Processor(processor.ProcessorABC):
         m_wplus = reco_objects.masked["Wplus"][best].mass.content
         m_top = reco_objects.masked["top"][best].mass.content
 
-        output["Mttbar"].fill(dataset=dsname, Mttbar=m_ttbar,
-                              weight=reco_objects.masked["weight"])
-        output["Mt"].fill(dataset=dsname, Mt=m_top,
-                          weight=reco_objects.masked["weight"])
-        output["MWplus"].fill(dataset=dsname, MW=m_wplus,
-                              weight=reco_objects.masked["weight"])
+        output["Selector_hists"] = self.selector_hist_set.accumulator
+        output["Reco_hists"] = self.reco_hist_set.accumulator
         output["cutflow"][dsname] = selector.cutflow
 
         if self.destdir is not None:

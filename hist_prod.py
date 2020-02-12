@@ -30,12 +30,12 @@ class hist_set():
     def __init__(self, hist_dict):
         self.accumulator = processor.dict_accumulator({})
         self.hist_dict = hist_dict
+        self.sys = []
     
-    def fill(self, data, cut, dsname, sys=None):
+    def fill(self, data, cut, dsname):
         for hist, fill_func in self.hist_dict.items():
-            if sys is None:
-                self.accumulator[(cut, hist)] = fill_func(data, dsname)
-            else:
+            self.accumulator[(cut, hist)] = fill_func(data, dsname)
+            for sys in self.sys:
                 self.accumulator[(cut, hist, sys)] = fill_func(data, dsname, sys)
 
 def fill_MET(data, dsname):
