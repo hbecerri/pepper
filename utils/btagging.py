@@ -52,7 +52,7 @@ class BTagWeighter(object):
         return None
 
     def __call__(
-            self, wp, jf, eta, pt, discr, sys="central"):
+            self, wp, jf, eta, pt, discr, variation="central"):
         if isinstance(wp, str):
             wp = wp.lower()
             if wp == "loose":
@@ -76,9 +76,9 @@ class BTagWeighter(object):
         sf = np.ones_like(eta)
         # Workaround: Call sf function three times, see
         # https://github.com/CoffeaTeam/coffea/issues/205
-        sf[jf == 0] = self._sf_func(wp, sys, 2)(eta, pt, discr)[jf == 0]
-        sf[jf == 4] = self._sf_func(wp, sys, 1)(eta, pt, discr)[jf == 4]
-        sf[jf == 5] = self._sf_func(wp, sys, 0)(eta, pt, discr)[jf == 5]
+        sf[jf == 0] = self._sf_func(wp, variation, 2)(eta, pt, discr)[jf == 0]
+        sf[jf == 4] = self._sf_func(wp, variation, 1)(eta, pt, discr)[jf == 4]
+        sf[jf == 5] = self._sf_func(wp, variation, 0)(eta, pt, discr)[jf == 5]
         sf = awkward.JaggedArray.fromcounts(counts, sf)
 
         eff = self.eff_evaluator["efficiency"](jf, pt, abs(eta))

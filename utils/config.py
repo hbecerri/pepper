@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
 import numpy as np
+import awkward
 import uproot
 import json
 import os
+import coffea
+from coffea.lookup_tools.extractor import file_converters
 
 from . import btagging
 
@@ -54,15 +57,37 @@ class ScaleFactors(object):
             factors = self._factors_down
 
         binIdxs = []
+        counts = None
         for key, bins_for_key in self._bins.items():
             try:
                 val = kwargs[key]
             except KeyError:
-                raise ValueError("Scale factor depends on \"{}\" but no such"
-                                 "a argument was not provided"
+                raise ValueError("Scale factor depends on \"{}\" but no such "
+                                 "argument was not provided"
                                  .format(key))
+            if isinstance(val, awkward.JaggedArray):
+                counts = val.counts
+                val = val.flatten()
             binIdxs.append(np.digitize(val, bins_for_key) - 1)
-        return factors[tuple(binIdxs)]
+        ret = factors[tuple(binIdxs)]
+        if counts is not None:
+            ret = awkward.JaggedArray.fromcounts(counts, ret)
+        return ret
+
+
+def get_evaluator(filename, fileform, filetype=None):
+    if filetype is None:
+        filetype = "default"
+    converter = file_converters[fileform][filetype]
+    extractor = coffea.lookup_tools.extractor()
+    for key, value in converter(filename).items():
+        extractor.add_weight_set(key[0], key[1], value)
+    extractor.finalize()
+    return extractor.make_evaluator()
+
+
+def get_evaluator_single(filename, fileform, filetype=None):
+    return next(iter(get_evaluator(filename, fileform, filetype)))
 
 
 class ConfigError(RuntimeError):
@@ -114,6 +139,14 @@ class Config(object):
     def _get_path(self, key):
         return os.path.realpath(self._replace_special_vars(self._config[key]))
 
+    def _get_maybe_external(self, key):
+        data = self._config[key]
+        if isinstance(data, str):
+            data = self._replace_special_vars(data)
+            with open(data) as f:
+                data = json.load(f)
+        return data
+
     def _get(self, key):
         if key in self._cache:
             return self._cache[key]
@@ -149,16 +182,39 @@ class Config(object):
                 weighters.append(btagweighter)
             self._cache[key] = weighters
             return weighters
+        elif key == "jet_uncertainty":
+            path = self._replace_special_vars(self._config[key])
+            evaluator = get_evaluator(path, "txt", "junc")
+            junc = coffea.jetmet_tools.JetCorrectionUncertainty(**evaluator)
+            self._cache[key] = junc
+            return junc
+        elif key == "jet_resolution":
+            path = self._replace_special_vars(self._config[key])
+            evaluator = get_evaluator(path, "txt", "jr")
+            jer = coffea.jetmet_tools.JetResolution(**evaluator)
+            self._cache[key] = jer
+            return jer
+        elif key == "jet_ressf":
+            path = self._replace_special_vars(self._config[key])
+            evaluator = get_evaluator(path, "txt", "jersf")
+            jersf = coffea.jetmet_tools.JetResolutionScaleFactor(**evaluator)
+            self._cache[key] = jersf
+            return jersf
         elif key == "mc_lumifactors":
-            factors = self._config[key]
-            if isinstance(factors, str):
-                with open(factors) as f:
-                    factors = json.load(f)
+            factors = self._get_maybe_external(key)
             if not isinstance(factors, dict):
                 raise ConfigError("mc_lumifactors must eiter be dict or a path"
                                   " to JSON file containing a dict")
             self._cache[key] = factors
             return factors
+        elif key == "crosssection_uncertainty":
+            uncerts = self._get_maybe_external(key)
+            if not isinstance(uncerts, dict):
+                raise ConfigError("crosssection_uncertainty must eiter be "
+                                  "dict or a path to JSON file containing a "
+                                  "dict")
+            self._cache[key] = uncerts
+            return uncerts
         elif key in ("genhist_path", "store", "lumimask", "mc_lumifactors"):
             self._cache[key] = self._get_path(key)
             return self._cache[key]

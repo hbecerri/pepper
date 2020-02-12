@@ -30,6 +30,8 @@
 	    "$DATADIR/scale_factors/deepjet_medium_efficiency.root"
 	]
     ],
+    "jet_resolution": "$DATADIR/scale_factors/Autumn18_V7b_MC_PtResolution_AK4PFchs.txt",
+    "jet_ressf": "$DATADIR/scale_factors/Autumn18_V7b_MC_SF_AK4PFchs.txt",
     "exp_datasets": {
         "MuonEG": [
             "/MuonEG/Run2018A-Nano1June2019-v1/NANOAOD",
@@ -238,5 +240,8 @@
     "jet_pt_num_satisfied": 2,
     "btag": "deepjet:medium",
     "num_atleast_btagged": 1,
-    "ee/mm_min_met": 40
+    "ee/mm_min_met": 40,
+
+    "compute_systematics": false,
+    "crosssection_uncertainty": "$DATADIR/2018ttbar_xsunc.json"
 }

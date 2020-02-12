@@ -97,8 +97,8 @@ if args.condor is not None:
                     " \"CentOS7\")")
     # Need to unset PYTHONPATH because of cmssw setting it incorrectly
     # Need to put own directory into PYTHONPATH for unpickling processor to
-    # work. Should be unncessecary, one this we have correct module structure
-    # Need to extend PATH to be able to execute the main parsle script
+    # work. Should be unncessecary, once we have correct module structure.
+    # Need to extend PATH to be able to execute the main parsl script
     condor_init = """
 source /cvmfs/cms.cern.ch/cmsset_default.sh
 if lsb_release -r | grep -q 7\\.; then
@@ -125,13 +125,13 @@ export PATH=~/.local/bin:$PATH
     )
     parsl_config = parsl.config.Config(
         executors=[parsl_executor],
-        retries=100,
+        retries=100000,
     )
 
     # Load config now instead of putting it into executor_args to be able to
     # use the same jobs for preprocessing and processing
     parsl.load(parsl_config)
-    executor_args = {"tailtimeout": None}
+    executor_args = {}
 else:
     executor = coffea.processor.iterative_executor
     executor_args = {}
