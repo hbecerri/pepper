@@ -1,3 +1,6 @@
+from collections import defaultdict
+import os
+
 from coffea import hist
 from coffea.analysis_objects import JaggedCandidateArray as JCA
 from coffea.util import awkward, numpy
@@ -16,9 +19,8 @@ from parsl.addresses import address_by_hostname
 from parsl.channels import LocalChannel
 import h5py
 import mplhep
-
-from collections import defaultdict
-import os
+from cycler import cycler
+import json
 
 import utils.config as config_utils
 import utils.datasets as dataset_utils
@@ -26,134 +28,233 @@ from processor import Processor
 
 matplotlib.interactive(True)
 
-wrk_init = """
-export PATH=/afs/desy.de/user/s/stafford/.local/bin:$PATH
-export PYTHONPATH=\
-/afs/desy.de/user/s/stafford/.local/lib/python3.6/site-packages:$PYTHONPATH
-export PYTHONPATH=\
-/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea:$PYTHONPATH
-"""
+def read_hist(hist_name, hist_file, dsnames, x_label=None):
+    if x_label == None:
+        x_label = hist_name
+    hf = uproot.open(hist_file)
+    dataset_axis = coffea.hist.Cat("dataset", "")
+    h = hf[dsnames[0] + "_" + hist_name]
+    main_axis = coffea.hist.Bin("vals", x_label, h.numbins, h.low, h.high)
+    hist = coffea.hist.Hist(h.title.decode("utf-8"), dataset_axis, main_axis)
+    for dsname in dsnames:
+        h = hf[dsname + "_" + hist_name]
+        vals = (h.edges[:-1]+h.edges[1:])/2
+        hist.fill(dataset=dsname, vals=vals, weight=h.values)
+        key = (dataset_axis.index(dsname),)
+        #hist._sumw[key] = h.allvalues
+        #hist._init_sumw2()
+        hist._sumw2[key][:-1] = numpy.array(
+                h._fSumw2,
+                dtype=getattr(h._fSumw2, "_dtype", numpy.dtype(numpy.float64)).newbyteorder("=")
+            )
+    return hist
 
-nproc = 1
-condor_cfg = """
-Requirements = OpSysAndVer == "CentOS7"
-RequestMemory = %d
-RequestCores = %d
-""" % (2048*nproc, nproc)
+def plot_data_mc(hists, data, sigs=[], sig_scaling=1, labels=None, colours=None, axis=None):
+    if colours is not None:
+        colours=colours.copy()
+    if labels is not None:
+        labelsset = list(set(labels.values()))
+        labelmap = defaultdict(list)
+        for key, val in labels.items():
+            labelmap[val].append(key)
+        sortedlabels = sorted(labelsset, key=(
+            lambda x: sum([(hists.integrate("vals")).values()[(y,)]
+                            for y in labelmap[x]])))
+        for key in sortedlabels:
+            labelmap[key] = labelmap.pop(key)
+            if colours is not None:
+                colours[key] = colours.pop(key)
 
-parsl_config = Config(
-        executors=[HighThroughputExecutor(label="HTCondor",
-                   address=address_by_hostname(),
-                   prefetch_capacity=0,
-                   cores_per_worker=1,
-                   max_workers=nproc,
-                   provider=CondorProvider(
-                        channel=LocalChannel(),
-                        init_blocks=10,
-                        min_blocks=5,
-                        max_blocks=1000,
-                        nodes_per_block=1,
-                        parallelism=1,
-                        scheduler_options=condor_cfg,
-                        worker_init=wrk_init))],
-        lazy_errors=False
-)
-dfk = load(parsl_config)
+        labels_axis = hist.Cat("labels", "", sorting="placement")
+        hists = hists.group("dataset", labels_axis, labelmap)
+# Note hists are currently only ordered by integral if labels is specified -might want to change this
+        axis = labels_axis
+    if axis is None:
+        raise ValueError("One of labels and axis must be specified")
+    bkgd_hist = hists.remove((sigs+[data]), axis)
+    fig, (ax, rax) = plt.subplots(2, 1, figsize=(7,7), gridspec_kw={"height_ratios": (3, 1)}, sharex=True)
+    fig.subplots_adjust(hspace=0)
+    sig_colours={}
+    if colours is not None:
+        for sig in sigs:
+            sig_colours[sig] = colours.pop(sig)
+        colours.pop(data)
+        ax.set_prop_cycle(cycler(color=list(colours.values())[::-1]))
+    fill_opts = {
+        'edgecolor': (0,0,0,0.3),
+        'alpha': 0.8
+    }
+    err_opts = {
+        'label':'Stat. Unc.',
+        'hatch':'///',
+        'facecolor':'none',
+        'edgecolor':(0,0,0,.5),
+        'linewidth': 0
+    }
+    hist.plot1d(bkgd_hist, overlay=axis, stack=True,
+                ax=ax, clear=False, fill_opts=fill_opts, error_opts=err_opts)
+    bkgdh = bkgd_hist.sum(axis)
+    for sig in sigs:
+        if len(list(sig_colours.values()))>0:
+            err_opts = {'color':sig_colours[sig]}
+        else:
+            err_opts = {}
+        sig_hist = hists[sig].copy()
+        sig_hist = sig_hist.sum(axis)
+        sig_hist.scale(sig_scaling)
+        sig_hist.add(bkgdh)
+        hist.plot1d(sig_hist,
+                    ax=ax,
+                    clear=False,
+                    error_opts=err_opts)
+    data_err_opts = {
+        'linestyle':'none',
+        'marker': '.',
+        'markersize': 10.,
+        'color':'k',
+        'elinewidth': 1,
+    }
+    hist.plot1d(
+        hists.integrate(axis, [data]),
+        ax=ax,
+        clear=False,
+        error_opts=data_err_opts)
+    hist.plotratio(hists.integrate(axis, [data]),
+                   bkgdh,
+                   ax=rax,
+                   error_opts=data_err_opts,
+                   denom_fill_opts={},
+                   guide_opts={},
+                   unc='num')
+    rax.set_ylabel('Ratio')
+    rax.set_ylim(0,2)
+
+def plot_cps(hist_file, plot_name, lumifactors, read_kwargs, plot_kwargs, show=False, save_dir=None):
+    cuts = set()
+    hf = uproot.open(hist_file)
+    for hist_name in hf.keys():
+        hist_name, _ = hist_name.decode("utf-8").split(";")
+        if len(hist_name.split("_")) == 3:
+            dataset, cut, plot = hist_name.split("_")
+            if plot == plot_name:
+                cuts.add(cut)
+    for cut in cuts:
+        plot = read_hist(cut + "_" + plot_name, hist_file, **read_kwargs)
+        plot.scale(lumifactors, axis="dataset")
+        plot_data_mc(plot, **plot_kwargs)
+        if show:
+            plt.show(block=True)
+        if save_dir is not None:
+            plt.savefig(os.path.join(save_dir, cut + "_" + plot_name + ".pdf"))
+        plt.clf()
 
 config = config_utils.Config("example/config.json")
 store = config["store"]
-fileset, _ = dataset_utils.expand_datasetdict(config["mc_datasets"], store)
-smallfileset, _ = \
-    dataset_utils.expand_datasetdict(config["testdataset"], store)
-destdir = \
-    "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
-"""output = coffea.processor.run_uproot_job(
-    smallfileset,
-    treename="Events",
-    processor_instance=Processor(config, "selected_columns"),
-    executor=coffea.processor.iterative_executor,
-    executor_args={"workers": 4},
-    chunksize=100000)
-"""
-output = coffea.processor.run_uproot_job(
-    smallfileset,
-    treename="Events",
-    processor_instance=Processor(config, destdir),
-    executor=parsl_executor,
-    executor_args={"tailtimeout": None},
-    chunksize=500000)
-
+mc_fileset, _ = dataset_utils.expand_datasetdict(config["mc_datasets"], store)
+data_fileset, _ = dataset_utils.expand_datasetdict(config["exp_datasets"], store)
+data_fileset.update(mc_fileset)
+fileset = data_fileset
 plot_config = config_utils.Config("example/plot_config.json")
 labels = plot_config["labels"]
 colours = plot_config["colours"]
 xsecs = plot_config["cross-sections"]
 
-# plt.style.use(mplhep.cms.style.ROOT)
+with open("cutflows.json", "r") as cutfile:
+    cutflows=json.load(cutfile)
+    cutvalues = dict((k, np.zeros(
+        len(cutflows["cutflow: "]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"])))
+        for k in set(labels.values()))
+    cuteffs = dict((k, np.zeros(len(
+        cutflows["cutflow: "]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]) - 1))
+        for k in set(labels.values()))
+    # currently assumes one always runs over a dilepton sample-
+    # might be nice to relax this
+    lumifactors = defaultdict(int)
+    for dataset in fileset.keys():
+        cutvals = np.array(list(cutflows["cutflow: "][dataset].values()))
+        if len(cutvals) == 0:
+            eff = 0
+            lumifactors[dataset] = 0
+        else:
+            eff = cutvals[-1]/cutvals[0]
+            if dataset in mc_fileset.keys():
+                lumifactors[dataset] = 0.333358160 * xsecs[dataset]/cutvals[0] #59.688059536
+            else:
+                lumifactors[dataset] = 1
+        print(dataset, "efficiency:", eff*100)
+        if len(cutvals > 0):
+            cutvalues[labels[dataset]] += cutvals
 
-cutvalues = dict((k, np.zeros(
-    len(output["cutflow"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"])))
-    for k in set(labels.values()))
-cuteffs = dict((k, np.zeros(len(
-    output["cutflow"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]) - 1))
-    for k in set(labels.values()))
-# currently assumes one always runs over a dilepton sample-
-# might be nice to relax this
-lumifactors = defaultdict(int)
-for dataset in fileset.keys():
-    cutvals = np.array(list(output["cutflow"][dataset].values()))
-    if len(cutvals) == 0:
-        eff = 0
-        lumifactors[dataset] = 0
-    else:
-        eff = cutvals[-1]/cutvals[0]
-        lumifactors[dataset] = 0.05 * xsecs[dataset]/cutvals[0]
-    print(dataset, "efficiency:", eff*100)
-    if len(cutvals > 0):
-        cutvalues[labels[dataset]] += cutvals
+    labelsset = list(set(labels.values()))
+    nlabels = len(labelsset)
+    ax = plt.gca()
+    for n, label in enumerate(labelsset):
+        cuteffs[label] = 100*cutvalues[label][1:]/cutvalues[label][:-1]
+        ax.bar(np.arange(len(cuteffs[label])) + (2*n-nlabels)*0.4/nlabels,
+               cuteffs[label], 0.8/nlabels, label=label, color=colours[label])
 
-labelsset = list(set(labels.values()))
-nlabels = len(labelsset)
-ax = plt.gca()
-for n, label in enumerate(labelsset):
-    cuteffs[label] = 100*cutvalues[label][1:]/cutvalues[label][:-1]
-    ax.bar(np.arange(len(cuteffs[label])) + (2*n-nlabels)*0.4/nlabels,
-           cuteffs[label], 0.8/nlabels, label=label, color=colours[label])
+    ax.set_xticks(np.arange(len(
+        cuteffs[labels["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]])))
+    ax.set_xticklabels(np.array(list(
+        (cutflows["cutflow: "]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]).keys()))[1:])
+    ax.set_ylabel("Efficiency")
 
-ax.set_xticks(np.arange(len(
-    cuteffs[labels["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]])))
-ax.set_xticklabels(np.array(list(
-    (output["cutflow"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]).keys()))[1:])
-ax.set_ylabel("Efficiency")
+    handles, labs = ax.get_legend_handles_labels()
+    # https://stackoverflow.com/questions/43348348/pyplot-legend-index-error-tuple-index-out-of-range
+    leghandles = []
+    leglabs = []
+    for i, h in enumerate(handles):
+        if len(h):
+            leghandles.append(h)
+            leglabs.append(labs[i])
+    ax.legend(leghandles, leglabs)
 
-handles, labs = ax.get_legend_handles_labels()
-# https://stackoverflow.com/questions/43348348/pyplot-legend-index-error-tuple-index-out-of-range
-leghandles = []
-leglabs = []
-for i, h in enumerate(handles):
-    if len(h):
-        leghandles.append(h)
-        leglabs.append(labs[i])
-ax.legend(leghandles, leglabs)
+    plt.show(block=True)
 
-plt.show(block=True)
+    plt.style.use(mplhep.cms.style.ROOT)
 
-output["Mttbar"].scale(lumifactors, axis="dataset")
-labelmap = defaultdict(list)
-for key, val in labels.items():
-    cutvals = np.array(list(output["cutflow"][key].values()))
-    if len(cutvals) > 0 and cutvals[-1] > 0:
-        labelmap[val].append(key)
+    MET_hist = read_hist("MET", "out_hists/out_hists.root", list(fileset.keys()), "MET (GeV)")
+    MET_hist.scale(lumifactors, axis="dataset")
+    
+    names_axis = hist.Cat("names", "")
 
-sortedlabels = sorted(labelsset, key=(
-    lambda x: sum([(output["Mttbar"].integrate("Mttbar")).values()[(y,)]
+    lim_MET = MET_hist.group("dataset", names_axis, plot_config["process_names"])
+    fout = uproot.recreate(os.path.join(plot_config["limit_hist_dir"], "MET_hists.root"))
+    for proc in plot_config["process_names"].keys():
+        proc_MET = lim_MET.integrate("names", [proc])
+        if len(proc_MET.values().values())>0:
+            fout[proc] = coffea.hist.export1d(proc_MET)
+    fout.close()
+
+    labelmap = defaultdict(list)
+    for key, val in labels.items():
+        cutvals = np.array(list(cutflows["cutflow: "][key].values()))
+        if len(cutvals) > 0 and cutvals[-1] > 0:
+            labelmap[val].append(key)
+
+    sortedlabels = sorted(labelsset, key=(
+        lambda x: sum([(MET_hist.integrate("vals")).values()[(y,)]
                   for y in labelmap[x]])))
-for key in sortedlabels:
-    labelmap[key] = labelmap.pop(key)
-    colours[key] = colours.pop(key)
+    for key in sortedlabels:
+        labelmap[key] = labelmap.pop(key)
+        colours[key] = colours.pop(key)
 
-labels_axis = hist.Cat("labels", "", sorting="placement")
-mttbar = output["Mttbar"].group("dataset", labels_axis, labelmap)
+    labels_axis = hist.Cat("labels", "", sorting="placement")
+    
+    MET = MET_hist.group("dataset", labels_axis, labelmap)
+    plot_data_mc(MET, "Data", ["DM Chi1 PS100 x100", "DM Chi1 S100 x100"], 100, None, colours, "labels")
+    plt.savefig(os.path.join(plot_config["hist_dir"], "MET.pdf"))
+    plt.show(block=True)
+    plt.clf()
 
-ax = hist.plot1d(mttbar, overlay="labels", stack=True)
-
-plt.show(block=True)
+    plot_cps("out_hists/out_hists.root",
+             "MET",
+             lumifactors,
+             {"dsnames": list(fileset.keys()), "x_label": "MET (GeV)"}, 
+             {"data": "Data",
+              "sigs": ["DM Chi1 PS100 x100", "DM Chi1 S100 x100"],
+              "sig_scaling": 100,
+              "labels": labels,
+              "colours": colours},
+             False,
+             plot_config["hist_dir"])
