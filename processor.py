@@ -283,7 +283,8 @@ class Selector(object):
 
 
 class Processor(processor.ProcessorABC):
-    def __init__(self, config, destdir, selector_hist_set=None, reco_hist_set=None):
+    def __init__(self, config, destdir,
+                 selector_hist_set=None, reco_hist_set=None):
         """Create a new Processor
 
         Arguments:
@@ -443,7 +444,8 @@ class Processor(processor.ProcessorABC):
                                               b=b, bbar=bbar,
                                               neutrino=neutrino,
                                               antineutrino=antineutrino,
-                                              weight=weight), is_mc, self.reco_hist_set)
+                                              weight=weight),
+                                is_mc, self.reco_hist_set)
         reco_objects.add_cut(self.passing_reco, "Reco")
         reco_objects.set_column(self.wminus, "Wminus")
         reco_objects.set_column(self.wplus, "Wplus")
