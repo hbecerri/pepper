@@ -39,7 +39,7 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
         for key, val in labels.items():
             labelmap[val].append(key)
         sortedlabels = sorted(labelsset, key=(
-            lambda x: sum([(hists.integrate("vals")).values()[(y,)]
+            lambda x: sum([(hists.integrate("MET")).values()[(y,)]
                            for y in labelmap[x]])))
         for key in sortedlabels:
             labelmap[key] = labelmap.pop(key)
@@ -117,7 +117,7 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
 def plot_cps(hist_set, plot_name, lumifactors, read_kwargs,
              plot_kwargs, show=False, save_dir=None):
     for key in hist_set.keys():
-        if len(key) == 2 & key[1] == plot_name:
+        if (len(key) == 2) & (key[1] == plot_name):
             plot = hist_set[key]
             plot.scale(lumifactors, axis="dataset")
             plot_data_mc(plot, **plot_kwargs)
@@ -141,18 +141,18 @@ labels = plot_config["labels"]
 colours = plot_config["colours"]
 xsecs = plot_config["cross-sections"]
 
-output = load("out_hists/output.coffea")
+output = coffea.util.load("out_hists/output.coffea")
 cutvalues = dict((k, np.zeros(
-    len(output["cutflow: "]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"])))
+    len(output["cutflow"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"])))
     for k in set(labels.values()))
 cuteffs = dict((k, np.zeros(len(
-    output["cutflow: "]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]) - 1))
+    output["cutflow"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]) - 1))
     for k in set(labels.values()))
 # currently assumes one always runs over a dilepton sample-
 # might be nice to relax this
 lumifactors = defaultdict(int)
 for dataset in fileset.keys():
-    cutvals = np.array(list(output["cutflow: "][dataset].values()))
+    cutvals = np.array(list(output["cutflow"][dataset].values()))
     if len(cutvals) == 0:
         eff = 0
         lumifactors[dataset] = 0
@@ -178,7 +178,7 @@ for n, label in enumerate(labelsset):
 ax.set_xticks(np.arange(len(
     cuteffs[labels["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]])))
 ax.set_xticklabels(np.array(list(
-    (output["cutflow: "]
+    (output["cutflow"]
         ["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]).keys()))[1:])
 ax.set_ylabel("Efficiency")
 
@@ -232,12 +232,12 @@ plt.savefig(os.path.join(plot_config["hist_dir"], "MET.pdf"))
 plt.show(block=True)
 plt.clf()'''
 
-plot_cps(output[selector_hists],
+plot_cps(output["Selector_hists"],
          "MET",
          lumifactors,
          {"dsnames": list(fileset.keys()), "x_label": "MET (GeV)"},
          {"data": "Data",
-          "sigs": ["DM Chi1 PS100 x100", "DM Chi1 S100 x100"],
+          "sigs": [],
           "sig_scaling": 100,
           "labels": labels,
           "colours": colours},
