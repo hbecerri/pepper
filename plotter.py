@@ -28,26 +28,6 @@ from processor import Processor
 
 matplotlib.interactive(True)
 
-def read_hist(hist_name, hist_file, dsnames, x_label=None):
-    if x_label == None:
-        x_label = hist_name
-    hf = uproot.open(hist_file)
-    dataset_axis = coffea.hist.Cat("dataset", "")
-    h = hf[dsnames[0] + "_" + hist_name]
-    main_axis = coffea.hist.Bin("vals", x_label, h.numbins, h.low, h.high)
-    hist = coffea.hist.Hist(h.title.decode("utf-8"), dataset_axis, main_axis)
-    for dsname in dsnames:
-        h = hf[dsname + "_" + hist_name]
-        vals = (h.edges[:-1]+h.edges[1:])/2
-        hist.fill(dataset=dsname, vals=vals, weight=h.values)
-        key = (dataset_axis.index(dsname),)
-        #hist._sumw[key] = h.allvalues
-        #hist._init_sumw2()
-        hist._sumw2[key][:-1] = numpy.array(
-                h._fSumw2,
-                dtype=getattr(h._fSumw2, "_dtype", numpy.dtype(numpy.float64)).newbyteorder("=")
-            )
-    return hist
 
 def plot_data_mc(hists, data, sigs=[], sig_scaling=1, labels=None, colours=None, axis=None):
     if colours is not None:
@@ -129,24 +109,17 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1, labels=None, colours=None,
     rax.set_ylabel('Ratio')
     rax.set_ylim(0,2)
 
-def plot_cps(hist_file, plot_name, lumifactors, read_kwargs, plot_kwargs, show=False, save_dir=None):
-    cuts = set()
-    hf = uproot.open(hist_file)
-    for hist_name in hf.keys():
-        hist_name, _ = hist_name.decode("utf-8").split(";")
-        if len(hist_name.split("_")) == 3:
-            dataset, cut, plot = hist_name.split("_")
-            if plot == plot_name:
-                cuts.add(cut)
-    for cut in cuts:
-        plot = read_hist(cut + "_" + plot_name, hist_file, **read_kwargs)
-        plot.scale(lumifactors, axis="dataset")
-        plot_data_mc(plot, **plot_kwargs)
-        if show:
-            plt.show(block=True)
-        if save_dir is not None:
-            plt.savefig(os.path.join(save_dir, cut + "_" + plot_name + ".pdf"))
-        plt.clf()
+def plot_cps(hist_set, plot_name, lumifactors, read_kwargs, plot_kwargs, show=False, save_dir=None):
+    for key in hist_set.keys():
+        if len(key) == 2 && key[1] == plot_name:
+            plot = hist_set[key]
+            plot.scale(lumifactors, axis="dataset")
+            plot_data_mc(plot, **plot_kwargs)
+            if show:
+                plt.show(block=True)
+            if save_dir is not None:
+                plt.savefig(os.path.join(save_dir, key[0] + "_" + plot_name + ".pdf"))
+            plt.clf()
 
 config = config_utils.Config("example/config.json")
 store = config["store"]
@@ -159,102 +132,101 @@ labels = plot_config["labels"]
 colours = plot_config["colours"]
 xsecs = plot_config["cross-sections"]
 
-with open("cutflows.json", "r") as cutfile:
-    cutflows=json.load(cutfile)
-    cutvalues = dict((k, np.zeros(
-        len(cutflows["cutflow: "]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"])))
-        for k in set(labels.values()))
-    cuteffs = dict((k, np.zeros(len(
-        cutflows["cutflow: "]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]) - 1))
-        for k in set(labels.values()))
-    # currently assumes one always runs over a dilepton sample-
-    # might be nice to relax this
-    lumifactors = defaultdict(int)
-    for dataset in fileset.keys():
-        cutvals = np.array(list(cutflows["cutflow: "][dataset].values()))
-        if len(cutvals) == 0:
-            eff = 0
-            lumifactors[dataset] = 0
+output = load("out_hists/output.coffea")
+cutvalues = dict((k, np.zeros(
+    len(output["cutflow: "]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"])))
+    for k in set(labels.values()))
+cuteffs = dict((k, np.zeros(len(
+    output["cutflow: "]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]) - 1))
+    for k in set(labels.values()))
+# currently assumes one always runs over a dilepton sample-
+# might be nice to relax this
+lumifactors = defaultdict(int)
+for dataset in fileset.keys():
+    cutvals = np.array(list(output["cutflow: "][dataset].values()))
+    if len(cutvals) == 0:
+        eff = 0
+        lumifactors[dataset] = 0
+    else:
+        eff = cutvals[-1]/cutvals[0]
+        if dataset in mc_fileset.keys():
+            lumifactors[dataset] = 0.333358160 * xsecs[dataset]/cutvals[0] #59.688059536
         else:
-            eff = cutvals[-1]/cutvals[0]
-            if dataset in mc_fileset.keys():
-                lumifactors[dataset] = 0.333358160 * xsecs[dataset]/cutvals[0] #59.688059536
-            else:
-                lumifactors[dataset] = 1
-        print(dataset, "efficiency:", eff*100)
-        if len(cutvals > 0):
-            cutvalues[labels[dataset]] += cutvals
+            lumifactors[dataset] = 1
+    print(dataset, "efficiency:", eff*100)
+    if len(cutvals > 0):
+        cutvalues[labels[dataset]] += cutvals
 
-    labelsset = list(set(labels.values()))
-    nlabels = len(labelsset)
-    ax = plt.gca()
-    for n, label in enumerate(labelsset):
-        cuteffs[label] = 100*cutvalues[label][1:]/cutvalues[label][:-1]
-        ax.bar(np.arange(len(cuteffs[label])) + (2*n-nlabels)*0.4/nlabels,
-               cuteffs[label], 0.8/nlabels, label=label, color=colours[label])
+labelsset = list(set(labels.values()))
+nlabels = len(labelsset)
+ax = plt.gca()
+for n, label in enumerate(labelsset):
+    cuteffs[label] = 100*cutvalues[label][1:]/cutvalues[label][:-1]
+    ax.bar(np.arange(len(cuteffs[label])) + (2*n-nlabels)*0.4/nlabels,
+           cuteffs[label], 0.8/nlabels, label=label, color=colours[label])
 
-    ax.set_xticks(np.arange(len(
-        cuteffs[labels["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]])))
-    ax.set_xticklabels(np.array(list(
-        (cutflows["cutflow: "]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]).keys()))[1:])
-    ax.set_ylabel("Efficiency")
+ax.set_xticks(np.arange(len(
+    cuteffs[labels["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]])))
+ax.set_xticklabels(np.array(list(
+    (output["cutflow: "]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]).keys()))[1:])
+ax.set_ylabel("Efficiency")
 
-    handles, labs = ax.get_legend_handles_labels()
-    # https://stackoverflow.com/questions/43348348/pyplot-legend-index-error-tuple-index-out-of-range
-    leghandles = []
-    leglabs = []
-    for i, h in enumerate(handles):
-        if len(h):
-            leghandles.append(h)
-            leglabs.append(labs[i])
-    ax.legend(leghandles, leglabs)
+handles, labs = ax.get_legend_handles_labels()
+# https://stackoverflow.com/questions/43348348/pyplot-legend-index-error-tuple-index-out-of-range
+leghandles = []
+leglabs = []
+for i, h in enumerate(handles):
+    if len(h):
+        leghandles.append(h)
+        leglabs.append(labs[i])
+ax.legend(leghandles, leglabs)
 
-    plt.show(block=True)
+plt.show(block=True)
 
-    plt.style.use(mplhep.cms.style.ROOT)
+plt.style.use(mplhep.cms.style.ROOT)
 
-    MET_hist = read_hist("MET", "out_hists/out_hists.root", list(fileset.keys()), "MET (GeV)")
-    MET_hist.scale(lumifactors, axis="dataset")
-    
-    names_axis = hist.Cat("names", "")
+'''MET_hist = output[
+MET_hist.scale(lumifactors, axis="dataset")
 
-    lim_MET = MET_hist.group("dataset", names_axis, plot_config["process_names"])
-    fout = uproot.recreate(os.path.join(plot_config["limit_hist_dir"], "MET_hists.root"))
-    for proc in plot_config["process_names"].keys():
-        proc_MET = lim_MET.integrate("names", [proc])
-        if len(proc_MET.values().values())>0:
-            fout[proc] = coffea.hist.export1d(proc_MET)
-    fout.close()
+names_axis = hist.Cat("names", "")
 
-    labelmap = defaultdict(list)
-    for key, val in labels.items():
-        cutvals = np.array(list(cutflows["cutflow: "][key].values()))
-        if len(cutvals) > 0 and cutvals[-1] > 0:
-            labelmap[val].append(key)
+lim_MET = MET_hist.group("dataset", names_axis, plot_config["process_names"])
+fout = uproot.recreate(os.path.join(plot_config["limit_hist_dir"], "MET_hists.root"))
+for proc in plot_config["process_names"].keys():
+    proc_MET = lim_MET.integrate("names", [proc])
+    if len(proc_MET.values().values())>0:
+        fout[proc] = coffea.hist.export1d(proc_MET)
+fout.close()
 
-    sortedlabels = sorted(labelsset, key=(
-        lambda x: sum([(MET_hist.integrate("vals")).values()[(y,)]
-                  for y in labelmap[x]])))
-    for key in sortedlabels:
-        labelmap[key] = labelmap.pop(key)
-        colours[key] = colours.pop(key)
+labelmap = defaultdict(list)
+for key, val in labels.items():
+    cutvals = np.array(list(output["cutflow: "][key].values()))
+    if len(cutvals) > 0 and cutvals[-1] > 0:
+        labelmap[val].append(key)
 
-    labels_axis = hist.Cat("labels", "", sorting="placement")
-    
-    MET = MET_hist.group("dataset", labels_axis, labelmap)
-    plot_data_mc(MET, "Data", ["DM Chi1 PS100 x100", "DM Chi1 S100 x100"], 100, None, colours, "labels")
-    plt.savefig(os.path.join(plot_config["hist_dir"], "MET.pdf"))
-    plt.show(block=True)
-    plt.clf()
+sortedlabels = sorted(labelsset, key=(
+    lambda x: sum([(MET_hist.integrate("vals")).values()[(y,)]
+              for y in labelmap[x]])))
+for key in sortedlabels:
+    labelmap[key] = labelmap.pop(key)
+    colours[key] = colours.pop(key)
 
-    plot_cps("out_hists/out_hists.root",
-             "MET",
-             lumifactors,
-             {"dsnames": list(fileset.keys()), "x_label": "MET (GeV)"}, 
-             {"data": "Data",
-              "sigs": ["DM Chi1 PS100 x100", "DM Chi1 S100 x100"],
-              "sig_scaling": 100,
-              "labels": labels,
-              "colours": colours},
-             False,
-             plot_config["hist_dir"])
+labels_axis = hist.Cat("labels", "", sorting="placement")
+
+MET = MET_hist.group("dataset", labels_axis, labelmap)
+plot_data_mc(MET, "Data", ["DM Chi1 PS100 x100", "DM Chi1 S100 x100"], 100, None, colours, "labels")
+plt.savefig(os.path.join(plot_config["hist_dir"], "MET.pdf"))
+plt.show(block=True)
+plt.clf()'''
+
+plot_cps(output[selector_hists],
+         "MET",
+         lumifactors,
+         {"dsnames": list(fileset.keys()), "x_label": "MET (GeV)"}, 
+         {"data": "Data",
+          "sigs": ["DM Chi1 PS100 x100", "DM Chi1 S100 x100"],
+          "sig_scaling": 100,
+          "labels": labels,
+          "colours": colours},
+         False,
+         plot_config["hist_dir"])

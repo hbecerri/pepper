@@ -28,17 +28,21 @@ from processor import Processor
 
 class hist_set():
     def __init__(self, hist_dict):
-        self.accumulator = processor.dict_accumulator({})
+        self.accumulator = coffea.processor.dict_accumulator({})
         self.hist_dict = hist_dict
         self.sys = []
-    
-    def fill(self, data, cut, dsname):
-        for hist, fill_func in self.hist_dict.items():
-            self.accumulator[(cut, hist)] = fill_func(data, dsname)
-            for sys in self.sys:
-                self.accumulator[(cut, hist, sys)] = fill_func(data, dsname, sys)
 
-def fill_MET(data, dsname):
+    def set_ds(self, dsname, is_mc):
+        self.dsname = dsname
+        self.is_mc =is_mc
+
+    def fill(self, data, cut):
+        for hist, fill_func in self.hist_dict.items():
+            self.accumulator[(cut, hist)] = fill_func(data, self.dsname, self.is_mc)
+            for sys in self.sys:
+                self.accumulator[(cut, hist, sys)] = fill_func(data, self.dsname, self.is_mc, sys)
+
+def fill_MET(data, dsname, is_mc):
     dataset_axis = hist.Cat("dataset", "")
     MET_axis = hist.Bin("MET", "MET [GeV]", 100, 0, 400)
     MET_hist = hist.Hist("Counts", dataset_axis, MET_axis)
@@ -48,7 +52,7 @@ def fill_MET(data, dsname):
         MET_hist.fill(dataset=dsname, MET=data["MET_pt"])
     return MET_hist
 
-def fill_Mll(data, dsname):
+def fill_Mll(data, dsname, is_mc):
     dataset_axis = hist.Cat("dataset", "")
     Mll_axis = hist.Bin("Mll", "Mll [GeV]", 100, 0, 400)
     Mll_hist = hist.Hist("Counts", dataset_axis, Mll_axis)
@@ -127,7 +131,7 @@ selector_hist_set = hist_set({"MET": fill_MET,
 """output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
-    processor_instance=Processor(config, "None"),
+    processor_instance=Processor(config, "None", selector_hist_set),
     executor=coffea.processor.iterative_executor,
     executor_args={"workers": 4},
     chunksize=100000)
@@ -135,28 +139,9 @@ selector_hist_set = hist_set({"MET": fill_MET,
 output = coffea.processor.run_uproot_job(
     fileset,
     treename="Events",
-    processor_instance=Processor(config, "None"),
+    processor_instance=Processor(config, "None", selector_hist_set),
     executor=parsl_executor,
     executor_args={"tailtimeout": None},
     chunksize=500000)
 
-with open("cutflows.json","w+") as cutflows:
-    json.dump({"cutflow: ": output["cutflow"],
-               "cutflow ee: ": output["cutflow_ee"],
-               "cutflow mumu: ": output["cutflow_mumu"],
-               "cutflow emu: ": output["cutflow_emu"]},
-              cutflows, cls=NpEncoder)
-
-fout = uproot.recreate("out_hists/out_hists.root")
-for plot_name, plot in output["plots"].items():
-    for proc in fileset.keys():
-        proc_plot = plot.integrate("dataset", [proc])
-        if len(proc_plot.values().values())>0:
-            fout[proc + "_" + plot_name] = coffea.hist.export1d(proc_plot)
-for cp_name, cp_dict in output["control_plots"].items():
-    for cut, plot in cp_dict.items():
-        for proc in fileset.keys():
-            proc_plot = plot.integrate("dataset", [proc])
-            if len(proc_plot.values().values())>0:
-                fout[proc + "_" + cut + "_" + cp_name] = coffea.hist.export1d(proc_plot)
-fout.close()
+coffea.util.save(output, "out_hists/output.coffea")

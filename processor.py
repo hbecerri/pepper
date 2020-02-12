@@ -180,7 +180,7 @@ class Selector(object):
         if not self._frozen:
             self._current_cuts.append(name)
         if self.hist_set is not None:
-            self.hist_set.fill(data, cut, dsname)
+            self.hist_set.fill(self.masked, name)
 
     def set_column(self, column, column_name):
         """Sets a column of the table
@@ -379,6 +379,10 @@ class Processor(processor.ProcessorABC):
         output = self.accumulator.identity()
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
+        if self.selector_hist_set is not None:
+            self.selector_hist_set.set_ds(dsname, is_mc)
+        if self.reco_hist_set is not None:
+            self.reco_hist_set.set_ds(dsname, is_mc)
         selector = Selector(LazyTable(df), is_mc, self.selector_hist_set)
 
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
@@ -452,8 +456,10 @@ class Processor(processor.ProcessorABC):
         m_wplus = reco_objects.masked["Wplus"][best].mass.content
         m_top = reco_objects.masked["top"][best].mass.content
 
-        output["Selector_hists"] = self.selector_hist_set.accumulator
-        output["Reco_hists"] = self.reco_hist_set.accumulator
+        if self.selector_hist_set is not None:
+            output["Selector_hists"] = self.selector_hist_set.accumulator
+        if self.reco_hist_set is not None:
+            output["Reco_hists"] = self.reco_hist_set.accumulator
         output["cutflow"][dsname] = selector.cutflow
 
         if self.destdir is not None:
