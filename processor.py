@@ -81,7 +81,7 @@ class LazyTable(object):
 class Selector(object):
     """Keeps track of the current event selection and data"""
 
-    def __init__(self, table, is_mc=False, hist_set=None):
+    def __init__(self, table, is_mc=False, on_cutdone=None):
         """Create a new Selector
 
         Arguments:
@@ -91,7 +91,7 @@ class Selector(object):
         self._cuts = PackedSelectionAccumulator()
         self._current_cuts = []
         self._frozen = False
-        self.hist_set = hist_set
+        self.on_cutdone = on_cutdone
 
         self._cutflow = processor.defaultdict_accumulator(int)
         if is_mc is True:
@@ -179,8 +179,8 @@ class Selector(object):
         self._add_cutflow(name)
         if not self._frozen:
             self._current_cuts.append(name)
-        if self.hist_set is not None:
-            self.hist_set.fill(self.masked, name)
+        if self.on_cutdone is not None:
+            self.on_cutdone(data=self.masked, cut=name)
 
     def set_column(self, column, column_name):
         """Sets a column of the table

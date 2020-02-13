@@ -36,7 +36,7 @@ class hist_set():
         self.dsname = dsname
         self.is_mc = is_mc
 
-    def fill(self, data, cut):
+    def __call__(self, data, cut):
         for hist, fill_func in self.hist_dict.items():
             self.accumulator[(cut, hist)] = \
                 fill_func(data, self.dsname, self.is_mc)
