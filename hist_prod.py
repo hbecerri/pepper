@@ -26,25 +26,6 @@ import utils.datasets as dataset_utils
 from processor import Processor
 
 
-class hist_set():
-    def __init__(self, hist_dict):
-        self.accumulator = coffea.processor.dict_accumulator({})
-        self.hist_dict = hist_dict
-        self.sys = []
-
-    def set_ds(self, dsname, is_mc):
-        self.dsname = dsname
-        self.is_mc = is_mc
-
-    def __call__(self, data, cut):
-        for hist, fill_func in self.hist_dict.items():
-            self.accumulator[(cut, hist)] = \
-                fill_func(data, self.dsname, self.is_mc)
-            for sys in self.sys:
-                self.accumulator[(cut, hist, sys)] = \
-                    fill_func(data, self.dsname, self.is_mc, sys)
-
-
 def fill_MET(data, dsname, is_mc):
     dataset_axis = hist.Cat("dataset", "")
     MET_axis = hist.Bin("MET", "MET [GeV]", 100, 0, 400)
@@ -135,8 +116,8 @@ smallfileset = {key: [val[0]] for key, val in fileset.items()}
 destdir = \
     "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
 
-selector_hist_set = hist_set({"MET": fill_MET,
-                              "Mll": fill_Mll})
+hist_dict = {"MET": fill_MET,
+             "Mll": fill_Mll}
 
 """output = coffea.processor.run_uproot_job(
     smallfileset,
@@ -149,7 +130,7 @@ selector_hist_set = hist_set({"MET": fill_MET,
 output = coffea.processor.run_uproot_job(
     fileset,
     treename="Events",
-    processor_instance=Processor(config, "None", selector_hist_set),
+    processor_instance=Processor(config, "None", hist_dict),
     executor=parsl_executor,
     executor_args={"tailtimeout": None},
     chunksize=500000)
