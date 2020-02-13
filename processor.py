@@ -284,7 +284,7 @@ class Selector(object):
 
 class Processor(processor.ProcessorABC):
     def __init__(self, config, destdir,
-                 selector_hist_set=None, reco_hist_set=None):
+                 sel_hists=None, reco_hists=None):
         """Create a new Processor
 
         Arguments:
@@ -295,8 +295,8 @@ class Processor(processor.ProcessorABC):
         """
         self.config = config
         self.destdir = destdir
-        self.selector_hist_set = selector_hist_set
-        self.reco_hist_set = reco_hist_set
+        self.sel_hists = sel_hists
+        self.reco_hists = reco_hists
 
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]
@@ -380,11 +380,8 @@ class Processor(processor.ProcessorABC):
         output = self.accumulator.identity()
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
-        if self.selector_hist_set is not None:
-            self.selector_hist_set.set_ds(dsname, is_mc)
-        if self.reco_hist_set is not None:
-            self.reco_hist_set.set_ds(dsname, is_mc)
-        selector = Selector(LazyTable(df), is_mc, self.selector_hist_set)
+        sel_cb = partial(self.fill_accumulator, self.sel_hists, output)
+        selector = Selector(LazyTable(df), is_mc, sel_cb)
 
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
@@ -440,12 +437,13 @@ class Processor(processor.ProcessorABC):
             weight = selector.final["weight"]
         else:
             weight = np.full(selector.final.size, 1.)
+        reco_cb = partial(self.fill_accumulator, self.reco_hists, output)
         reco_objects = Selector(awkward.Table(lep=lep, antilep=antilep,
                                               b=b, bbar=bbar,
                                               neutrino=neutrino,
                                               antineutrino=antineutrino,
                                               weight=weight),
-                                is_mc, self.reco_hist_set)
+                                is_mc, reco_cb)
         reco_objects.add_cut(self.passing_reco, "Reco")
         reco_objects.set_column(self.wminus, "Wminus")
         reco_objects.set_column(self.wplus, "Wplus")
@@ -468,6 +466,15 @@ class Processor(processor.ProcessorABC):
             self._save_per_event_info(dsname, selector, reco_objects)
 
         return output
+
+    def fill_accumulator(self, hist_dict, accumulator, is_mc, dsname, data,
+                         cut):
+        if hist_dict is None:
+            return
+        for histname, fill_func in hist_dict.items():
+            accumulator[(cut, histname)] = fill_func(data=data,
+                                                     dsname=dsname,
+                                                     is_mc=is_mc)
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
