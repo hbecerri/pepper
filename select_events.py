@@ -61,11 +61,9 @@ else:
         else:
             datasets[dataset[0]] = [dataset[1]]
 if args.skip_sysds:
-    sys_datasets = set()
-    for systematic, mapping in config["datasets_for_systematics"].items():
-        for orig, sysds in mapping.items():
-            if sysds in datasets:
-                del datasets[sysds]
+    for sysds in config["datasets_for_systematics"].keys():
+        if sysds in datasets:
+            del datasets[sysds]
 
 datasets, paths2dsname = expand_datasetdict(datasets, store)
 num_files = len(paths2dsname)
