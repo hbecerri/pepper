@@ -86,6 +86,8 @@ class Selector(object):
 
         Arguments:
         table -- An `awkward.Table` or `LazyTable` holding the events' data
+        is_mc -- A booling indicating if `table` is MC
+        on_cutdown -- callable that gets called after a cut is done (`add_cut`)
         """
         self.table = table
         self._cuts = PackedSelectionAccumulator()
@@ -292,6 +294,12 @@ class Processor(processor.ProcessorABC):
         destdir -- Destination directory, where the event HDF5s are saved.
                    Every chunk will be saved in its own file. If `None`,
                    nothing will be saved.
+        sel_hists -- A dictionary of histogram names (strings) to callables.
+                     The callable should be in form of
+                     `f(data, dsname, is_mc)`, should create a new Hist, fill
+                     it if possible and return it.
+        reco_hists -- Same as `sel_hists`, with the difference that the
+                      callables get caleld after the reconstruction.
         """
         self.config = config
         self.destdir = destdir
