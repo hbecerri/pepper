@@ -382,7 +382,11 @@ class Processor(processor.ProcessorABC):
         output = self.accumulator.identity()
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
-        sel_cb = partial(self.fill_accumulator, hist_dict=self.sel_hists, accumulator=output["sel_hists"], is_mc=is_mc, dsname=dsname)
+        sel_cb = partial(self.fill_accumulator,
+                         hist_dict=self.sel_hists,
+                         accumulator=output["sel_hists"],
+                         is_mc=is_mc,
+                         dsname=dsname)
         selector = Selector(LazyTable(df), is_mc, sel_cb)
 
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
@@ -439,7 +443,11 @@ class Processor(processor.ProcessorABC):
             weight = selector.final["weight"]
         else:
             weight = np.full(selector.final.size, 1.)
-        reco_cb = partial(self.fill_accumulator, hist_dict=self.reco_hists, accumulator=output["reco_hists"], is_mc=is_mc, dsname=dsname)
+        reco_cb = partial(self.fill_accumulator,
+                          hist_dict=self.reco_hists,
+                          accumulator=output["reco_hists"],
+                          is_mc=is_mc,
+                          dsname=dsname)
         reco_objects = Selector(awkward.Table(lep=lep, antilep=antilep,
                                               b=b, bbar=bbar,
                                               neutrino=neutrino,
