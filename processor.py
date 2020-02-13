@@ -295,8 +295,8 @@ class Processor(processor.ProcessorABC):
         """
         self.config = config
         self.destdir = destdir
-        self.sel_hists = sel_hists
-        self.reco_hists = reco_hists
+        self.sel_hists = sel_hists if sel_hists is not None else {}
+        self.reco_hists = reco_hists if reco_hists is not None else {}
 
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]
@@ -475,8 +475,6 @@ class Processor(processor.ProcessorABC):
 
     def fill_accumulator(self, hist_dict, accumulator, is_mc, dsname, data,
                          cut):
-        if hist_dict is None:
-            return
         for histname, fill_func in hist_dict.items():
             accumulator[(cut, histname)] = fill_func(data=data,
                                                      dsname=dsname,
