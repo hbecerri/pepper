@@ -339,6 +339,8 @@ class Processor(processor.ProcessorABC):
     @property
     def accumulator(self):
         self._accumulator = processor.dict_accumulator({
+            "sel_hists": processor.dict_accumulator(),
+            "reco_hists": processor.dict_accumulator(),
             "cutflow": processor.defaultdict_accumulator(
                 partial(processor.defaultdict_accumulator, int)),
         })
@@ -380,7 +382,7 @@ class Processor(processor.ProcessorABC):
         output = self.accumulator.identity()
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
-        sel_cb = partial(self.fill_accumulator, self.sel_hists, output)
+        sel_cb = partial(self.fill_accumulator, hist_dict=self.sel_hists, accumulator=output["sel_hists"], is_mc=is_mc, dsname=dsname)
         selector = Selector(LazyTable(df), is_mc, sel_cb)
 
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
@@ -437,7 +439,7 @@ class Processor(processor.ProcessorABC):
             weight = selector.final["weight"]
         else:
             weight = np.full(selector.final.size, 1.)
-        reco_cb = partial(self.fill_accumulator, self.reco_hists, output)
+        reco_cb = partial(self.fill_accumulator, hist_dict=self.reco_hists, accumulator=output["reco_hists"], is_mc=is_mc, dsname=dsname)
         reco_objects = Selector(awkward.Table(lep=lep, antilep=antilep,
                                               b=b, bbar=bbar,
                                               neutrino=neutrino,
@@ -456,10 +458,6 @@ class Processor(processor.ProcessorABC):
         m_wplus = reco_objects.masked["Wplus"][best].mass.content
         m_top = reco_objects.masked["top"][best].mass.content
 
-        if self.selector_hist_set is not None:
-            output["Selector_hists"] = self.selector_hist_set.accumulator
-        if self.reco_hist_set is not None:
-            output["Reco_hists"] = self.reco_hist_set.accumulator
         output["cutflow"][dsname] = selector.cutflow
 
         if self.destdir is not None:
