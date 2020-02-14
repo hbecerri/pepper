@@ -386,6 +386,7 @@ class Processor(processor.ProcessorABC):
             self.reco_hist_set.set_ds(dsname, is_mc)
         selector = Selector(LazyTable(df), is_mc, self.selector_hist_set)
 
+        selector.add_cut(partial(self.blinding, is_mc), "Blinding")
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
         pos_triggers, neg_triggers = utils.misc.get_trigger_paths_for(
@@ -468,6 +469,12 @@ class Processor(processor.ProcessorABC):
             self._save_per_event_info(dsname, selector, reco_objects)
 
         return output
+
+    def blinding(self, is_mc, data):
+        if (~is_mc) and self.config["blinding_denom"] is not None:
+            return np.where(np.mod(data["event"], self.config["blinding_denom"]) == 0, True, False)
+        else:
+            return np.full(len(data["event"]), True)
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
