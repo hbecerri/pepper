@@ -57,6 +57,7 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
     fig, (ax, rax) = plt.subplots(2, 1, figsize=(7, 7),
                                   gridspec_kw={"height_ratios": (3, 1)},
                                   sharex=True)
+    ax = hep.cms.cmslabel(ax, data=False, paper=False, year='2018')
     fig.subplots_adjust(hspace=0)
     sig_colours = {}
     if colours is not None:
@@ -80,17 +81,19 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
     bkgdh = bkgd_hist.sum(axis)
     for sig in sigs:
         if len(list(sig_colours.values())) > 0:
-            err_opts = {'color': sig_colours[sig]}
+            err_opts = {'color': sig_colours[sig],
+                        'linestyle': '-'}
         else:
-            err_opts = {}
+            err_opts = {'linestyle': '-'}
         sig_hist = hists[sig].copy()
-        sig_hist = sig_hist.sum(axis)
+        #sig_hist = sig_hist.sum(axis)
         sig_hist.scale(sig_scaling)
-        sig_hist.add(bkgdh)
+        #sig_hist.add(bkgdh)
         hist.plot1d(sig_hist,
                     ax=ax,
                     clear=False,
-                    error_opts=err_opts)
+                    error_opts=err_opts,
+                    overlay=axis)
     data_err_opts = {
         'linestyle': 'none',
         'marker': '.',
@@ -99,10 +102,11 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
         'elinewidth': 1,
     }
     hist.plot1d(
-        hists.integrate(axis, [data]),
+        hists[data],
         ax=ax,
         clear=False,
-        error_opts=data_err_opts)
+        error_opts=data_err_opts,
+        overlay=axis)
     hist.plotratio(hists.integrate(axis, [data]),
                    bkgdh,
                    ax=rax,
@@ -128,6 +132,24 @@ def plot_cps(hist_set, plot_name, lumifactors, read_kwargs,
                     save_dir, key[0] + "_" + plot_name + ".pdf"))
             plt.clf()
 
+
+def plot_channels(hist_set, plot_name, lumifactors, read_kwargs,
+                  plot_kwargs, show=False, save_dir=None):
+    for key in hist_set.keys():
+        if (len(key) == 2) & (key[1] == plot_name):
+            plot = hist_set[key]
+            if len(plot.axes()) == 3:
+                for ch in ["ee", "emu", "mumu"]:
+                    plot = plot[ch].sum(channel)
+                    plot.scale(lumifactors, axis="dataset")
+                    plot_data_mc(plot, **plot_kwargs)
+                    if show:
+                        plt.show(block=True)
+                    if save_dir is not None:
+                        plt.savefig(os.path.join(
+                            save_dir, key[0] + "_" + plot_name +
+                            "_" + ch + ".pdf"))
+                    plt.clf()
 
 config = config_utils.Config("example/config.json")
 store = config["store"]
@@ -232,7 +254,7 @@ plt.savefig(os.path.join(plot_config["hist_dir"], "MET.pdf"))
 plt.show(block=True)
 plt.clf()'''
 
-plot_cps(output["Selector_hists"],
+plot__channels(output["Selector_hists"],
          "MET",
          lumifactors,
          {"dsnames": list(fileset.keys()), "x_label": "MET (GeV)"},

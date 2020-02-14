@@ -4,7 +4,7 @@
     "store": "/pnfs/desy.de/cms/tier2/store",
     "genhist_path": "$DATADIR/GenHists.root",
     "lumimask": "/afs/cern.ch/cms/CAF/CMSCOMM/COMM_DQM/certification/Collisions18/13TeV/PromptReco/Cert_314472-325175_13TeV_PromptReco_Collisions18_JSON.txt",
-    "blinding_denom": None,
+    "blinding_denom": null,
     "electron_sf": [
         [
             "$DATADIR/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root",
@@ -152,31 +152,55 @@
             "/TTTo2L2Nu_mtop171p5_TuneCP5_13TeV-powheg-pythia8/RunIIAutumn18NanoAODv5-Nano1June2019_102X_upgrade2018_realistic_v19-v1/NANOAODSIM"
         ]
     },
-    "datasets_for_systematics": {
-        "hdamp_up": {
-            "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8": "TTToSemiLeptonic_hdampUP_TuneCP5_13TeV-powheg-pythia8",
-            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8": "TTTo2L2Nu_hdampUP_TuneCP5_13TeV-powheg-pythia8",
-        },
-        "hdamp_down": {
-            "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8": "TTToSemiLeptonic_hdampDOWN_TuneCP5_13TeV-powheg-pythia8",
-            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8": "TTTo2L2Nu_hdampDOWN_TuneCP5_13TeV-powheg-pythia8",
-        },
-        "tune_up": {
-            "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8": "TTToSemiLeptonic_TuneCP5up_13TeV-powheg-pythia8",
-            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8": "TTTo2L2Nu_TuneCP5up_13TeV-powheg-pythia8",
-        },
-        "tune_down": {
-            "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8": "TTToSemiLeptonic_TuneCP5down_13TeV-powheg-pythia8",
-            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8": "TTTo2L2Nu_TuneCP5down_13TeV-powheg-pythia8",
-        },
-        "tmass_up": {
-            "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8": "TTToSemiLeptonic_mtop173p5_TuneCP5_13TeV-powheg-pythia8",
-            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8": "TTTo2L2Nu_mtop173p5_TuneCP5_13TeV-powheg-pythia8",
-        },
-        "tmass_down": {
-            "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8": "TTToSemiLeptonic_mtop171p5_TuneCP5_13TeV-powheg-pythia8",
-            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8": "TTTo2L2Nu_mtop171p5_TuneCP5_13TeV-powheg-pythia8",
-        }
+    "dataset_for_systematics": {
+        "TTToSemiLeptonic_hdampUP_TuneCP5_13TeV-powheg-pythia8": [
+            "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8",
+            "hdamp_up"
+        ],
+        "TTToSemiLeptonic_hdampDOWN_TuneCP5_13TeV-powheg-pythia8": [
+            "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8",
+            "hdamp_down"
+        ],
+        "TTTo2L2Nu_hdampUP_TuneCP5_13TeV-powheg-pythia8": [
+            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8",
+            "hdamp_up"
+        ],
+        "TTTo2L2Nu_hdampDOWN_TuneCP5_13TeV-powheg-pythia8": [
+            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8",
+            "hdamp_down"
+        ],
+        "TTToSemiLeptonic_TuneCP5up_13TeV-powheg-pythia8": [
+            "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8",
+            "tune_up"
+        ],
+        "TTToSemiLeptonic_TuneCP5down_13TeV-powheg-pythia8": [
+            "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8",
+            "tune_down"
+        ],
+        "TTTo2L2Nu_TuneCP5up_13TeV-powheg-pythia8": [
+            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8",
+            "tune_up"
+        ],
+        "TTTo2L2Nu_TuneCP5down_13TeV-powheg-pythia8": [
+            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8",
+            "tune_down"
+        ],
+        "TTToSemiLeptonic_mtop173p5_TuneCP5_13TeV-powheg-pythia8": [
+            "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8",
+            "tmass_up"
+        ],
+        "TTToSemiLeptonic_mtop171p5_TuneCP5_13TeV-powheg-pythia8": [
+            "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8",
+            "ttmass_down"
+        ],
+        "TTTo2L2Nu_mtop173p5_TuneCP5_13TeV-powheg-pythia8": [
+            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8",
+            "tmass_up"
+        ],
+        "TTTo2L2Nu_mtop171p5_TuneCP5_13TeV-powheg-pythia8": [
+            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8",
+            "tmass_down"
+        ]
     },
     "testdataset": {
         "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8":

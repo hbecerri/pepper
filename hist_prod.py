@@ -26,35 +26,46 @@ import utils.datasets as dataset_utils
 from processor import Processor
 
 
-class hist_set():
-    def __init__(self, hist_dict):
-        self.accumulator = coffea.processor.dict_accumulator({})
-        self.hist_dict = hist_dict
-        self.sys = []
-
-    def set_ds(self, dsname, is_mc):
-        self.dsname = dsname
-        self.is_mc = is_mc
-
-    def fill(self, data, cut):
-        for hist, fill_func in self.hist_dict.items():
-            self.accumulator[(cut, hist)] = \
-                fill_func(data, self.dsname, self.is_mc)
-            for sys in self.sys:
-                self.accumulator[(cut, hist, sys)] = \
-                    fill_func(data, self.dsname, self.is_mc, sys)
-
-
 def fill_MET(data, dsname, is_mc):
     dataset_axis = hist.Cat("dataset", "")
     MET_axis = hist.Bin("MET", "MET [GeV]", 100, 0, 400)
-    MET_hist = hist.Hist("Counts", dataset_axis, MET_axis)
-    if is_mc:
-        MET_hist.fill(dataset=dsname, MET=data["MET_pt"],
-                      weight=data["genWeight"])
+    if "Lepton" in data:
+        channel_axis =  hist.Cat("channel", "")
+        MET_hist = hist.Hist("Counts", dataset_axis, channel_axis, MET_axis)
+        if is_mc:
+            for ch, vals in channel(data["Lepton"]).items():
+                MET_hist.fill(dataset=dsname, channel=ch, MET=data["MET_pt"][vals],
+                              weight=data["genWeight"][vals])
+        else:
+            for ch, vals in channel(data["Lepton"]).items():
+                MET_hist.fill(dataset=dsname, channel=ch, MET=data["MET_pt"][vals])
     else:
-        MET_hist.fill(dataset=dsname, MET=data["MET_pt"])
+        MET_hist = hist.Hist("Counts", dataset_axis, MET_axis)
+        if is_mc:
+            MET_hist.fill(dataset=dsname, MET=data["MET_pt"],
+                          weight=data["genWeight"])
+        else:
+            MET_hist.fill(dataset=dsname, MET=data["MET_pt"])
     return MET_hist
+
+
+def channel(leps):
+    ch = {}
+    ch["None"] = leps.counts<2
+    twoleps = leps[leps.counts>1]
+    ee = ((np.abs(twoleps[:, 0].pdgId) == 11) & (np.abs(twoleps[:, 1].pdgId) == 11))
+    ee_full = leps.counts>1
+    ee_full[leps.counts>1] = ee
+    mumu = ((np.abs(twoleps[:, 0].pdgId) == 13) & (np.abs(twoleps[:, 1].pdgId) == 13))
+    mumu_full = leps.counts>1
+    mumu_full[leps.counts>1] = mumu
+    emu = (np.abs(twoleps[:, 0].pdgId) != np.abs(twoleps[:, 1].pdgId))
+    emu_full = leps.counts>1
+    emu_full[leps.counts>1] = emu
+    ch["ee"] = ee_full
+    ch["mumu"] = mumu_full
+    ch["emu"] = emu_full
+    return ch
 
 
 def fill_Mll(data, dsname, is_mc):
@@ -117,7 +128,7 @@ parsl_config = Config(
 )
 dfk = load(parsl_config)
 
-config = config_utils.Config("example/config.json")
+config = config_utils.Config("ttDM_config/config.json")
 store = config["store"]
 mc_fileset, _ = dataset_utils.expand_datasetdict(config["mc_datasets"], store)
 data_fileset, _ = dataset_utils.expand_datasetdict(config["exp_datasets"],
@@ -135,13 +146,13 @@ smallfileset = {key: [val[0]] for key, val in fileset.items()}
 destdir = \
     "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
 
-selector_hist_set = hist_set({"MET": fill_MET,
-                              "Mll": fill_Mll})
+hist_dict = {"MET": fill_MET,
+             "Mll": fill_Mll}
 
 """output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
-    processor_instance=Processor(config, "None", selector_hist_set),
+    processor_instance=Processor(config, "None", hist_dict),
     executor=coffea.processor.iterative_executor,
     executor_args={"workers": 4},
     chunksize=100000)
@@ -149,9 +160,11 @@ selector_hist_set = hist_set({"MET": fill_MET,
 output = coffea.processor.run_uproot_job(
     fileset,
     treename="Events",
-    processor_instance=Processor(config, "None", selector_hist_set),
+    processor_instance=Processor(config, "None", hist_dict),
     executor=parsl_executor,
     executor_args={"tailtimeout": None},
     chunksize=500000)
 
+print("saving")
 coffea.util.save(output, "out_hists/output.coffea")
+print("saved")
