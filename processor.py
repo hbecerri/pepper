@@ -263,7 +263,7 @@ class Selector(object):
         self.systematics[name + "_down"] = self._pad_npcolumndata(
             down, 1, mask)
 
-    def modify_weight(self, name, factor, updown=None, mask=None):
+    def modify_weight(self, name, factor=None, updown=None, mask=None):
         """Modify the event weight. The weight will be multiplied by `factor`.
         `name` gives the name of the factor and is important to keep track of
         the systematics supplied by `updown`. If updown is not None, it should
@@ -271,8 +271,9 @@ class Selector(object):
         `mask` is an array of bools and indicates, which events the
         systematic applies to.
         """
-        factor = self._pad_npcolumndata(factor, 1, mask)
-        self.systematics["weight"] = self.systematics["weight"] * factor
+        if factor is not None:
+            factor = self._pad_npcolumndata(factor, 1, mask)
+            self.systematics["weight"] = self.systematics["weight"] * factor
         if updown is not None:
             self.set_systematic(name, updown[0], updown[1], mask)
 
@@ -615,7 +616,19 @@ class Processor(processor.ProcessorABC):
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
-            return np.full(len(data["genWeight"]), True)
+            # Lumimask only present in data, all events pass in MC
+            # Compute lumi variation here
+            allpass = np.full(len(data["genWeight"]), True)
+            weight = {}
+            if self.config["year"] == "2018" or self.config["year"] == "2016":
+                weight["lumi"] = (None,
+                                  np.full(data.size, 1 + 0.025),
+                                  np.full(data.size, 1 - 0.025))
+            elif self.config["year"] == "2017":
+                weight["lumi"] = (None,
+                                  np.full(data.size, 1 + 0.023),
+                                  np.full(data.size, 1 - 0.023))
+            return (allpass, weight)
         else:
             run = np.array(data["run"])
             luminosity_block = np.array(data["luminosityBlock"])
