@@ -495,6 +495,7 @@ class Processor(processor.ProcessorABC):
 
         if self.config["compute_systematics"] and is_mc:
             self.add_generator_uncertainies(selector)
+            self.add_crosssection_uncertainties(selector, dsname)
 
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
@@ -613,6 +614,13 @@ class Processor(processor.ProcessorABC):
         selector.set_systematic("PSfsr",
                                 data["PSWeight"][:, 3],
                                 data["PSWeight"][:, 1])
+
+    def add_crosssection_uncertainties(self, selector, dsname):
+        xsuncerts = self.config["crosssection_uncertainty"]
+        if "dsname" in xsuncerts:
+            selector.set_systematic("XS",
+                                    np.full(data.size, 1 + xsuncerts[dsname]),
+                                    np.full(data.size, 1 - xsuncerts[dsname]))
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
