@@ -81,12 +81,13 @@ class LazyTable(object):
 class Selector(object):
     """Keeps track of the current event selection and data"""
 
-    def __init__(self, table, is_mc=False, on_cutdone=None):
+    def __init__(self, table, weight=None, on_cutdone=None):
         """Create a new Selector
 
         Arguments:
         table -- An `awkward.Table` or `LazyTable` holding the events' data
-        is_mc -- A booling indicating if `table` is MC
+        weight -- A 1d numpy array of size equal to `table` size, describing
+                  the events' weight or None
         on_cutdown -- callable that gets called after a cut is done (`add_cut`)
         """
         self.table = table
@@ -96,10 +97,12 @@ class Selector(object):
         self.on_cutdone = on_cutdone
 
         self._cutflow = processor.defaultdict_accumulator(int)
-        if is_mc is True:
-            self._weight_col = "genWeight"
+        if weight is not None:
+            tabled = awkward.Table({"weight": weight})
+            counts = np.full(self.table.size, 1)
+            self.systematics = awkward.JaggedArray.fromcounts(counts, tabled)
         else:
-            self._weight_col = None
+            self.systematics = None
 
         # Add a dummy cut to inform about event number and circumvent error
         # when calling all or require before adding actual cuts
@@ -118,11 +121,45 @@ class Selector(object):
             return self.table
 
     @property
+    def weight(self):
+        """Get the event weights for the currently selected events
+        """
+        if self.systematics is None:
+            return None
+        weight = self.systematics["weight"].flatten()
+        if len(self._current_cuts) > 0:
+            return weight[self._cur_sel]
+        else:
+            return weight
+
+    @property
+    def masked_systematics(self):
+        """Get the systematics for the currently selected events
+
+        Returns an `awkward.Table`, where "weight" maps to the event weight.
+        All other columns are named by the scale factor they belong to.
+        """
+        if self.systematics is None:
+            return None
+        if len(self._current_cuts) > 0:
+            return self.systematics[self._cur_sel]
+        else:
+            return self.systematics
+
+    @property
     def final(self):
         """Get events which have passed all cuts
         (both those before and after freeze_selection)
         """
         return self.table[self._cuts.all(*self._cuts.names)]
+
+    @property
+    def final_systematics(self):
+        """Get the systematics for the events which have passed all cuts
+        """
+        if self.systematics is None:
+            return None
+        return self.systematics[self._cuts.all(*self._cuts.names)]
 
     def freeze_selection(self):
         """Freezes the selection
@@ -135,8 +172,8 @@ class Selector(object):
 
     def _add_cutflow(self, name):
         passing_all = self._cuts.all(*(self._cuts.names or []))
-        if self._weight_col and self._weight_col in self.table:
-            num = self.table[self._weight_col][passing_all].sum()
+        if self.systematics is not None:
+            num = self.systematics["weight"][passing_all].flatten().sum()
         else:
             num = passing_all.sum()
         self._cutflow[name] = num
@@ -163,15 +200,26 @@ class Selector(object):
 
         Arguments:
         accept -- A function that will be called with a table of the currently
-                  selected events. The function should return a numpy array of
-                  the same length as the table holding bools, indicating if an
-                  event is not cut (True). Does not get called if num_selected
-                  is 0 already.
+                  selected events. The function should return an array of bools
+                  or a tuple of this array and a dict.
+                  The array has the same length as the table and indicates if
+                  an event is not cut (True).
+                  The dict maps names of scale factors to a tuples of the form
+                  (sf, (up, down)) where sf, up and down are arrays of floats
+                  giving central, up and down variation for a scale factor for
+                  each event, thus making only sense in case of MC. In case of
+                  no up/down variations (sf, None) is a valid value. `up` and
+                  `down` must be given relative to sf.
+                  accept does not get called if num_selected is already 0.
         name -- A label to assoiate within the cutflow
         """
         if name in self._cutflow:
             raise ValueError("A cut with name {} already exists".format(name))
         accepted = accept(self.masked)
+        if isinstance(accepted, tuple):
+            accepted, weight = accepted
+        else:
+            weight = {}
         if len(self._current_cuts) > 0:
             cut = np.full(self.table.size, False)
             cut[self._cur_sel] = accepted
@@ -181,8 +229,52 @@ class Selector(object):
         self._add_cutflow(name)
         if not self._frozen:
             self._current_cuts.append(name)
+            mask = None
+        else:
+            mask = accepted
+        for weightname, factors in weight.items():
+            self.modify_weight(weightname, factors[0], factors[1], mask)
         if self.on_cutdone is not None:
-            self.on_cutdone(data=self.masked, cut=name)
+            self.on_cutdone(data=self.masked,
+                            systematics=self.masked_systematics,
+                            cut=name)
+
+    def _pad_npcolumndata(self, data, defaultval=None, mask=None):
+        padded = np.empty(self.table.size, dtype=data.dtype)
+        if defaultval:
+            padded[:] = defaultval
+        if mask is not None:
+            total_mask = self._cur_sel
+            total_mask[self._cur_sel] = mask
+            padded[total_mask] = data
+        else:
+            padded[self._cur_sel] = data
+        return padded
+
+    def set_systematic(self, name, up, down, mask=None):
+        """Set the systematic up/down variation for a systematic given by
+        `name`. `mask` is an array of bools and indicates, which events the
+        systematic applies to. If `None`, the systematic applies to all events.
+        `up` and `down` must be given relative to the central value.
+        """
+        if name == "weight":
+            raise ValueError("The name of a systematic can't be 'weight'")
+        self.systematics[name + "_up"] = self._pad_npcolumndata(up, 1, mask)
+        self.systematics[name + "_down"] = self._pad_npcolumndata(
+            down, 1, mask)
+
+    def modify_weight(self, name, factor, updown=None, mask=None):
+        """Modify the event weight. The weight will be multiplied by `factor`.
+        `name` gives the name of the factor and is important to keep track of
+        the systematics supplied by `updown`. If updown is not None, it should
+        be a tuple of up and down variation factors relative to `factor`.
+        `mask` is an array of bools and indicates, which events the
+        systematic applies to.
+        """
+        factor = self._pad_npcolumndata(factor, 1, mask)
+        self.systematics["weight"] = self.systematics["weight"] * factor
+        if updown is not None:
+            self.set_systematic(name, updown[0], updown[1], mask)
 
     def set_column(self, column, column_name):
         """Sets a column of the table
@@ -205,8 +297,7 @@ class Selector(object):
 
         # Move data into the table with appropriate padding (important!)
         if isinstance(data, np.ndarray):
-            unmasked_data = np.empty(self.table.size, dtype=data.dtype)
-            unmasked_data[self._cur_sel] = data
+            unmasked_data = self._pad_npcolumndata(data)
         elif isinstance(data, awkward.JaggedArray):
             counts = np.zeros(self.table.size, dtype=int)
             counts[self._cur_sel] = data.counts
@@ -395,7 +486,11 @@ class Processor(processor.ProcessorABC):
                          accumulator=output["sel_hists"],
                          is_mc=is_mc,
                          dsname=dsname)
-        selector = Selector(LazyTable(df), is_mc, sel_cb)
+        if is_mc:
+            genweight = df["genWeight"]
+        else:
+            genweight = None
+        selector = Selector(LazyTable(df), genweight, sel_cb)
 
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
@@ -407,14 +502,15 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(partial(self.met_filters, is_mc), "MET filters")
 
         selector.set_column(self.build_lepton_column, "Lepton")
-        selector.add_cut(self.lepton_pair, "At least 2 leps")
+        selector.add_cut(partial(self.lepton_pair, is_mc), "At least 2 leps")
         selector.set_column(self.same_flavor, "is_same_flavor")
         selector.set_column(self.mll, "mll")
 
         selector.freeze_selection()
 
         selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
-        selector.add_cut(self.no_additional_leptons, "No add. leps")
+        selector.add_cut(partial(self.no_additional_leptons, is_mc),
+                         "No add. leps")
         selector.add_cut(self.channel_trigger_matching, "Chn. trig. match")
         selector.add_cut(self.lep_pt_requirement, "Req lep pT")
         selector.add_cut(self.good_mll, "M_ll")
@@ -448,7 +544,7 @@ class Processor(processor.ProcessorABC):
                                          selector.final["MET_pt"],
                                          selector.final["MET_phi"])
         if is_mc:
-            weight = selector.final["weight"]
+            weight = selector.final_systematics["weight"]
         else:
             weight = np.full(selector.final.size, 1.)
         reco_cb = partial(self.fill_accumulator,
@@ -459,20 +555,14 @@ class Processor(processor.ProcessorABC):
         reco_objects = Selector(awkward.Table(lep=lep, antilep=antilep,
                                               b=b, bbar=bbar,
                                               neutrino=neutrino,
-                                              antineutrino=antineutrino,
-                                              weight=weight),
-                                is_mc, reco_cb)
+                                              antineutrino=antineutrino),
+                                weight, reco_cb)
         reco_objects.add_cut(self.passing_reco, "Reco")
         reco_objects.set_column(self.wminus, "Wminus")
         reco_objects.set_column(self.wplus, "Wplus")
         reco_objects.set_column(self.top, "top")
         reco_objects.set_column(self.antitop, "antitop")
         reco_objects.set_column(self.ttbar, "ttbar")
-
-        best = reco_objects.masked["ttbar"].mass.argmin()
-        m_ttbar = reco_objects.masked["ttbar"][best].mass.content
-        m_wplus = reco_objects.masked["Wplus"][best].mass.content
-        m_top = reco_objects.masked["top"][best].mass.content
 
         output["cutflow"][dsname] = selector.cutflow
 
@@ -482,11 +572,24 @@ class Processor(processor.ProcessorABC):
         return output
 
     def fill_accumulator(self, hist_dict, accumulator, is_mc, dsname, data,
-                         cut):
+                         systematics, cut):
+        if systematics is not None:
+            weight = systematics["weight"]
+        else:
+            weight = None
         for histname, fill_func in hist_dict.items():
             accumulator[(cut, histname)] = fill_func(data=data,
                                                      dsname=dsname,
-                                                     is_mc=is_mc)
+                                                     is_mc=is_mc,
+                                                     weight=weight)
+            if systematics is not None:
+                for syscol in systematics.columns:
+                    if syscol == "weight":
+                        continue
+                    sysweight = weight * systematics[syscol]
+                    hist = fill_func(data=data, dsname=dsname, is_mc=is_mc,
+                                     weight=sysweight)
+                    accumulator[(cut, histname, syscol)] = hist
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
@@ -662,8 +765,36 @@ class Processor(processor.ProcessorABC):
         leptons = leptons[leptons.pt.argsort()]
         return leptons
 
-    def lepton_pair(self, data):
-        return data["Lepton"].counts >= 2
+    def compute_lepton_sf(self, data):
+        is_ele = abs(data["Lepton"].pdgId) == 11
+        eles = data["Lepton"][is_ele]
+        muons = data["Lepton"][~is_ele]
+
+        weights = {}
+        # Electron identification efficiency
+        for i, sffunc in enumerate(self.electron_sf):
+            central = sffunc(eta=eles.sceta, pt=eles.pt).prod()
+            up = sffunc(eta=eles.sceta, pt=eles.pt, variation="up").prod()
+            down = sffunc(eta=eles.sceta, pt=eles.pt, variation="down").prod()
+            key = "electronsf{}".format(i)
+            weights[key] = (central, (up / central, down / central))
+        # Muon identification and isolation efficiency
+        for i, sffunc in enumerate(self.muon_sf):
+            central = sffunc(abseta=abs(muons.eta), pt=muons.pt).prod()
+            up = sffunc(
+                abseta=abs(muons.eta), pt=muons.pt, variation="up").prod()
+            down = sffunc(
+                abseta=abs(muons.eta), pt=muons.pt, variation="down").prod()
+            key = "muonsf{}".format(i)
+            weights[key] = (central, (up / central, down / central))
+        return weights
+
+    def lepton_pair(self, is_mc, data):
+        accept = data["Lepton"].counts >= 2
+        if self.config["compute_systematics"] and is_mc:
+            return (accept, self.compute_lepton_sf(data[accept]))
+        else:
+            return accept
 
     def opposite_sign_lepton_pair(self, data):
         return (np.sign(data["Lepton"][:, 0].pdgId)
@@ -872,10 +1003,14 @@ class Processor(processor.ProcessorABC):
     def good_mll(self, data):
         return data["mll"] > self.config["mll_min"]
 
-    def no_additional_leptons(self, data):
+    def no_additional_leptons(self, is_mc, data):
         add_ele = self.electron_cuts(data, good_lep=False)
         add_muon = self.muon_cuts(data, good_lep=False)
-        return add_ele.sum() + add_muon.sum() <= 2
+        accept = add_ele.sum() + add_muon.sum() <= 2
+        if self.config["compute_systematics"] and is_mc:
+            return (accept, self.compute_lepton_sf(data[accept]))
+        else:
+            return accept
 
     def z_window(self, data):
         m_min = self.config["z_boson_window_start"]
