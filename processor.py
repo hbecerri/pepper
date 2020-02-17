@@ -492,6 +492,9 @@ class Processor(processor.ProcessorABC):
             genweight = None
         selector = Selector(LazyTable(df), genweight, sel_cb)
 
+        if is_mc:
+            self.add_generator_uncertainies(selector)
+
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
         pos_triggers, neg_triggers = utils.misc.get_trigger_paths_for(
@@ -590,6 +593,25 @@ class Processor(processor.ProcessorABC):
                     hist = fill_func(data=data, dsname=dsname, is_mc=is_mc,
                                      weight=sysweight)
                     accumulator[(cut, histname, syscol)] = hist
+
+    def add_generator_uncertainies(self, selector):
+        # Matrix-element renormalization and factorization scale
+        # Get describtion of individual columns of this branch with
+        # Events->GetBranch("LHEScaleWeight")->GetTitle() in ROOT
+        data = selector.masked
+        selector.set_systematic("MEren",
+                                data["LHEScaleWeight"][:, 7],
+                                data["LHEScaleWeight"][:, 1])
+        selector.set_systematic("MEfac",
+                                data["LHEScaleWeight"][:, 5],
+                                data["LHEScaleWeight"][:, 3])
+        # Parton shower scale
+        selector.set_systematic("PSisr",
+                                data["PSWeight"][:, 2],
+                                data["PSWeight"][:, 0])
+        selector.set_systematic("PSfsr",
+                                data["PSWeight"][:, 3],
+                                data["PSWeight"][:, 1])
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
