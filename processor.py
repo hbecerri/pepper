@@ -493,7 +493,7 @@ class Processor(processor.ProcessorABC):
             genweight = None
         selector = Selector(LazyTable(df), genweight, sel_cb)
 
-        if is_mc:
+        if self.config["compute_systematics"] and is_mc:
             self.add_generator_uncertainies(selector)
 
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
@@ -619,16 +619,20 @@ class Processor(processor.ProcessorABC):
             # Lumimask only present in data, all events pass in MC
             # Compute lumi variation here
             allpass = np.full(len(data["genWeight"]), True)
-            weight = {}
-            if self.config["year"] == "2018" or self.config["year"] == "2016":
-                weight["lumi"] = (None,
-                                  np.full(data.size, 1 + 0.025),
-                                  np.full(data.size, 1 - 0.025))
-            elif self.config["year"] == "2017":
-                weight["lumi"] = (None,
-                                  np.full(data.size, 1 + 0.023),
-                                  np.full(data.size, 1 - 0.023))
-            return (allpass, weight)
+            if self.config["compute_systematics"]:
+                weight = {}
+                if (self.config["year"] == "2018"
+                        or self.config["year"] == "2016"):
+                    weight["lumi"] = (None,
+                                      np.full(data.size, 1 + 0.025),
+                                      np.full(data.size, 1 - 0.025))
+                elif self.config["year"] == "2017":
+                    weight["lumi"] = (None,
+                                      np.full(data.size, 1 + 0.023),
+                                      np.full(data.size, 1 - 0.023))
+                return (allpass, weight)
+            else:
+                return allpass
         else:
             run = np.array(data["run"])
             luminosity_block = np.array(data["luminosityBlock"])
