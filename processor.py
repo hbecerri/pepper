@@ -182,7 +182,7 @@ class Selector(object):
         if not self._frozen:
             self._current_cuts.append(name)
         if self.on_cutdone is not None:
-            self.on_cutdone(data=self.masked, cut=name)
+            self.on_cutdone(data=self.final, cut=name)
 
     def set_column(self, column, column_name):
         """Sets a column of the table
@@ -282,6 +282,10 @@ class Selector(object):
             raise ValueError("cuts needs to be one of 'Current', 'All' or a "
                              "list")
         return self._cuts.mask[self._cuts.all(*cuts)]
+
+
+class Empty_err(Exception):
+    pass
 
 
 class Processor(processor.ProcessorABC):
@@ -490,8 +494,11 @@ class Processor(processor.ProcessorABC):
                                                      is_mc=is_mc)
 
     def blinding(self, is_mc, data):
-        if (~is_mc) and self.config["blinding_denom"] is not None:
-            return np.where(np.mod(data["event"], self.config["blinding_denom"]) == 0, True, False)
+        if (not is_mc) and (self.config["blinding_denom"] is not None):
+            return np.where(np.mod(data["event"],
+                                   self.config["blinding_denom"]) == 0,
+                            True,
+                            False)
         else:
             return np.full(len(data["event"]), True)
 
@@ -653,14 +660,14 @@ class Processor(processor.ProcessorABC):
         ge = self.electron_cuts(data, good_lep=True)
         gm = self.muon_cuts(data, good_lep=True)
         for key in keys:
-            arr = awkward.concatenate([data["Electron_" + key][ge],
-                                       data["Muon_" + key][gm]], axis=1)
+            arr = self.safe_concat(data["Electron_" + key], ge,
+                                   data["Muon_" + key], gm)
             offsets = arr.offsets
             lep_dict[key] = arr.flatten()  # Could use concatenate here
         # Add supercluster eta, which only is given for electrons
-        arr = awkward.concatenate([(data["Electron_eta"][ge]
-                                    + data["Electron_deltaEtaSC"][ge]),
-                                   data["Muon_eta"][gm]], axis=1)
+        arr = self.safe_concat(data["Electron_eta"]
+                               + data["Electron_deltaEtaSC"], ge,
+                               data["Muon_eta"], gm)
         lep_dict["sceta"] = arr.flatten()
 
         leptons = Jca.candidatesfromoffsets(offsets, **lep_dict)
@@ -668,6 +675,17 @@ class Processor(processor.ProcessorABC):
         # Sort leptons by pt
         leptons = leptons[leptons.pt.argsort()]
         return leptons
+
+    def safe_concat(self, a, a_in, b, b_in):
+        if len(a.flatten()) > 0 and len(b.flatten()) > 0:
+            arr = awkward.concatenate([a[a_in], b[b_in]], axis=1)
+        elif len(a.flatten()) > 0:
+            arr = a[a_in]
+        elif len(b.flatten()) > 0:
+            arr = b[b_in]
+        else:
+            arr = awkward.JaggedArray.fromcounts([0], [])
+        return arr
 
     def lepton_pair(self, data):
         return data["Lepton"].counts >= 2

@@ -38,6 +38,7 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
         labelmap = defaultdict(list)
         for key, val in labels.items():
             labelmap[val].append(key)
+
         sortedlabels = sorted(labelsset, key=(
             lambda x: sum([(hists.integrate("MET")).values()[(y,)]
                            for y in labelmap[x]])))
@@ -57,7 +58,7 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
     fig, (ax, rax) = plt.subplots(2, 1, figsize=(7, 7),
                                   gridspec_kw={"height_ratios": (3, 1)},
                                   sharex=True)
-    ax = hep.cms.cmslabel(ax, data=False, paper=False, year='2018')
+    ax = mplhep.cms.cmslabel(ax, data=False, paper=False, year='2018')
     fig.subplots_adjust(hspace=0)
     sig_colours = {}
     if colours is not None:
@@ -86,9 +87,7 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
         else:
             err_opts = {'linestyle': '-'}
         sig_hist = hists[sig].copy()
-        #sig_hist = sig_hist.sum(axis)
         sig_hist.scale(sig_scaling)
-        #sig_hist.add(bkgdh)
         hist.plot1d(sig_hist,
                     ax=ax,
                     clear=False,
@@ -137,10 +136,10 @@ def plot_channels(hist_set, plot_name, lumifactors, read_kwargs,
                   plot_kwargs, show=False, save_dir=None):
     for key in hist_set.keys():
         if (len(key) == 2) & (key[1] == plot_name):
-            plot = hist_set[key]
-            if len(plot.axes()) == 3:
+            hists = hist_set[key]
+            if len(hists.axes()) == 3:
                 for ch in ["ee", "emu", "mumu"]:
-                    plot = plot[ch].sum(channel)
+                    plot = hists.integrate("channel", [ch])
                     plot.scale(lumifactors, axis="dataset")
                     plot_data_mc(plot, **plot_kwargs)
                     if show:
@@ -150,6 +149,7 @@ def plot_channels(hist_set, plot_name, lumifactors, read_kwargs,
                             save_dir, key[0] + "_" + plot_name +
                             "_" + ch + ".pdf"))
                     plt.clf()
+
 
 config = config_utils.Config("example/config.json")
 store = config["store"]
@@ -181,7 +181,7 @@ for dataset in fileset.keys():
     else:
         eff = cutvals[-1]/cutvals[0]
         if dataset in mc_fileset.keys():
-            lumifactors[dataset] = 0.333358160 * xsecs[dataset]/cutvals[0]
+            lumifactors[dataset] = 0.994800992266 * xsecs[dataset]/cutvals[0]
             # 59.688059536
         else:
             lumifactors[dataset] = 1
@@ -254,14 +254,14 @@ plt.savefig(os.path.join(plot_config["hist_dir"], "MET.pdf"))
 plt.show(block=True)
 plt.clf()'''
 
-plot__channels(output["Selector_hists"],
-         "MET",
-         lumifactors,
-         {"dsnames": list(fileset.keys()), "x_label": "MET (GeV)"},
-         {"data": "Data",
-          "sigs": [],
-          "sig_scaling": 100,
-          "labels": labels,
-          "colours": colours},
-         False,
-         plot_config["hist_dir"])
+plot_channels(output["sel_hists"],
+              "MET",
+              lumifactors,
+              {"dsnames": list(fileset.keys()), "x_label": "MET (GeV)"},
+              {"data": "Data",
+               "sigs": ["DM Chi1 PS100 x100", "DM Chi1 S100 x100"],
+               "sig_scaling": 100,
+               "labels": labels,
+               "colours": colours},
+              False,
+              plot_config["hist_dir"])

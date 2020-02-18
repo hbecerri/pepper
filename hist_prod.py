@@ -30,19 +30,24 @@ def fill_MET(data, dsname, is_mc):
     dataset_axis = hist.Cat("dataset", "")
     MET_axis = hist.Bin("MET", "MET [GeV]", 100, 0, 400)
     if "Lepton" in data:
-        channel_axis =  hist.Cat("channel", "")
+        channel_axis = hist.Cat("channel", "")
         MET_hist = hist.Hist("Counts", dataset_axis, channel_axis, MET_axis)
         if is_mc:
             for ch, vals in channel(data["Lepton"]).items():
-                MET_hist.fill(dataset=dsname, channel=ch, MET=data["MET_pt"][vals],
+                MET_hist.fill(dataset=dsname,
+                              channel=ch,
+                              MET=data["MET_pt"][vals],
                               weight=data["genWeight"][vals])
         else:
             for ch, vals in channel(data["Lepton"]).items():
-                MET_hist.fill(dataset=dsname, channel=ch, MET=data["MET_pt"][vals])
+                MET_hist.fill(dataset=dsname,
+                              channel=ch,
+                              MET=data["MET_pt"][vals])
     else:
         MET_hist = hist.Hist("Counts", dataset_axis, MET_axis)
         if is_mc:
-            MET_hist.fill(dataset=dsname, MET=data["MET_pt"],
+            MET_hist.fill(dataset=dsname,
+                          MET=data["MET_pt"],
                           weight=data["genWeight"])
         else:
             MET_hist.fill(dataset=dsname, MET=data["MET_pt"])
@@ -51,17 +56,20 @@ def fill_MET(data, dsname, is_mc):
 
 def channel(leps):
     ch = {}
-    ch["None"] = leps.counts<2
-    twoleps = leps[leps.counts>1]
-    ee = ((np.abs(twoleps[:, 0].pdgId) == 11) & (np.abs(twoleps[:, 1].pdgId) == 11))
-    ee_full = leps.counts>1
-    ee_full[leps.counts>1] = ee
-    mumu = ((np.abs(twoleps[:, 0].pdgId) == 13) & (np.abs(twoleps[:, 1].pdgId) == 13))
-    mumu_full = leps.counts>1
-    mumu_full[leps.counts>1] = mumu
-    emu = (np.abs(twoleps[:, 0].pdgId) != np.abs(twoleps[:, 1].pdgId))
-    emu_full = leps.counts>1
-    emu_full[leps.counts>1] = emu
+    ch["None"] = leps.counts < 2
+    twoleps = leps[leps.counts > 1]
+    ee = ((np.abs(twoleps[:, 0].pdgId) == 11)
+          & (np.abs(twoleps[:, 1].pdgId) == 11))
+    ee_full = leps.counts > 1
+    ee_full[leps.counts > 1] = ee
+    mumu = ((np.abs(twoleps[:, 0].pdgId) == 13)
+            & (np.abs(twoleps[:, 1].pdgId) == 13))
+    mumu_full = leps.counts > 1
+    mumu_full[leps.counts > 1] = mumu
+    emu = (np.abs(twoleps[:, 0].pdgId)
+           != np.abs(twoleps[:, 1].pdgId))
+    emu_full = leps.counts > 1
+    emu_full[leps.counts > 1] = emu
     ch["ee"] = ee_full
     ch["mumu"] = mumu_full
     ch["emu"] = emu_full
