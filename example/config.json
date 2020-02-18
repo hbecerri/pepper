@@ -190,7 +190,7 @@
         ],
         "TTToSemiLeptonic_mtop171p5_TuneCP5_13TeV-powheg-pythia8": [
             "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8",
-            "ttmass_down"
+            "tmass_down"
         ],
         "TTTo2L2Nu_mtop173p5_TuneCP5_13TeV-powheg-pythia8": [
             "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8",

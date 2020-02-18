@@ -583,18 +583,33 @@ class Processor(processor.ProcessorABC):
         else:
             weight = None
         for histname, fill_func in hist_dict.items():
-            accumulator[(cut, histname)] = fill_func(data=data,
-                                                     dsname=dsname,
-                                                     is_mc=is_mc,
-                                                     weight=weight)
-            if systematics is not None:
-                for syscol in systematics.columns:
-                    if syscol == "weight":
-                        continue
-                    sysweight = weight * systematics[syscol]
-                    hist = fill_func(data=data, dsname=dsname, is_mc=is_mc,
-                                     weight=sysweight)
-                    accumulator[(cut, histname, syscol)] = hist
+            dsforsys = self.config["dataset_for_systematics"]
+            nominal_hist = fill_func(data=data,
+                                     dsname=dsname,
+                                     is_mc=is_mc,
+                                     weight=weight)
+            # If this ds is dedicated for a systematic, save hist accordingly
+            if dsname in dsforsys:
+                # But only if we want to compute systematics
+                if systematics is not None:
+                    replacename, sysname = dsforsys[dsname]
+                    accumulator[(cut, histname, sysname)] = nominal_hist
+            else:
+                accumulator[(cut, histname)] = nominal_hist
+
+                if systematics is not None:
+                    for syscol in systematics.columns:
+                        if syscol == "weight":
+                            continue
+                        sysweight = weight * systematics[syscol]
+                        hist = fill_func(data=data, dsname=dsname, is_mc=is_mc,
+                                         weight=sysweight)
+                        accumulator[(cut, histname, syscol)] = hist
+                    # In order to have the hists specific to dedicated
+                    # systematic datasets contain also all the events from
+                    # unaffected datasets, copy the nominal hists
+                    for sysds, (replace, sys) in dsforsys.items():
+                        accumulator[(cut, histname, sys)] = nominal_hist.copy()
 
     def add_generator_uncertainies(self, selector):
         # Matrix-element renormalization and factorization scale
