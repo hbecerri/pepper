@@ -632,11 +632,16 @@ class Processor(processor.ProcessorABC):
 
     def add_crosssection_uncertainties(self, selector, dsname):
         xsuncerts = self.config["crosssection_uncertainty"]
-        if dsname in xsuncerts:
-            data = selector.masked
-            selector.set_systematic("XS",
-                                    np.full(data.size, 1 + xsuncerts[dsname]),
-                                    np.full(data.size, 1 - xsuncerts[dsname]))
+        num_events = selector.num_selected
+        for name, affected_datasets in xsuncerts.items():
+            for affected_dataset, uncert in affected_datasets.items():
+                if dsname == affected_dataset:
+                    break
+            else:
+                uncert = 0
+            selector.set_systematic(name + "XS",
+                                    np.full(num_events, 1 + uncert),
+                                    np.full(num_events, 1 - uncert))
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
