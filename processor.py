@@ -350,6 +350,8 @@ class Selector(object):
             if col not in data:
                 continue
             return_dict[prefix + col] = utils.misc.jagged_reduce(data[col])
+        if self.systematics is not None:
+            return_dict["weight"] = self.weight
         return return_dict
 
     def get_columns_from_config(self, to_save, prefix=""):
@@ -537,10 +539,6 @@ class Processor(processor.ProcessorABC):
         if is_mc:
             if self.btagweighters is not None:
                 selector.set_column(self.compute_weight_btag, "weight_btag")
-            selector.set_column(self.compute_weight, "weight")
-            if self.config["compute_systematics"]:
-                selector.set_column(partial(
-                    self.compute_systematic_weights, dsname), "syst")
 
         lep, antilep = self.pick_leps(selector.final)
         b, bbar = self.choose_bs(selector.final, lep, antilep)
@@ -1116,87 +1114,6 @@ class Processor(processor.ProcessorABC):
         discr = jets["btag"]
         return np.prod(list(weighter(wp, flav, eta, pt, discr, variation)
                        for weighter in self.btagweighters), axis=0)
-
-    def compute_weight(self, data):
-        weight = np.ones(data.size)
-
-        weight *= data["genWeight"]
-        electrons = data["Lepton"][abs(data["Lepton"].pdgId) == 11]
-        muons = data["Lepton"][abs(data["Lepton"].pdgId) == 13]
-        for sf in self.electron_sf:
-            factors_flat = sf(eta=electrons.sceta.flatten(),
-                              pt=electrons.pt.flatten())
-            weight *= utils.misc.jaggedlike(
-                electrons.eta, factors_flat).prod()
-        for sf in self.muon_sf:
-            factors_flat = sf(abseta=abs(muons.eta.flatten()),
-                              pt=muons.pt.flatten())
-            weight *= utils.misc.jaggedlike(muons.eta, factors_flat).prod()
-        if self.btagweighters is not None:
-            weight *= data["weight_btag"]
-
-        return weight
-
-    def compute_systematic_weights(self, dsname, data):
-        uncerts = {}
-
-        eles = data["Lepton"][abs(data["Lepton"].pdgId) == 11]
-        muons = data["Lepton"][abs(data["Lepton"].pdgId) == 13]
-        jets = data["Jet"]
-
-        # Electron identification efficiency
-        for i, sffunc in enumerate(self.electron_sf):
-            central = sffunc(eta=eles.sceta, pt=eles.pt).prod()
-            for var in ("up", "down"):
-                sf = sffunc(eta=eles.sceta, pt=eles.pt, variation=var).prod()
-                key = "electron_sf_{}_{}".format(i, var)
-                uncerts[key] = sf / central
-        # Muon identification and isolation efficiency
-        for i, sffunc in enumerate(self.muon_sf):
-            central = sffunc(abseta=abs(muons.eta), pt=muons.pt).prod()
-            for var in ("up", "down"):
-                sf = sffunc(
-                    abseta=abs(muons.eta), pt=muons.pt, variation=var).prod()
-                key = "muon_sf_{}_{}".format(i, var)
-                uncerts[key] = sf / central
-        # b-tag and mistag scale factors
-        if self.config["num_atleast_btagged"] > 0:
-            wp = self.config["btag"].split(":", 1)[1]
-            for i, sffunc in enumerate(self.btagweighters):
-                central = sffunc(
-                    wp, jets["hadronFlavour"], jets.eta, jets.pt, jets["btag"])
-                for var in ("up", "down"):
-                    sf = sffunc(wp, jets["hadronFlavour"], jets.eta, jets.pt,
-                                jets["btag"], variation=var)
-                    key = "btag_sf_{}_{}".format(i, var)
-                    uncerts[key] = sf / central
-        # Matrix-element renormalization and factorization scale
-        # Get describtion of individual columns of this branch with
-        # Events->GetBranch("LHEScaleWeight")->GetTitle() in ROOT
-        uncerts["me_ren_down"] = data["LHEScaleWeight"][:, 1]
-        uncerts["me_ren_up"] = data["LHEScaleWeight"][:, 7]
-        uncerts["me_fac_down"] = data["LHEScaleWeight"][:, 3]
-        uncerts["me_fac_up"] = data["LHEScaleWeight"][:, 5]
-        # Parton shower scale
-        uncerts["ps_isr_down"] = data["PSWeight"][:, 0]
-        uncerts["ps_isr_up"] = data["PSWeight"][:, 2]
-        uncerts["ps_fsr_down"] = data["PSWeight"][:, 1]
-        uncerts["pa_fsr_up"] = data["PSWeight"][:, 3]
-        # Luminosity
-        if self.config["year"] == "2018" or self.config["year"] == "2016":
-            uncerts["lumi_down"] = np.full(data.size, 1 - 0.025)
-            uncerts["lumi_up"] = np.full(data.size, 1 + 0.025)
-        elif self.config["year"] == "2017":
-            uncerts["lumi_down"] = np.full(data.size, 1 - 0.023)
-            uncerts["lumi_up"] = np.full(data.size, 1 + 0.023)
-        # Cross sections
-        xsuncerts = self.config["crosssection_uncertainty"]
-        if "dsname" in xsuncerts:
-            uncerts["xs_down"] = np.full(data.size, 1 - xsuncerts[dsname])
-            uncerts["xs_up"] = np.full(data.size, 1 + xsuncerts[dsname])
-
-        return awkward.JaggedArray.fromcounts(np.full(1, data.size),
-                                              awkward.Table(uncerts))
 
     def pick_leps(self, data):
         lep_pair = data["Lepton"][:, :2]
