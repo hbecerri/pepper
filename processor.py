@@ -617,7 +617,8 @@ class Processor(processor.ProcessorABC):
 
     def add_crosssection_uncertainties(self, selector, dsname):
         xsuncerts = self.config["crosssection_uncertainty"]
-        if "dsname" in xsuncerts:
+        if dsname in xsuncerts:
+            data = selector.masked
             selector.set_systematic("XS",
                                     np.full(data.size, 1 + xsuncerts[dsname]),
                                     np.full(data.size, 1 - xsuncerts[dsname]))
