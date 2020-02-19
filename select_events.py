@@ -231,14 +231,13 @@ export PATH=~/.local/bin:$PATH
 
     # Load config now instead of putting it into executor_args to be able to
     # use the same jobs for preprocessing and processing
+    print("Spawning jobs. This can take a while")
     parsl.load(parsl_config)
     executor_args = {}
 else:
     executor = coffea.processor.iterative_executor
     executor_args = {}
 
-if args.condor is not None:
-    print("Spawning jobs. This can take a while")
 output = coffea.processor.run_uproot_job(
     datasets, "Events", processor, executor, executor_args,
     chunksize=args.chunksize)
