@@ -235,8 +235,8 @@ class Selector(object):
         for weightname, factors in weight.items():
             self.modify_weight(weightname, factors[0], factors[1], mask)
         if self.on_cutdone is not None:
-            self.on_cutdone(data=self.masked,
-                            systematics=self.masked_systematics,
+            self.on_cutdone(data=self.final,
+                            systematics=self.final_systematics,
                             cut=name)
 
     def _pad_npcolumndata(self, data, defaultval=None, mask=None):
