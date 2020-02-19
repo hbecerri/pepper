@@ -577,7 +577,7 @@ class Processor(processor.ProcessorABC):
     def fill_accumulator(self, hist_dict, accumulator, is_mc, dsname, data,
                          systematics, cut):
         if systematics is not None:
-            weight = systematics["weight"]
+            weight = systematics["weight"].flatten()
         else:
             weight = None
         for histname, fill_func in hist_dict.items():
@@ -599,7 +599,7 @@ class Processor(processor.ProcessorABC):
                     for syscol in systematics.columns:
                         if syscol == "weight":
                             continue
-                        sysweight = weight * systematics[syscol]
+                        sysweight = weight * systematics[syscol].flatten()
                         hist = fill_func(data=data, dsname=dsname, is_mc=is_mc,
                                          weight=sysweight)
                         accumulator[(cut, histname, syscol)] = hist
