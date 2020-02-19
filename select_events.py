@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import numpy as np
 import coffea
 from functools import partial
 import shutil
@@ -13,9 +14,49 @@ from utils.datasets import expand_datasetdict
 from processor import Processor
 
 
+def get_channel_masks(data):
+    p0 = abs(data["Lepton"]["pdgId"][:, 0])
+    p1 = abs(data["Lepton"]["pdgId"][:, 1])
+    return {
+        "ee": (p0 == 11) & (p1 == 11),
+        "mm": (p0 == 13) & (p1 == 13),
+        "em": p0 != p1,
+    }
+
+
+def make_particle_hist(particle_name, data, dsname, is_mc, weight):
+    hist = coffea.hist.Hist(
+        "Counts",
+        coffea.hist.Cat("dsname", "Dataset name", "integral"),
+        coffea.hist.Cat("chan", "Channel", "integral"),
+        coffea.hist.Bin(
+            "pt", "{} $p_{{T}}$ in GeV".format(particle_name), 20, 0, 200),
+        coffea.hist.Bin(
+            "eta", r"{} $\eta$".format(particle_name), 26, -2.6, 2.6),
+        coffea.hist.Bin(
+            "phi", r"{} $\varphi$".format(particle_name), 38, -3.8, 3.8)
+    )
+    if particle_name in data:
+        for chan, mask in get_channel_masks(data).items():
+            pt = data[particle_name].pt[mask].flatten()
+            eta = data[particle_name].eta[mask].flatten()
+            phi = data[particle_name].phi[mask].flatten()
+            if weight is not None:
+                chan_weight = np.repeat(weight[mask],
+                                        data[particle_name][mask].counts)
+                hist.fill(dsname=dsname, chan=chan, pt=pt, eta=eta, phi=phi,
+                          weight=chan_weight)
+            else:
+                hist.fill(dsname=dsname, chan=chan, pt=pt, eta=eta, phi=phi)
+    return hist
+
+
 parser = ArgumentParser(description="Select events from nanoAODs")
 parser.add_argument("config", help="Path to a configuration file")
-parser.add_argument("dest", help="Path to destination output directory")
+parser.add_argument(
+    "eventdir", help="Path to event destination output directory")
+parser.add_argument(
+    "histdir", help="Path to the histogram destination output directory")
 parser.add_argument(
     "--dataset", nargs=2, action="append", metavar=("name", "path"),
     help="Can be specified multiple times. Ignore datasets given in "
@@ -66,12 +107,13 @@ if args.skip_sysds:
             del datasets[sysds]
 
 datasets, paths2dsname = expand_datasetdict(datasets, store)
-num_files = len(paths2dsname)
-num_mc_files = sum(len(datasets[dsname])
-                   for dsname in config["mc_datasets"].keys())
+if args.dataset is None:
+    num_files = len(paths2dsname)
+    num_mc_files = sum(len(datasets[dsname])
+                       for dsname in config["mc_datasets"].keys())
 
-print("Got a total of {} files of which {} are MC".format(num_files,
-                                                          num_mc_files))
+    print("Got a total of {} files of which {} are MC".format(num_files,
+                                                              num_mc_files))
 
 if args.debug:
     print("Processing only one file because of --debug")
@@ -81,7 +123,7 @@ if args.debug:
 nonempty = []
 for dsname in datasets.keys():
     try:
-        next(os.scandir(os.path.join(args.dest, dsname)))
+        next(os.scandir(os.path.join(args.eventdir, dsname)))
     except (FileNotFoundError, StopIteration):
         pass
     else:
@@ -92,12 +134,16 @@ if len(nonempty) != 0:
         answer = input("Delete? y/n ")
         if answer == "y":
             for dsname in nonempty:
-                shutil.rmtree(os.path.join(args.dest, dsname))
+                shutil.rmtree(os.path.join(args.eventdir, dsname))
             break
         elif answer == "n":
             break
 
-processor = Processor(config, os.path.realpath(args.dest))
+hist_dict = {
+    "Lep": partial(make_particle_hist, "Lepton")
+}
+
+processor = Processor(config, os.path.realpath(args.eventdir), hist_dict)
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
     conor_config = ("requirements = (OpSysAndVer == \"SL6\" || OpSysAndVer =="
@@ -148,3 +194,8 @@ if args.condor is not None:
 output = coffea.processor.run_uproot_job(
     datasets, "Events", processor, executor, executor_args,
     chunksize=args.chunksize)
+
+os.makedirs(args.histdir, exist_ok=True)
+for key, hist in output["sel_hists"].items():
+    fname = "_".join(key) + ".coffea"
+    coffea.util.save(hist, os.path.join(args.histdir, fname))
