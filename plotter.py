@@ -80,19 +80,15 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
     hist.plot1d(bkgd_hist, overlay=axis, stack=True,
                 ax=ax, clear=False, fill_opts=fill_opts, error_opts=err_opts)
     bkgdh = bkgd_hist.sum(axis)
-    for sig in sigs:
-        if len(list(sig_colours.values())) > 0:
-            err_opts = {'color': sig_colours[sig],
-                        'linestyle': '-'}
-        else:
-            err_opts = {'linestyle': '-'}
-        sig_hist = hists[sig].copy()
-        sig_hist.scale(sig_scaling)
-        hist.plot1d(sig_hist,
-                    ax=ax,
-                    clear=False,
-                    error_opts=err_opts,
-                    overlay=axis)
+    if len(list(sig_colours.values())) > 0:
+        ax.set_prop_cycle(cycler(color=list(sig_colours.values())[::-1]))
+    sig_hist = hists[sigs].copy()
+    sig_hist.scale(sig_scaling)
+    hist.plot1d(sig_hist,
+                ax=ax,
+                clear=False,
+                overlay=axis,
+                stack=False)
     data_err_opts = {
         'linestyle': 'none',
         'marker': '.',
@@ -142,6 +138,7 @@ def plot_channels(hist_set, plot_name, lumifactors, read_kwargs,
                     plot = hists.integrate("channel", [ch])
                     plot.scale(lumifactors, axis="dataset")
                     plot_data_mc(plot, **plot_kwargs)
+                    plt.title(key[0] + "_" + plot_name + "_" + ch)
                     if show:
                         plt.show(block=True)
                     if save_dir is not None:
@@ -151,14 +148,14 @@ def plot_channels(hist_set, plot_name, lumifactors, read_kwargs,
                     plt.clf()
 
 
-config = config_utils.Config("example/config.json")
+config = config_utils.Config("ttDM_config/config.json")
 store = config["store"]
 mc_fileset, _ = dataset_utils.expand_datasetdict(config["mc_datasets"], store)
 data_fileset, _ = dataset_utils.expand_datasetdict(config["exp_datasets"],
                                                    store)
 data_fileset.update(mc_fileset)
 fileset = data_fileset
-plot_config = config_utils.Config("example/plot_config.json")
+plot_config = config_utils.Config("ttDM_config/plot_config.json")
 labels = plot_config["labels"]
 colours = plot_config["colours"]
 xsecs = plot_config["cross-sections"]
@@ -260,8 +257,8 @@ plot_channels(output["sel_hists"],
               {"dsnames": list(fileset.keys()), "x_label": "MET (GeV)"},
               {"data": "Data",
                "sigs": ["DM Chi1 PS100 x100", "DM Chi1 S100 x100"],
-               "sig_scaling": 100,
+               "sig_scaling": 1000,
                "labels": labels,
                "colours": colours},
-              False,
+              True,
               plot_config["hist_dir"])
