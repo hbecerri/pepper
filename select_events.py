@@ -2,6 +2,7 @@
 
 import os
 import numpy as np
+import awkward
 import coffea
 from functools import partial
 import shutil
@@ -30,7 +31,7 @@ def make_particle_hist(particle_name, data, dsname, is_mc, weight):
         coffea.hist.Cat("dsname", "Dataset name", "integral"),
         coffea.hist.Cat("chan", "Channel", "integral"),
         coffea.hist.Bin(
-            "pt", "{} $p_{{T}}$ in GeV".format(particle_name), 20, 0, 200),
+            "pt", "{} $p_{{T}}$ (GeV)".format(particle_name), 20, 0, 200),
         coffea.hist.Bin(
             "eta", r"{} $\eta$".format(particle_name), 26, -2.6, 2.6),
         coffea.hist.Bin(
@@ -49,6 +50,48 @@ def make_particle_hist(particle_name, data, dsname, is_mc, weight):
             else:
                 hist.fill(dsname=dsname, chan=chan, pt=pt, eta=eta, phi=phi)
     return hist
+
+
+def make_onedim_hist(xlabel, binopts, datafunc, data, dsname, is_mc, weight):
+    hist = coffea.hist.Hist(
+        "Counts",
+        coffea.hist.Cat("dsname", "Dataset name", "integral"),
+        coffea.hist.Cat("chan", "Channel", "integral"),
+        coffea.hist.Bin("x", xlabel, *binopts)
+    )
+    x = datafunc(data)
+    if x is not None:
+        for chan, mask in get_channel_masks(data).items():
+            x_masked = x[mask]
+            if weight is not None:
+                if isinstance(x_masked, awkward.JaggedArray):
+                    chan_weight = np.repeat(weight[mask], x_masked.counts)
+                    hist.fill(dsname=dsname, chan=chan, x=x_masked.flatten(),
+                              weight=chan_weight)
+                else:
+                    hist.fill(dsname=dsname, chan=chan, x=x_masked,
+                              weight=weight[mask])
+            else:
+                hist.fill(dsname=dsname, chan=chan, x=x_masked)
+    return hist
+
+
+def mll_datafunc(data):
+    if "mll" not in data:
+        return None
+    return data["mll"]
+
+
+def njets_datafunc(data):
+    if "Jets" not in data:
+        return None
+    return data["Jets"].counts
+
+
+def nbjets_datafunc(data):
+    if "Jets" not in data:
+        return None
+    return data["Jets"]["btagged"].sum()
 
 
 parser = ArgumentParser(description="Select events from nanoAODs")
@@ -140,7 +183,12 @@ if len(nonempty) != 0:
             break
 
 hist_dict = {
-    "Lep": partial(make_particle_hist, "Lepton")
+    "Lep": partial(make_particle_hist, "Lepton"),
+    "Jet": partial(make_particle_hist, "Jet"),
+    "MET": partial(make_particle_hist, "MET"),
+    "mll": partial(make_onedim_hist, "$M_{ll}$ (GeV)", (20, 0, 200), mll_datafunc),
+    "njet": partial(make_onedim_hist, "Number of jets", (np.arange(10),), njets_datafunc),
+    "nbjet": partial(make_onedim_hist, "Number of b-tagged jets", (np.arange(10),), nbjets_datafunc),
 }
 
 processor = Processor(config, os.path.realpath(args.eventdir), hist_dict)
@@ -197,5 +245,7 @@ output = coffea.processor.run_uproot_job(
 
 os.makedirs(args.histdir, exist_ok=True)
 for key, hist in output["sel_hists"].items():
+    if hist.values() == {}:
+        continue
     fname = "_".join(key) + ".coffea"
     coffea.util.save(hist, os.path.join(args.histdir, fname))
