@@ -576,7 +576,9 @@ class Processor(processor.ProcessorABC):
 
     def fill_accumulator(self, hist_dict, accumulator, is_mc, dsname, data,
                          systematics, cut):
-        if self.config["compute_systematics"]:
+        do_systematics = (self.config["compute_systematics"]
+                          and systematics is not None)
+        if do_systematics:
             weight = systematics["weight"].flatten()
         else:
             weight = None
@@ -589,13 +591,13 @@ class Processor(processor.ProcessorABC):
             # If this ds is dedicated for a systematic, save hist accordingly
             if dsname in dsforsys:
                 # But only if we want to compute systematics
-                if self.config["compute_systematics"]:
+                if do_systematics:
                     replacename, sysname = dsforsys[dsname]
                     accumulator[(cut, histname, sysname)] = nominal_hist
             else:
                 accumulator[(cut, histname)] = nominal_hist
 
-                if self.config["compute_systematics"]:
+                if do_systematics:
                     for syscol in systematics.columns:
                         if syscol == "weight":
                             continue
