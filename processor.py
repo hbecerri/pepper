@@ -616,12 +616,20 @@ class Processor(processor.ProcessorABC):
         # Get describtion of individual columns of this branch with
         # Events->GetBranch("LHEScaleWeight")->GetTitle() in ROOT
         data = selector.masked
-        selector.set_systematic("MEren",
-                                data["LHEScaleWeight"][:, 7],
-                                data["LHEScaleWeight"][:, 1])
-        selector.set_systematic("MEfac",
-                                data["LHEScaleWeight"][:, 5],
-                                data["LHEScaleWeight"][:, 3])
+        if "LHEScaleWeight" in data:
+            selector.set_systematic("MEren",
+                                    data["LHEScaleWeight"][:, 7],
+                                    data["LHEScaleWeight"][:, 1])
+            selector.set_systematic("MEfac",
+                                    data["LHEScaleWeight"][:, 5],
+                                    data["LHEScaleWeight"][:, 3])
+        else:
+            selector.set_systematic("MEren",
+                                    np.full(data.size, 1),
+                                    np.full(data.size, 1))
+            selector.set_systematic("MEfac",
+                                    np.full(data.size, 1),
+                                    np.full(data.size, 1))
         # Parton shower scale
         selector.set_systematic("PSisr",
                                 data["PSWeight"][:, 2],
