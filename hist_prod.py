@@ -26,7 +26,7 @@ import utils.datasets as dataset_utils
 from processor import Processor
 
 
-def fill_MET(data, dsname, is_mc):
+def fill_MET(data, dsname, is_mc, weight):
     dataset_axis = hist.Cat("dataset", "")
     MET_axis = hist.Bin("MET", "MET [GeV]", 100, 0, 400)
     if "Lepton" in data:
@@ -37,7 +37,7 @@ def fill_MET(data, dsname, is_mc):
                 MET_hist.fill(dataset=dsname,
                               channel=ch,
                               MET=data["MET_pt"][vals],
-                              weight=data["genWeight"][vals])
+                              weight=weight[vals])
         else:
             for ch, vals in channel(data["Lepton"]).items():
                 MET_hist.fill(dataset=dsname,
@@ -48,11 +48,64 @@ def fill_MET(data, dsname, is_mc):
         if is_mc:
             MET_hist.fill(dataset=dsname,
                           MET=data["MET_pt"],
-                          weight=data["genWeight"])
+                          weight=weight)
         else:
             MET_hist.fill(dataset=dsname, MET=data["MET_pt"])
     return MET_hist
 
+def fill_puppi_MET(data, dsname, is_mc, weight):
+    dataset_axis = hist.Cat("dataset", "")
+    MET_axis = hist.Bin("MET", "MET [GeV]", 100, 0, 400)
+    if "Lepton" in data:
+        channel_axis = hist.Cat("channel", "")
+        MET_hist = hist.Hist("Counts", dataset_axis, channel_axis, MET_axis)
+        if is_mc:
+            for ch, vals in channel(data["Lepton"]).items():
+                MET_hist.fill(dataset=dsname,
+                              channel=ch,
+                              MET=data["PuppiMET_pt"][vals],
+                              weight=weight[vals])
+        else:
+            for ch, vals in channel(data["Lepton"]).items():
+                MET_hist.fill(dataset=dsname,
+                              channel=ch,
+                              MET=data["PuppiMET_pt"][vals])
+    else:
+        MET_hist = hist.Hist("Counts", dataset_axis, MET_axis)
+        if is_mc:
+            MET_hist.fill(dataset=dsname,
+                          MET=data["PuppiMET_pt"],
+                          weight=weight)
+        else:
+            MET_hist.fill(dataset=dsname, MET=data["PuppiMET_pt"])
+    return MET_hist
+
+def fill_MET_sig(data, dsname, is_mc, weight):
+    dataset_axis = hist.Cat("dataset", "")
+    MET_axis = hist.Bin("MET_sig", "MET significance", 100, 0, 600)
+    if "Lepton" in data:
+        channel_axis = hist.Cat("channel", "")
+        MET_hist = hist.Hist("Counts", dataset_axis, channel_axis, MET_axis)
+        if is_mc:
+            for ch, vals in channel(data["Lepton"]).items():
+                MET_hist.fill(dataset=dsname,
+                              channel=ch,
+                              MET_sig=data["MET_significance"][vals],
+                              weight=weight[vals])
+        else:
+            for ch, vals in channel(data["Lepton"]).items():
+                MET_hist.fill(dataset=dsname,
+                              channel=ch,
+                              MET_sig=data["MET_significance"][vals])
+    else:
+        MET_hist = hist.Hist("Counts", dataset_axis, MET_axis)
+        if is_mc:
+            MET_hist.fill(dataset=dsname,
+                          MET_sig=data["MET_significance"],
+                          weight=weight)
+        else:
+            MET_hist.fill(dataset=dsname, MET_sig=data["MET_significance"])
+    return MET_hist
 
 def channel(leps):
     ch = {}
@@ -76,7 +129,7 @@ def channel(leps):
     return ch
 
 
-def fill_Mll(data, dsname, is_mc):
+def fill_Mll(data, dsname, is_mc, weight):
     dataset_axis = hist.Cat("dataset", "")
     Mll_axis = hist.Bin("Mll", "Mll [GeV]", 100, 0, 400)
     Mll_hist = hist.Hist("Counts", dataset_axis, Mll_axis)
@@ -87,20 +140,6 @@ def fill_Mll(data, dsname, is_mc):
         else:
             Mll_hist.fill(dataset=dsname, Mll=data["Mll"])
     return Mll_hist
-
-
-# https://stackoverflow.com/questions/50916422/python-typeerror-object-of-type-int64-is-not-json-serializable/50916741
-class NpEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        elif isinstance(obj, np.floating):
-            return float(obj)
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        else:
-            return super(NpEncoder, self).default(obj)
-
 
 wrk_init = """
 export PATH=/afs/desy.de/user/s/stafford/.local/bin:$PATH
@@ -155,7 +194,8 @@ destdir = \
     "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
 
 hist_dict = {"MET": fill_MET,
-             "Mll": fill_Mll}
+             "Puppi_MET": fill_puppi_MET,
+             "MET_sig": fill_MET_sig}
 
 """output = coffea.processor.run_uproot_job(
     smallfileset,

@@ -30,7 +30,8 @@ matplotlib.interactive(True)
 
 
 def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
-                 labels=None, colours=None, axis=None):
+                 labels=None, colours=None, axis=None,
+                 x_ax_name="x_ax"):
     if colours is not None:
         colours = colours.copy()
     if labels is not None:
@@ -40,7 +41,7 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
             labelmap[val].append(key)
 
         sortedlabels = sorted(labelsset, key=(
-            lambda x: sum([(hists.integrate("MET")).values()[(y,)]
+            lambda x: sum([(hists.integrate(x_ax_name)).values()[(y,)]
                            for y in labelmap[x]])))
         for key in sortedlabels:
             labelmap[key] = labelmap.pop(key)
@@ -138,7 +139,9 @@ def plot_channels(hist_set, plot_name, lumifactors, read_kwargs,
                     plot = hists.integrate("channel", [ch])
                     plot.scale(lumifactors, axis="dataset")
                     plot_data_mc(plot, **plot_kwargs)
-                    plt.title(key[0] + "_" + plot_name + "_" + ch)
+                    fig = plt.gcf()
+                    fig.suptitle(key[0] + " " + plot_name + " " + ch)
+                    fig.set_size_inches(16, 12)
                     if show:
                         plt.show(block=True)
                     if save_dir is not None:
@@ -251,14 +254,48 @@ plt.savefig(os.path.join(plot_config["hist_dir"], "MET.pdf"))
 plt.show(block=True)
 plt.clf()'''
 
+plot_kwargs={"data": "Data",
+               "sigs": ["DM Chi1 PS100 x1000", "DM Chi1 S100 x1000"],
+               "sig_scaling": 1000,
+               "labels": labels,
+               "colours": colours,
+               "x_ax_name": "MET"}
+'''
+hists = output["sel_hists"][("MET > 40 GeV", "Puppi_MET")]
+for ch in ["ee", "emu", "mumu"]:
+    plot = hists.integrate("channel", [ch])
+    plot.scale(lumifactors, axis="dataset")
+    plot_data_mc(plot, **plot_kwargs)
+    fig = plt.gcf()
+    fig.suptitle("MET > 40 GeV" + " " + "Puppi MET" + " " + ch)
+    plt.savefig(os.path.join(
+                            plot_config["hist_dir"], "trial.pdf"))'''
+
 plot_channels(output["sel_hists"],
               "MET",
               lumifactors,
               {"dsnames": list(fileset.keys()), "x_label": "MET (GeV)"},
+              plot_kwargs,
+              False,
+              plot_config["hist_dir"])
+
+plot_channels(output["sel_hists"],
+              "Puppi_MET",
+              lumifactors,
+              {"dsnames": list(fileset.keys()), "x_label": "MET (GeV)"},
+              plot_kwargs,
+              False,
+              plot_config["hist_dir"])
+
+plot_channels(output["sel_hists"],
+              "MET_sig",
+              lumifactors,
+              {"dsnames": list(fileset.keys()), "x_label": "MET significance"},
               {"data": "Data",
-               "sigs": ["DM Chi1 PS100 x100", "DM Chi1 S100 x100"],
+               "sigs": ["DM Chi1 PS100 x1000", "DM Chi1 S100 x1000"],
                "sig_scaling": 1000,
                "labels": labels,
-               "colours": colours},
-              True,
+               "colours": colours,
+               "x_ax_name": "MET_sig"},
+              False,
               plot_config["hist_dir"])

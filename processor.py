@@ -12,6 +12,7 @@ import coffea.processor as processor
 import uproot
 from uproot_methods import TLorentzVectorArray
 import h5py
+import time
 
 import utils.config
 import utils.misc
@@ -235,6 +236,9 @@ class Selector(object):
         for weightname, factors in weight.items():
             self.modify_weight(weightname, factors[0], factors[1], mask)
         if self.on_cutdone is not None:
+            '''print(name)
+            print(self.final_systematics["weight"])
+            time.sleep(10)'''
             self.on_cutdone(data=self.final,
                             systematics=self.final_systematics,
                             cut=name)
@@ -273,6 +277,8 @@ class Selector(object):
         """
         if factor is not None:
             factor = self._pad_npcolumndata(factor, 1, mask)
+            print(self.systematics["weight"], factor)
+            time.sleep(10)
             self.systematics["weight"] = self.systematics["weight"] * factor
         if updown is not None:
             self.set_systematic(name, updown[0], updown[1], mask)
@@ -545,7 +551,7 @@ class Processor(processor.ProcessorABC):
             if self.btagweighters is not None:
                 selector.set_column(self.compute_weight_btag, "weight_btag")
 
-        lep, antilep = self.pick_leps(selector.final)
+        '''lep, antilep = self.pick_leps(selector.final)
         b, bbar = self.choose_bs(selector.final, lep, antilep)
         neutrino, antineutrino = kinreco(lep["p4"], antilep["p4"],
                                          b["p4"], bbar["p4"],
@@ -570,19 +576,19 @@ class Processor(processor.ProcessorABC):
         reco_objects.set_column(self.wplus, "Wplus")
         reco_objects.set_column(self.top, "top")
         reco_objects.set_column(self.antitop, "antitop")
-        reco_objects.set_column(self.ttbar, "ttbar")
+        reco_objects.set_column(self.ttbar, "ttbar")'''
 
         output["cutflow"][dsname] = selector.cutflow
 
-        if self.destdir is not None:
-            self._save_per_event_info(dsname, selector, reco_objects)
+        '''if self.destdir is not None:
+            self._save_per_event_info(dsname, selector, reco_objects)'''
 
         return output
 
     def fill_accumulator(self, hist_dict, accumulator, is_mc, dsname, data,
                          systematics, cut):
         if systematics is not None:
-            weight = systematics["weight"]
+            weight = systematics["weight"].flatten()
         else:
             weight = None
         for histname, fill_func in hist_dict.items():
