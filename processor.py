@@ -350,8 +350,6 @@ class Selector(object):
             if col not in data:
                 continue
             return_dict[prefix + col] = utils.misc.jagged_reduce(data[col])
-        if self.systematics is not None:
-            return_dict["weight"] = self.weight
         return return_dict
 
     def get_columns_from_config(self, to_save, prefix=""):
@@ -472,6 +470,7 @@ class Processor(processor.ProcessorABC):
             outf = awkward.hdf5(f)
             out_dict = selector.get_columns_from_config(
                 self.config["selector_cols_to_save"])
+            out_dict["weight"] = selector.weight
             out_dict.update(reco_selector.get_columns_from_config(
                 self.config["reco_cols_to_save"], "reco"))
             out_dict["cutflags"] = selector.get_cuts()
