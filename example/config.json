@@ -3,7 +3,7 @@
     "datadir": "data",
     "store": "/pnfs/desy.de/cms/tier2/store",
     "genhist_path": "$DATADIR/GenHists.root",
-    "lumimask": "/afs/cern.ch/cms/CAF/CMSCOMM/COMM_DQM/certification/Collisions18/13TeV/PromptReco/Cert_314472-325175_13TeV_PromptReco_Collisions18_JSON.txt",
+    "lumimask": "$DATADIR/Cert_314472-325175_13TeV_PromptReco_Collisions18_JSON.txt",
     "electron_sf": [
         [
             "$DATADIR/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root",

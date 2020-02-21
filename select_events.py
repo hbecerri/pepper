@@ -108,7 +108,7 @@ parser.add_argument(
     help="Can be specified multiple times. Ignore datasets given in "
     "config and instead process these")
 parser.add_argument(
-    "--condor", type=int, const=10, nargs="?", metavar="simul_jobs",
+    "-c", "--condor", type=int, const=10, nargs="?", metavar="simul_jobs",
     help="Split and submit to HTCondor. By default 10 condor jobs are "
     "submitted. The number can be changed by supplying it to this option"
 )
@@ -121,8 +121,8 @@ parser.add_argument(
 parser.add_argument(
     "--mc", action="store_true", help="Only process MC files")
 parser.add_argument(
-    "--debug", action="store_true", help="Only process a small amount of files"
-    "to make debugging feasible")
+    "-d", "--debug", action="store_true", help="Only process a small amount "
+    "of files to make debugging feasible")
 args = parser.parse_args()
 
 
