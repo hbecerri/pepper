@@ -31,7 +31,7 @@ matplotlib.interactive(True)
 
 def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
                  labels=None, colours=None, axis=None,
-                 x_ax_name="x_ax"):
+                 x_ax_name="x_ax", y_scale="linear"):
     if colours is not None:
         colours = colours.copy()
     if labels is not None:
@@ -112,13 +112,21 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
                    unc='num')
     rax.set_ylabel('Ratio')
     rax.set_ylim(0, 2)
+    ax.set_yscale(y_scale)
+    if y_scale == "log":
+        ax.set_ylim(10**-2, 10**3)
 
 
 def plot_cps(hist_set, plot_name, lumifactors, read_kwargs,
              plot_kwargs, show=False, save_dir=None):
     for key in hist_set.keys():
         if (len(key) == 2) & (key[1] == plot_name):
-            plot = hist_set[key]
+            hists = hist_set[key]
+            ax_names = [ax.name for ax in hists.axes]
+            if "channel" in ax_names:
+                plot = hists.integrate("channel")
+            else:
+                plot = hists
             plot.scale(lumifactors, axis="dataset")
             plot_data_mc(plot, **plot_kwargs)
             if show:
@@ -134,7 +142,8 @@ def plot_channels(hist_set, plot_name, lumifactors, read_kwargs,
     for key in hist_set.keys():
         if (len(key) == 2) & (key[1] == plot_name):
             hists = hist_set[key]
-            if len(hists.axes()) == 3:
+            ax_names = [ax.name for ax in hists.axes]
+            if "channel" in ax_names:
                 for ch in ["ee", "emu", "mumu"]:
                     plot = hists.integrate("channel", [ch])
                     plot.scale(lumifactors, axis="dataset")
@@ -296,6 +305,7 @@ plot_channels(output["sel_hists"],
                "sig_scaling": 1000,
                "labels": labels,
                "colours": colours,
-               "x_ax_name": "MET_sig"},
+               "x_ax_name": "MET_sig",
+               "y_scale":"log"},
               False,
               plot_config["hist_dir"])
