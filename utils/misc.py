@@ -151,7 +151,10 @@ def montecarlo_iterate(datasets, factors, branches, treepath="Events"):
                 if tree[branch].size == 0:
                     continue
                 chunks[branch].append(tree[branch])
-            weight_chunks.append(tree["weight"] * factors[group])
+            if factors is not None:
+                weight_chunks.append(tree["weight"] * factors[group])
+            else:
+                weight_chunks.append(tree["weight"])
         if len(weight_chunks) == 0:
             continue
         data = {}

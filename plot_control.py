@@ -200,7 +200,7 @@ def get_channel_masks(data):
     }
 
 
-def apply_cuts(data, name, cuts, negcuts):
+def apply_cuts(data, name, cuts, negcuts, weight=None):
     cutsel = None
     if cuts is not None:
         cutsel = (data["cutflags"] & cuts) == cuts
@@ -213,9 +213,14 @@ def apply_cuts(data, name, cuts, negcuts):
                                                             cutsel.sum(),
                                                             data.size))
         data = data[cutsel]
+        if weight is not None:
+            weight = weight[cutsel]
     else:
         print("{}: {} events".format(name, data.size))
-    return data
+    if weight is not None:
+        return data, weight
+    else:
+        return data
 
 
 parser = ArgumentParser()
@@ -256,9 +261,16 @@ config = Config(args.config)
 
 exp_datasets = get_event_files(
     args.eventdir, args.eventext, config["exp_datasets"])
+if "dataset_for_systematics" in config:
+    mc_datasets = {}
+    for dsname, files in config["mc_datasets"].items():
+        if dsname in config["dataset_for_systematics"]:
+            continue
+        mc_datasets[dsname] = files
+else:
+    mc_datasets = config["mc_datasets"]
 mc_datasets = get_event_files(
-    args.eventdir, args.eventext, config["mc_datasets"])
-montecarlo_factors = config["mc_lumifactors"]
+    args.eventdir, args.eventext, mc_datasets)
 
 if args.labels:
     with open(args.labels) as f:
@@ -289,9 +301,9 @@ branches = ["Lepton_pt",
 
 mc_colors = {}
 for name, weight, data in montecarlo_iterate(mc_datasets,
-                                             montecarlo_factors,
+                                             None,
                                              branches):
-    data = apply_cuts(data, name, args.cuts, args.negcuts)
+    data, weight = apply_cuts(data, name, args.cuts, args.negcuts, weight)
 
     is_dy = name.startswith("DYJets")
     if labels_map:
