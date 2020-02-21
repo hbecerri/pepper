@@ -26,12 +26,16 @@ def get_channel_masks(data):
 
 
 def make_particle_hist(particle_name, data, dsname, is_mc, weight):
+    """pt, eta, phi histogram. Due to the high dimensionality, a histogram has
+    82080 bins, considering a single dataset source, so its memory intensive.
+    """
     hist = coffea.hist.Hist(
         "Counts",
         coffea.hist.Cat("dsname", "Dataset name", "integral"),
         coffea.hist.Cat("chan", "Channel", "integral"),
         coffea.hist.Bin(
-            "pt", "{} $p_{{T}}$ (GeV)".format(particle_name), 20, 0, 200),
+            "pt", "{} $p_{{\\mathrm{{T}}}}$ (GeV)".format(particle_name), 20,
+            0, 200),
         coffea.hist.Bin(
             "eta", r"{} $\eta$".format(particle_name), 26, -2.6, 2.6),
         coffea.hist.Bin(
@@ -52,14 +56,25 @@ def make_particle_hist(particle_name, data, dsname, is_mc, weight):
     return hist
 
 
-def make_onedim_hist(xlabel, binopts, datafunc, data, dsname, is_mc, weight):
+def make_onedim_hist(xlabel, binopts, datasource, data, dsname, is_mc, weight):
     hist = coffea.hist.Hist(
         "Counts",
         coffea.hist.Cat("dsname", "Dataset name", "integral"),
         coffea.hist.Cat("chan", "Channel", "integral"),
         coffea.hist.Bin("x", xlabel, *binopts)
     )
-    x = datafunc(data)
+    if callable(datasource):
+        x = datasource(data)
+    elif isinstance(datasource, tuple):
+        if datasource[0] not in data:
+            x = None
+        else:
+            x = getattr(data[datasource[0]], datasource[1])
+    else:
+        if datasource not in data:
+            x = None
+        else:
+            x = data[datasource]
     if x is not None:
         for chan, mask in get_channel_masks(data).items():
             x_masked = x[mask]
@@ -72,20 +87,8 @@ def make_onedim_hist(xlabel, binopts, datafunc, data, dsname, is_mc, weight):
                     hist.fill(dsname=dsname, chan=chan, x=x_masked,
                               weight=weight[mask])
             else:
-                hist.fill(dsname=dsname, chan=chan, x=x_masked)
+                hist.fill(dsname=dsname, chan=chan, x=x_masked.flatten())
     return hist
-
-
-def mll_datafunc(data):
-    if "mll" not in data:
-        return None
-    return data["mll"]
-
-
-def njets_datafunc(data):
-    if "Jets" not in data:
-        return None
-    return data["Jets"].counts
 
 
 def nbjets_datafunc(data):
@@ -183,12 +186,34 @@ if len(nonempty) != 0:
             break
 
 hist_dict = {
-    "Lep": partial(make_particle_hist, "Lepton"),
-    "Jet": partial(make_particle_hist, "Jet"),
-    "MET": partial(make_particle_hist, "MET"),
-    "mll": partial(make_onedim_hist, "$M_{ll}$ (GeV)", (20, 0, 200), mll_datafunc),
-    "njet": partial(make_onedim_hist, "Number of jets", (np.arange(10),), njets_datafunc),
-    "nbjet": partial(make_onedim_hist, "Number of b-tagged jets", (np.arange(10),), nbjets_datafunc),
+    "Leptonpt": partial(
+        make_onedim_hist, "Lepton $p_{{\\mathrm{{T}}}}$ (GeV)", (20, 0, 200),
+        ("Lepton", "pt")),
+    "Leptoneta": partial(
+        make_onedim_hist, r"Lepton $\eta$", (26, -2.6, 2.6),
+        ("Lepton", "eta")),
+    "Leptonphi": partial(
+        make_onedim_hist, r"Lepton $\varphi$", (38, -3.8, 3.8),
+        ("Lepton", "phi")),
+    "Jetpt": partial(
+        make_onedim_hist, "Jet $p_{{\\mathrm{{T}}}}$ (GeV)", (20, 0, 200),
+        ("Jet", "pt")),
+    "Jeteta": partial(
+        make_onedim_hist, r"Jet $\eta$", (26, -2.6, 2.6), ("Jet", "eta")),
+    "Jetphi": partial(
+        make_onedim_hist, r"Jet $\varphi$", (38, -3.8, 3.8), ("Jet", "phi")),
+    "METpt": partial(
+        make_onedim_hist, "MET $p_{{\\mathrm{{T}}}}$ (GeV)", (20, 0, 200),
+        ("MET", "pt")),
+    "METphi": partial(
+        make_onedim_hist, r"MET $\varphi$", (38, -3.8, 3.8), ("MET", "phi")),
+    "mll": partial(make_onedim_hist, "$M_{ll}$ (GeV)", (20, 0, 200), "mll"),
+    "njet": partial(
+        make_onedim_hist, "Number of jets", (np.arange(10),),
+        ("Jet", "counts")),
+    "nbjet": partial(
+        make_onedim_hist, "Number of b-tagged jets", (np.arange(10),),
+        nbjets_datafunc),
 }
 
 processor = Processor(config, os.path.realpath(args.eventdir), hist_dict)
