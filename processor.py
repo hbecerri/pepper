@@ -98,6 +98,7 @@ class Selector(object):
         self.on_cutdone = on_cutdone
 
         self._cutflow = processor.defaultdict_accumulator(int)
+        self.channel_cutflows = None
         if weight is not None:
             tabled = awkward.Table({"weight": weight})
             counts = np.full(self.table.size, 1)
@@ -192,6 +193,22 @@ class Selector(object):
     def cutflow(self):
         """Return an ordered dict of cut name -> selected events"""
         return self._cutflow
+ 
+    def _add_channel_cutflow(self, name):
+        passing_all = self._cuts.all(*(self._cuts.names or []))
+        for ch in self.channel_cutflows.keys():
+            if self.systematics is not None:
+                num = self.systematics["weight"][passing_all][np.where(self.final["Channel"] == ch)].flatten().sum()
+            else:
+                passing_all[passing_all] = np.where(self.masked["Channel"] == ch)
+                num = passing_all.sum()
+            self.channel_cutflows[ch][name] = num
+
+    def initalise_channel_cutflows(self, channels, ch_func):
+        self.channel_cutflows=processor.dict_accumulator(
+            {ch: processor.defaultdict_accumulator(int) for ch in channels})
+        self.set_column(ch_func, "Channel")
+        self._add_channel_cutflow(self._cuts.names[-1])
 
     def add_cut(self, accept, name):
         """Adds a cut
@@ -228,6 +245,8 @@ class Selector(object):
             cut = accepted
         self._cuts.add_cut(name, cut)
         self._add_cutflow(name)
+        if self.channel_cutflows is not None:
+            self._add_channel_cutflow(name)
         if not self._frozen:
             self._current_cuts.append(name)
             mask = None
@@ -236,9 +255,6 @@ class Selector(object):
         for weightname, factors in weight.items():
             self.modify_weight(weightname, factors[0], factors[1], mask)
         if self.on_cutdone is not None:
-            '''print(name)
-            print(self.final_systematics["weight"])
-            time.sleep(10)'''
             self.on_cutdone(data=self.final,
                             systematics=self.final_systematics,
                             cut=name)
@@ -520,6 +536,7 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(partial(self.met_filters, is_mc), "MET filters")
 
         selector.set_column(self.build_lepton_column, "Lepton")
+        selector.initalise_channel_cutflows(["ee", "emu", "mumu", "None"], self.set_channels)
         selector.add_cut(partial(self.lepton_pair, is_mc), "At least 2 leps")
         selector.set_column(self.same_flavor, "is_same_flavor")
         selector.set_column(self.mll, "mll")
@@ -861,6 +878,22 @@ class Processor(processor.ProcessorABC):
         else:
             arr = awkward.JaggedArray.fromcounts([0], [])
         return arr
+
+    def set_channels(self, data):
+        leps = data["Lepton"]
+        ch = np.empty(len(leps), dtype=str)
+        ch[leps.counts < 2] = "None"
+        twoleps = leps[leps.counts > 1]
+        ee = ((np.abs(twoleps[:, 0].pdgId) == 11)
+              & (np.abs(twoleps[:, 1].pdgId) == 11))
+        ch[leps.counts > 1][ee] ="ee"
+        mumu = ((np.abs(twoleps[:, 0].pdgId) == 13)
+                & (np.abs(twoleps[:, 1].pdgId) == 13))
+        ch[leps.counts > 1][mumu] = "mumu"
+        emu = (np.abs(twoleps[:, 0].pdgId)
+               != np.abs(twoleps[:, 1].pdgId))
+        ch[leps.counts > 1][emu] = "emu"
+        return ch
 
     def compute_lepton_sf(self, data):
         is_ele = abs(data["Lepton"].pdgId) == 11
