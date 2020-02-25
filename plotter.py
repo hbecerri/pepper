@@ -117,7 +117,7 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
         ax.set_ylim(10**-2, 10**3)
 
 
-def plot_cps(hist_set, plot_name, lumifactors, read_kwargs,
+def plot_cps(hist_set, plot_name, lumifactors,
              plot_kwargs, show=False, save_dir=None):
     for key in hist_set.keys():
         if (len(key) == 2) & (key[1] == plot_name):
@@ -137,8 +137,23 @@ def plot_cps(hist_set, plot_name, lumifactors, read_kwargs,
             plt.clf()
 
 
-def plot_channels(hist_set, plot_name, lumifactors, read_kwargs,
+def plot_cps(hist_set, plot_name, lumifactors,
                   plot_kwargs, show=False, save_dir=None):
+    def _plot(plot, lumifactors, plot_kwargs,
+              show=False, save_dir=None, save_name=None):
+        plot.scale(lumifactors, axis="dataset")
+        plot_data_mc(plot, **plot_kwargs)
+        fig = plt.gcf()
+        fig.suptitle(key[0] + " " + plot_name + " " + ch)
+        fig.set_size_inches(16, 12)
+        if show:
+            plt.show(block=True)
+        if save_dir is not None:
+            plt.savefig(os.path.join(
+                save_dir, key[0] + "_" + plot_name +
+                "_" + ch + ".pdf"))
+        plt.clf()
+    
     for key in hist_set.keys():
         if (len(key) == 2) & (key[1] == plot_name):
             hists = hist_set[key]
@@ -146,18 +161,7 @@ def plot_channels(hist_set, plot_name, lumifactors, read_kwargs,
             if "channel" in ax_names:
                 for ch in ["ee", "emu", "mumu"]:
                     plot = hists.integrate("channel", [ch])
-                    plot.scale(lumifactors, axis="dataset")
-                    plot_data_mc(plot, **plot_kwargs)
-                    fig = plt.gcf()
-                    fig.suptitle(key[0] + " " + plot_name + " " + ch)
-                    fig.set_size_inches(16, 12)
-                    if show:
-                        plt.show(block=True)
-                    if save_dir is not None:
-                        plt.savefig(os.path.join(
-                            save_dir, key[0] + "_" + plot_name +
-                            "_" + ch + ".pdf"))
-                    plt.clf()
+                    
 
 
 config = config_utils.Config("ttDM_config/config.json")
@@ -283,7 +287,6 @@ for ch in ["ee", "emu", "mumu"]:
 plot_channels(output["sel_hists"],
               "MET",
               lumifactors,
-              {"dsnames": list(fileset.keys()), "x_label": "MET (GeV)"},
               plot_kwargs,
               False,
               plot_config["hist_dir"])
@@ -291,7 +294,6 @@ plot_channels(output["sel_hists"],
 plot_channels(output["sel_hists"],
               "Puppi_MET",
               lumifactors,
-              {"dsnames": list(fileset.keys()), "x_label": "MET (GeV)"},
               plot_kwargs,
               False,
               plot_config["hist_dir"])
@@ -299,7 +301,6 @@ plot_channels(output["sel_hists"],
 plot_channels(output["sel_hists"],
               "MET_sig",
               lumifactors,
-              {"dsnames": list(fileset.keys()), "x_label": "MET significance"},
               {"data": "Data",
                "sigs": ["DM Chi1 PS100 x1000", "DM Chi1 S100 x1000"],
                "sig_scaling": 1000,

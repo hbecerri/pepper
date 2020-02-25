@@ -200,8 +200,7 @@ class Selector(object):
             if self.systematics is not None:
                 num = self.systematics["weight"][passing_all][np.where(self.final["Channel"] == ch)].flatten().sum()
             else:
-                passing_all[passing_all] = np.where(self.masked["Channel"] == ch)
-                num = passing_all.sum()
+                num = np.where(self.final["Channel"] == ch, True, False).sum()
             self.channel_cutflows[ch][name] = num
 
     def initalise_channel_cutflows(self, channels, ch_func):
@@ -635,7 +634,8 @@ class Processor(processor.ProcessorABC):
                     # systematic datasets contain also all the events from
                     # unaffected datasets, copy the nominal hists
                     for sysds, (replace, sys) in dsforsys.items():
-                        accumulator[(cut, histname, sys)] = nominal_hist.copy()
+                        if nominal_hist is not None:
+                            accumulator[(cut, histname, sys)] = nominal_hist.copy()
 
     def add_generator_uncertainies(self, selector):
         # Matrix-element renormalization and factorization scale

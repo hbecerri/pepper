@@ -23,7 +23,7 @@ import json
 import utils.config as config_utils
 import utils.datasets as dataset_utils
 from processor import Processor
-from hist_defns import hist_dict
+from utils.hist_defns import create_hist_dict
 
 
 wrk_init = """
@@ -33,6 +33,8 @@ export PYTHONPATH=\
 export PYTHONPATH=\
 /nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea:$PYTHONPATH
 """
+
+hist_dict = create_hist_dict("ttDM_config")
 
 nproc = 1
 condor_cfg = """
@@ -78,7 +80,7 @@ smallfileset = {key: [val[0]] for key, val in fileset.items()}
 destdir = \
     "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
 
-output = coffea.processor.run_uproot_job(
+"""output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
     processor_instance=Processor(config, "None", hist_dict),
@@ -92,7 +94,7 @@ output = coffea.processor.run_uproot_job(
     processor_instance=Processor(config, "None", hist_dict),
     executor=parsl_executor,
     executor_args={"tailtimeout": None},
-    chunksize=500000)"""
+    chunksize=500000)
 
 print("saving")
 coffea.util.save(output, "out_hists/output.coffea")
