@@ -204,12 +204,12 @@ class Selector(object):
                   or a tuple of this array and a dict.
                   The array has the same length as the table and indicates if
                   an event is not cut (True).
-                  The dict maps names of scale factors to a tuples of the form
-                  (sf, (up, down)) where sf, up and down are arrays of floats
-                  giving central, up and down variation for a scale factor for
-                  each event, thus making only sense in case of MC. In case of
-                  no up/down variations (sf, None) is a valid value. `up` and
-                  `down` must be given relative to sf.
+                  The dict maps names of scale factors to either the SFs or
+                  tuples of the form (sf, up, down) where sf, up and down are
+                  arrays of floats giving central, up and down variation for a
+                  scale factor for each event, thus making only sense in case
+                  of MC. In case of no up/down variations (sf, None) is a valid
+                  value. `up` and `down` must be given relative to sf.
                   accept does not get called if num_selected is already 0.
         name -- A label to assoiate within the cutflow
         """
@@ -233,7 +233,12 @@ class Selector(object):
         else:
             mask = accepted
         for weightname, factors in weight.items():
-            self.modify_weight(weightname, factors[0], factors[1], mask)
+            if isinstance(factors, tuple):
+                factor = factors[0]
+                updown = (factors[1], factors[2])
+            else:
+                factor = factors
+            self.modify_weight(weightname, factor, updown, mask)
         if self.on_cutdone is not None:
             self.on_cutdone(data=self.final,
                             systematics=self.final_systematics,
@@ -858,7 +863,7 @@ class Processor(processor.ProcessorABC):
             up = sffunc(eta=eles.sceta, pt=eles.pt, variation="up").prod()
             down = sffunc(eta=eles.sceta, pt=eles.pt, variation="down").prod()
             key = "electronsf{}".format(i)
-            weights[key] = (central, (up / central, down / central))
+            weights[key] = (central, up / central, down / central)
         # Muon identification and isolation efficiency
         for i, sffunc in enumerate(self.muon_sf):
             central = sffunc(abseta=abs(muons.eta), pt=muons.pt).prod()
@@ -867,7 +872,7 @@ class Processor(processor.ProcessorABC):
             down = sffunc(
                 abseta=abs(muons.eta), pt=muons.pt, variation="down").prod()
             key = "muonsf{}".format(i)
-            weights[key] = (central, (up / central, down / central))
+            weights[key] = (central, up / central, down / central)
         return weights
 
     def lepton_pair(self, is_mc, data):
