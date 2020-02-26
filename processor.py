@@ -646,8 +646,6 @@ class Processor(processor.ProcessorABC):
         num_events = selector.num_selected
         lumifactors = self.config["mc_lumifactors"]
         dsforsys = self.config["dataset_for_systematics"]
-        if dsname in dsforsys:
-            dsname = dsforsys[dsname][0]
         factor = np.full(num_events, lumifactors[dsname])
         selector.modify_weight("lumi_factor", factor)
         xsuncerts = self.config["crosssection_uncertainty"]

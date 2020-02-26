@@ -280,7 +280,7 @@
     },
 
     "apply_met_filters": true,
-    "mc_lumifactors": "$DATADIR/2018ttbar_mc_lumifactors.json",
+    "mc_lumifactors": "$DATADIR/2018ttbar_mclumifactors.json",
 
     "ele_cut_transreg": true,
     "ele_eta_min": -2.4,
