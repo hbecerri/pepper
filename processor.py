@@ -1120,7 +1120,7 @@ class Processor(processor.ProcessorABC):
 
     def met_requirement(self, data):
         is_sf = data["is_same_flavor"]
-        met = data["MET_pt"]
+        met = data["MET"].pt
         return ~is_sf | (met > self.config["ee/mm_min_met"])
 
     def compute_weight_btag(self, data, variation="central"):
