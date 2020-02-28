@@ -593,9 +593,9 @@ class Processor(processor.ProcessorABC):
                 if do_systematics:
                     replacename, sysname = dsforsys[dsname]
                     sys_hist = fill_func(data=data,
-                                     dsname=replacename,
-                                     is_mc=is_mc,
-                                     weight=weight)
+                                         dsname=replacename,
+                                         is_mc=is_mc,
+                                         weight=weight)
                     accumulator[(cut, histname, sysname)] = sys_hist
             else:
                 accumulator[(cut, histname)] = fill_func(data=data,
@@ -615,7 +615,8 @@ class Processor(processor.ProcessorABC):
                     # systematic datasets contain also all the events from
                     # unaffected datasets, copy the nominal hists
                     for sysds, (replace, sys) in dsforsys.items():
-                        accumulator[(cut, histname, sys)] = accumulator[(cut, histname)].copy()
+                        accumulator[(cut, histname, sys)] =\
+                            accumulator[(cut, histname)].copy()
 
     def add_generator_uncertainies(self, selector):
         # Matrix-element renormalization and factorization scale
