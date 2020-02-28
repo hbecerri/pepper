@@ -92,9 +92,9 @@ def make_onedim_hist(xlabel, binopts, datasource, data, dsname, is_mc, weight):
 
 
 def nbjets_datafunc(data):
-    if "Jets" not in data:
+    if "Jet" not in data:
         return None
-    return data["Jets"]["btagged"].sum()
+    return data["Jet"]["btagged"].sum()
 
 
 parser = ArgumentParser(description="Select events from nanoAODs")
@@ -186,6 +186,9 @@ if len(nonempty) != 0:
             break
 
 hist_dict = {
+    "nvtx": partial(
+        make_onedim_hist, "Number of good reconstructed primary vertices",
+        (20, 0, 100), "PV_npvsGood")
     "Leptonpt": partial(
         make_onedim_hist, "Lepton $p_{{\\mathrm{{T}}}}$ (GeV)", (20, 0, 200),
         ("Lepton", "pt")),
