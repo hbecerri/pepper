@@ -588,18 +588,20 @@ class Processor(processor.ProcessorABC):
             weight = None
         for histname, fill_func in hist_dict.items():
             dsforsys = self.config["dataset_for_systematics"]
-            nominal_hist = fill_func(data=data,
-                                     dsname=dsname,
-                                     is_mc=is_mc,
-                                     weight=weight)
-            # If this ds is dedicated for a systematic, save hist accordingly
             if dsname in dsforsys:
                 # But only if we want to compute systematics
                 if do_systematics:
                     replacename, sysname = dsforsys[dsname]
-                    accumulator[(cut, histname, sysname)] = nominal_hist
+                    sys_hist = fill_func(data=data,
+                                     dsname=replacename,
+                                     is_mc=is_mc,
+                                     weight=weight)
+                    accumulator[(cut, histname, sysname)] = sys_hist
             else:
-                accumulator[(cut, histname)] = nominal_hist
+                accumulator[(cut, histname)] = fill_func(data=data,
+                                                         dsname=dsname,
+                                                         is_mc=is_mc,
+                                                         weight=weight)
 
                 if do_systematics:
                     for syscol in systematics.columns:
@@ -613,7 +615,7 @@ class Processor(processor.ProcessorABC):
                     # systematic datasets contain also all the events from
                     # unaffected datasets, copy the nominal hists
                     for sysds, (replace, sys) in dsforsys.items():
-                        accumulator[(cut, histname, sys)] = nominal_hist.copy()
+                        accumulator[(cut, histname, sys)] = accumulator[(cut, histname)].copy()
 
     def add_generator_uncertainies(self, selector):
         # Matrix-element renormalization and factorization scale
@@ -645,7 +647,6 @@ class Processor(processor.ProcessorABC):
     def add_crosssection_scale(self, selector, dsname):
         num_events = selector.num_selected
         lumifactors = self.config["mc_lumifactors"]
-        dsforsys = self.config["dataset_for_systematics"]
         factor = np.full(num_events, lumifactors[dsname])
         selector.modify_weight("lumi_factor", factor)
         xsuncerts = self.config["crosssection_uncertainty"]
