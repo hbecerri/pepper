@@ -99,6 +99,7 @@ class Config(object):
         with open(path) as f:
             self._config = json.load(f)
         self._cache = {}
+        self._config["configdir"] = os.path.dirname(os.path.realpath(path))
 
     def _get_scalefactors(self, key, dimlabels):
         sfs = []
@@ -125,14 +126,14 @@ class Config(object):
     def _replace_special_vars(self, s):
         SPECIAL_VARS = {
             "$DATADIR": "datadir",
+            "$CONFDIR": "configdir",
         }
 
         for name, configvar in SPECIAL_VARS.items():
             if name in s:
                 if configvar not in self._config:
-                    raise ConfigError("{} contained in {} but datadir was "
-                                      "not specified in config".format(
-                                          name, configvar))
+                    raise ConfigError("{} contained in config but {} was "
+                                      "not specified".format(name, configvar))
                 s = s.replace(name, self._config[configvar])
         return s
 
