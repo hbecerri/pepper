@@ -280,7 +280,7 @@
     },
 
     "apply_met_filters": true,
-    "mc_lumifactors": "$DATADIR/2018ttbar_mc_lumifactors.json",
+    "mc_lumifactors": "$DATADIR/2018ttbar_mclumifactors.json",
 
     "ele_cut_transreg": true,
     "ele_eta_min": -2.4,
@@ -340,9 +340,13 @@
             "ST_t-channel_top_4f_InclusiveDecays_TuneCP5_13TeV-powheg-madspin-pythia8": 0.15,
             "ST_t-channel_antitop_4f_InclusiveDecays_TuneCP5_13TeV-powheg-madspin-pythia8": 0.15,
             "ST_s-channel_4f_leptonDecays_TuneCP5_13TeV-madgraph-pythia8": 0.15,
-            "ST_tW_top_5f_inclusiveDecays_TuneCP5_13TeV-powheg-pythia8": 0.3,
+            "ST_tW_top_5f_inclusiveDecays_TuneCP5_13TeV-powheg-pythia8": 0.3
+        },
+        "ttbar": {
             "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8": 0.06,
-            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8": 0.06,
+            "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8": 0.06
+        },
+        "ttv": {
             "TTWJetsToLNu_TuneCP5_13TeV-amcatnloFXFX-madspin-pythia8": 0.3,
             "TTWJetsToQQ_TuneCP5_13TeV-amcatnloFXFX-madspin-pythia8": 0.3,
             "TTZToQQ_TuneCP5_13TeV-amcatnlo-pythia8": 0.3,

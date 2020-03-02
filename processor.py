@@ -204,12 +204,12 @@ class Selector(object):
                   or a tuple of this array and a dict.
                   The array has the same length as the table and indicates if
                   an event is not cut (True).
-                  The dict maps names of scale factors to a tuples of the form
-                  (sf, (up, down)) where sf, up and down are arrays of floats
-                  giving central, up and down variation for a scale factor for
-                  each event, thus making only sense in case of MC. In case of
-                  no up/down variations (sf, None) is a valid value. `up` and
-                  `down` must be given relative to sf.
+                  The dict maps names of scale factors to either the SFs or
+                  tuples of the form (sf, up, down) where sf, up and down are
+                  arrays of floats giving central, up and down variation for a
+                  scale factor for each event, thus making only sense in case
+                  of MC. In case of no up/down variations (sf, None) is a valid
+                  value. `up` and `down` must be given relative to sf.
                   accept does not get called if num_selected is already 0.
         name -- A label to assoiate within the cutflow
         """
@@ -233,10 +233,15 @@ class Selector(object):
         else:
             mask = accepted
         for weightname, factors in weight.items():
-            self.modify_weight(weightname, factors[0], factors[1], mask)
+            if isinstance(factors, tuple):
+                factor = factors[0]
+                updown = (factors[1], factors[2])
+            else:
+                factor = factors
+            self.modify_weight(weightname, factor, updown, mask)
         if self.on_cutdone is not None:
-            self.on_cutdone(data=self.masked,
-                            systematics=self.masked_systematics,
+            self.on_cutdone(data=self.final,
+                            systematics=self.final_systematics,
                             cut=name)
 
     def _pad_npcolumndata(self, data, defaultval=None, mask=None):
@@ -350,8 +355,6 @@ class Selector(object):
             if col not in data:
                 continue
             return_dict[prefix + col] = utils.misc.jagged_reduce(data[col])
-        if self.systematics is not None:
-            return_dict["weight"] = self.weight
         return return_dict
 
     def get_columns_from_config(self, to_save, prefix=""):
@@ -472,6 +475,7 @@ class Processor(processor.ProcessorABC):
             outf = awkward.hdf5(f)
             out_dict = selector.get_columns_from_config(
                 self.config["selector_cols_to_save"])
+            out_dict["weight"] = selector.weight
             out_dict.update(reco_selector.get_columns_from_config(
                 self.config["reco_cols_to_save"], "reco"))
             out_dict["cutflags"] = selector.get_cuts()
@@ -497,7 +501,7 @@ class Processor(processor.ProcessorABC):
 
         if self.config["compute_systematics"] and is_mc:
             self.add_generator_uncertainies(selector)
-            self.add_crosssection_uncertainties(selector, dsname)
+            self.add_crosssection_scale(selector, dsname)
 
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
@@ -576,30 +580,34 @@ class Processor(processor.ProcessorABC):
 
     def fill_accumulator(self, hist_dict, accumulator, is_mc, dsname, data,
                          systematics, cut):
-        if systematics is not None:
-            weight = systematics["weight"]
+        do_systematics = (self.config["compute_systematics"]
+                          and systematics is not None)
+        if do_systematics:
+            weight = systematics["weight"].flatten()
         else:
             weight = None
         for histname, fill_func in hist_dict.items():
             dsforsys = self.config["dataset_for_systematics"]
-            nominal_hist = fill_func(data=data,
-                                     dsname=dsname,
-                                     is_mc=is_mc,
-                                     weight=weight)
-            # If this ds is dedicated for a systematic, save hist accordingly
             if dsname in dsforsys:
                 # But only if we want to compute systematics
-                if systematics is not None:
+                if do_systematics:
                     replacename, sysname = dsforsys[dsname]
-                    accumulator[(cut, histname, sysname)] = nominal_hist
+                    sys_hist = fill_func(data=data,
+                                         dsname=replacename,
+                                         is_mc=is_mc,
+                                         weight=weight)
+                    accumulator[(cut, histname, sysname)] = sys_hist
             else:
-                accumulator[(cut, histname)] = nominal_hist
+                accumulator[(cut, histname)] = fill_func(data=data,
+                                                         dsname=dsname,
+                                                         is_mc=is_mc,
+                                                         weight=weight)
 
-                if systematics is not None:
+                if do_systematics:
                     for syscol in systematics.columns:
                         if syscol == "weight":
                             continue
-                        sysweight = weight * systematics[syscol]
+                        sysweight = weight * systematics[syscol].flatten()
                         hist = fill_func(data=data, dsname=dsname, is_mc=is_mc,
                                          weight=sysweight)
                         accumulator[(cut, histname, syscol)] = hist
@@ -607,19 +615,28 @@ class Processor(processor.ProcessorABC):
                     # systematic datasets contain also all the events from
                     # unaffected datasets, copy the nominal hists
                     for sysds, (replace, sys) in dsforsys.items():
-                        accumulator[(cut, histname, sys)] = nominal_hist.copy()
+                        accumulator[(cut, histname, sys)] =\
+                            accumulator[(cut, histname)].copy()
 
     def add_generator_uncertainies(self, selector):
         # Matrix-element renormalization and factorization scale
         # Get describtion of individual columns of this branch with
         # Events->GetBranch("LHEScaleWeight")->GetTitle() in ROOT
         data = selector.masked
-        selector.set_systematic("MEren",
-                                data["LHEScaleWeight"][:, 7],
-                                data["LHEScaleWeight"][:, 1])
-        selector.set_systematic("MEfac",
-                                data["LHEScaleWeight"][:, 5],
-                                data["LHEScaleWeight"][:, 3])
+        if "LHEScaleWeight" in data:
+            selector.set_systematic("MEren",
+                                    data["LHEScaleWeight"][:, 7],
+                                    data["LHEScaleWeight"][:, 1])
+            selector.set_systematic("MEfac",
+                                    data["LHEScaleWeight"][:, 5],
+                                    data["LHEScaleWeight"][:, 3])
+        else:
+            selector.set_systematic("MEren",
+                                    np.full(data.size, 1),
+                                    np.full(data.size, 1))
+            selector.set_systematic("MEfac",
+                                    np.full(data.size, 1),
+                                    np.full(data.size, 1))
         # Parton shower scale
         selector.set_systematic("PSisr",
                                 data["PSWeight"][:, 2],
@@ -628,9 +645,12 @@ class Processor(processor.ProcessorABC):
                                 data["PSWeight"][:, 3],
                                 data["PSWeight"][:, 1])
 
-    def add_crosssection_uncertainties(self, selector, dsname):
-        xsuncerts = self.config["crosssection_uncertainty"]
+    def add_crosssection_scale(self, selector, dsname):
         num_events = selector.num_selected
+        lumifactors = self.config["mc_lumifactors"]
+        factor = np.full(num_events, lumifactors[dsname])
+        selector.modify_weight("lumi_factor", factor)
+        xsuncerts = self.config["crosssection_uncertainty"]
         for name, affected_datasets in xsuncerts.items():
             for affected_dataset, uncert in affected_datasets.items():
                 if dsname == affected_dataset:
@@ -843,7 +863,7 @@ class Processor(processor.ProcessorABC):
             up = sffunc(eta=eles.sceta, pt=eles.pt, variation="up").prod()
             down = sffunc(eta=eles.sceta, pt=eles.pt, variation="down").prod()
             key = "electronsf{}".format(i)
-            weights[key] = (central, (up / central, down / central))
+            weights[key] = (central, up / central, down / central)
         # Muon identification and isolation efficiency
         for i, sffunc in enumerate(self.muon_sf):
             central = sffunc(abseta=abs(muons.eta), pt=muons.pt).prod()
@@ -852,7 +872,7 @@ class Processor(processor.ProcessorABC):
             down = sffunc(
                 abseta=abs(muons.eta), pt=muons.pt, variation="down").prod()
             key = "muonsf{}".format(i)
-            weights[key] = (central, (up / central, down / central))
+            weights[key] = (central, up / central, down / central)
         return weights
 
     def lepton_pair(self, is_mc, data):
