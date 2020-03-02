@@ -86,10 +86,6 @@ def get_evaluator(filename, fileform, filetype=None):
     return extractor.make_evaluator()
 
 
-def get_evaluator_single(filename, fileform, filetype=None):
-    return next(iter(get_evaluator(filename, fileform, filetype)))
-
-
 class ConfigError(RuntimeError):
     pass
 
