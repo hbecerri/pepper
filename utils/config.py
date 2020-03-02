@@ -109,8 +109,6 @@ class Config(object):
             hist = rootf[sfpath[1]]
             if len(sfpath) > 2:
                 sumw2 = np.zeros(len(hist._fSumw2))
-                import pdb
-                pdb.set_trace()
                 for path in sfpath[2:]:
                     hist_err = rootf[path]
                     sumw2 += hist_err.allvariances.T.flatten() ** 2
