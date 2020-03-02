@@ -399,7 +399,10 @@ class Processor(processor.ProcessorABC):
                       callables get caleld after the reconstruction.
         """
         self.config = config
-        self.destdir = destdir
+        if destdir is not None:
+            self.destdir = os.path.realdir(destdir)
+        else:
+            self.destdir = None
         self.sel_hists = sel_hists if sel_hists is not None else {}
         self.reco_hists = reco_hists if reco_hists is not None else {}
 

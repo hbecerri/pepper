@@ -103,9 +103,11 @@ def nbjets_datafunc(data):
 parser = ArgumentParser(description="Select events from nanoAODs")
 parser.add_argument("config", help="Path to a configuration file")
 parser.add_argument(
-    "eventdir", help="Path to event destination output directory")
+    "--eventdir", help="Path to event destination output directory. If not "
+    "specified, no events will be saved")
 parser.add_argument(
-    "histdir", help="Path to the histogram destination output directory")
+    "--histdir", help="Path to the histogram destination output directory. By "
+    "default, ./hists will be used.", default="./hists")
 parser.add_argument(
     "--dataset", nargs=2, action="append", metavar=("name", "path"),
     help="Can be specified multiple times. Ignore datasets given in "
@@ -169,24 +171,29 @@ if args.debug:
     key = next(iter(datasets.keys()))
     datasets = {key: datasets[key][:1]}
 
-nonempty = []
-for dsname in datasets.keys():
-    try:
-        next(os.scandir(os.path.join(args.eventdir, dsname)))
-    except (FileNotFoundError, StopIteration):
-        pass
-    else:
-        nonempty.append(dsname)
-if len(nonempty) != 0:
-    print("Non-empty output directories: {}".format(", ".join(nonempty)))
-    while True:
-        answer = input("Delete? y/n ")
-        if answer == "y":
-            for dsname in nonempty:
-                shutil.rmtree(os.path.join(args.eventdir, dsname))
-            break
-        elif answer == "n":
-            break
+if args.eventdir is not None:
+    # Check for non-empty subdirectories and remove them if wanted
+    nonempty = []
+    for dsname in datasets.keys():
+        try:
+            next(os.scandir(os.path.join(args.eventdir, dsname)))
+        except (FileNotFoundError, StopIteration):
+            pass
+        else:
+            nonempty.append(dsname)
+    if len(nonempty) != 0:
+        print("Non-empty output directories: {}".format(", ".join(nonempty)))
+        while True:
+            answer = input("Delete? y/n ")
+            if answer == "y":
+                for dsname in nonempty:
+                    shutil.rmtree(os.path.join(args.eventdir, dsname))
+                break
+            elif answer == "n":
+                break
+
+# Create histdir and in case of errors, raise them now (before processing)
+os.makedirs(args.histdir, exist_ok=True)
 
 hist_dict = {
     "nvtx": partial(
@@ -224,7 +231,7 @@ hist_dict = {
         make_onedim_hist, "B-tag discriminant", (20, 0, 1), ("Jet", "btag")),
 }
 
-processor = Processor(config, os.path.realpath(args.eventdir), hist_dict)
+processor = Processor(config, args.eventdir, hist_dict)
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
     conor_config = ("requirements = (OpSysAndVer == \"SL6\" || OpSysAndVer =="
@@ -275,7 +282,6 @@ output = coffea.processor.run_uproot_job(
     datasets, "Events", processor, executor, executor_args,
     chunksize=args.chunksize)
 
-os.makedirs(args.histdir, exist_ok=True)
 jsonname = "hists.json"
 selhists_forjson = {}
 for key, hist in output["sel_hists"].items():
