@@ -535,14 +535,10 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.has_jets, "#Jets >= %d"
                          % self.config["num_jets_atleast"])
         selector.add_cut(self.jet_pt_requirement, "Jet pt req")
-        selector.add_cut(self.btag_cut, "At least %d btag"
+        selector.add_cut(partial(self.btag_cut, is_mc), "At least %d btag"
                          % self.config["num_atleast_btagged"])
         selector.add_cut(self.met_requirement, "MET > %d GeV"
                          % self.config["ee/mm_min_met"])
-
-        if is_mc:
-            if self.btagweighters is not None:
-                selector.set_column(self.compute_weight_btag, "weight_btag")
 
         lep, antilep = self.pick_leps(selector.final)
         b, bbar = self.choose_bs(selector.final, lep, antilep)
@@ -1114,26 +1110,33 @@ class Processor(processor.ProcessorABC):
             n[mask] += (pt_min < data["Jet"].pt[mask, i]).astype(int)
         return n >= self.config["jet_pt_num_satisfied"]
 
-    def btag_cut(self, data):
-        num_btagged = data["Jet"]["btagged"].sum()
-        return num_btagged >= self.config["num_atleast_btagged"]
-
-    def met_requirement(self, data):
-        is_sf = data["is_same_flavor"]
-        met = data["MET"].pt
-        return ~is_sf | (met > self.config["ee/mm_min_met"])
-
-    def compute_weight_btag(self, data, variation="central"):
-        if self.config["num_atleast_btagged"] == 0:
-            return np.full(data.size, 1.)
+    def compute_weight_btag(self, data):
         jets = data["Jet"]
         wp = self.config["btag"].split(":", 1)[1]
         flav = jets["hadronFlavour"]
         eta = jets.eta
         pt = jets.pt
         discr = jets["btag"]
-        return np.prod(list(weighter(wp, flav, eta, pt, discr, variation)
-                       for weighter in self.btagweighters), axis=0)
+        weight = {}
+        for i, weighter in enumerate(self.btagweighters):
+            central = weighter(wp, flav, eta, pt, discr, "central")
+            up = weighter(wp, flav, eta, pt, discr, "up")
+            down = weighter(wp, flav, eta, pt, discr, "down")
+            weight[f"btagsf{i}"] = (central, up / central, down / central)
+        return weight
+
+    def btag_cut(self, is_mc, data):
+        num_btagged = data["Jet"]["btagged"].sum()
+        is_tagged = num_btagged >= self.config["num_atleast_btagged"]
+        if is_mc and self.config["compute_systematics"]:
+            return (is_tagged, self.compute_weight_btag(data[is_tagged]))
+        else:
+            return is_tagged
+
+    def met_requirement(self, data):
+        is_sf = data["is_same_flavor"]
+        met = data["MET"].pt
+        return ~is_sf | (met > self.config["ee/mm_min_met"])
 
     def pick_leps(self, data):
         lep_pair = data["Lepton"][:, :2]
