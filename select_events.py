@@ -7,6 +7,7 @@ import coffea
 from functools import partial
 import shutil
 import parsl
+import json
 from parsl.addresses import address_by_hostname
 from argparse import ArgumentParser
 
@@ -16,6 +17,8 @@ from processor import Processor
 
 
 def get_channel_masks(data):
+    if "Lepton" not in data:
+        return {"all": np.full(data.size, True)}
     p0 = abs(data["Lepton"]["pdgId"][:, 0])
     p1 = abs(data["Lepton"]["pdgId"][:, 1])
     return {
@@ -188,7 +191,7 @@ if len(nonempty) != 0:
 hist_dict = {
     "nvtx": partial(
         make_onedim_hist, "Number of good reconstructed primary vertices",
-        (20, 0, 100), "PV_npvsGood")
+        (20, 0, 100), "PV_npvsGood"),
     "Leptonpt": partial(
         make_onedim_hist, "Lepton $p_{{\\mathrm{{T}}}}$ (GeV)", (20, 0, 200),
         ("Lepton", "pt")),
