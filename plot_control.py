@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 
 import os
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import mplhep as hep
 from argparse import ArgumentParser
 import coffea
+from collections import defaultdict
 import json
-from functools import partial
-import itertools
 
 from utils.config import Config
-from utils.misc import get_event_files, montecarlo_iterate, expdata_iterate
 
 
+# Luminosities needed for CMS label at the top of plots
 LUMIS = {
     "2016": "35.92",
     "2017": "41.53",
@@ -22,340 +20,183 @@ LUMIS = {
 }
 
 
-class ComparisonHistogram(object):
-    def __init__(self, data_hist, pred_hist):
-        self.data_hist = data_hist
-        self.pred_hist = pred_hist
-
-    @classmethod
-    def frombin(cls, cofbin, ylabel):
-        data_hist = coffea.hist.Hist(
-            ylabel,
-            coffea.hist.Cat("proc", "Process", "integral"),
-            coffea.hist.Cat("chan", "Channel"),
-            cofbin)
-        pred_hist = data_hist.copy(content=False)
-        return cls(data_hist, pred_hist)
-
-    def fill(self, proc, chan, **kwargs):
-        if proc.lower() == "data":
-            self.data_hist.fill(chan=chan, proc=proc, **kwargs)
-        else:
-            self.pred_hist.fill(chan=chan, proc=proc, **kwargs)
-
-    def plot1d(self, chan, fname_data, fname_pred):
-        for hist, fname in zip([self.data_hist, self.pred_hist],
-                               [fname_data, fname_pred]):
-            hist = hist.integrate("chan", int_range=chan)
-            fig, ax, p = coffea.hist.plot1d(hist, overlay="proc", stack=True)
-            fig.savefig(fname)
-            plt.close()
-
-    def plotratio(self, chan, namebase, colors={}, cmsyear=None):
-        data_hist = self.data_hist.integrate("chan", int_range=chan)
-        pred_hist = self.pred_hist.integrate("chan", int_range=chan)
-        fig, (ax1, ax2) = plt.subplots(
-            nrows=2, sharex=True, gridspec_kw={"height_ratios": [3, 1]})
-        coffea.hist.plot1d(pred_hist,
-                           ax=ax1,
-                           overlay="proc",
-                           clear=False,
-                           stack=True,
-                           fill_opts={}, error_opts={
-                               "hatch": "////",
-                               "facecolor": "#00000000",
-                               "label": "Uncertainty"})
-        coffea.hist.plot1d(data_hist,
-                           ax=ax1,
-                           overlay="proc",
-                           clear=False,
-                           error_opts={
-                               "color": "black",
-                               "marker": "o",
-                               "markersize": 4})
-        coffea.hist.plotratio(data_hist.sum("proc"),
-                              pred_hist.sum("proc"),
-                              ax=ax2,
-                              error_opts={"fmt": "ok", "markersize": 4},
-                              denom_fill_opts={},
-                              unc="num")
-        for handle, label in zip(*ax1.get_legend_handles_labels()):
-            if label in colors:
-                handle.set_color(colors[label])
-        ax1.legend(ncol=2)
-        ax1.set_xlabel("")
-        ax1.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-        ax2.set_ylabel("Data / Pred.")
-        ax2.set_ylim(0.75, 1.25)
-        fig.subplots_adjust(hspace=0)
-        if cmsyear is not None:
-            ax1 = hep.cms.cmslabel(
-                ax1, data=True, paper=False, year=cmsyear, lumi=LUMIS[cmsyear])
-        ax1.autoscale(axis="y")
-        fig.savefig(namebase + ".svg")
-        ax1.autoscale(axis="y")
-        ax1.set_yscale("log")
-        fig.savefig(namebase + "_log.svg")
-        plt.close()
-
-    def save(self, fname_data, fname_pred):
-        coffea.util.save(self.data_hist, fname_data)
-        coffea.util.save(self.pred_hist, fname_pred)
+def get_syshists(dirname, fname):
+    keys, histnames = json.load(open(os.path.join(dirname, "hists.json")))
+    try:
+        histkey = keys[histnames.index(fname)]
+    except ValueError:
+        return []
+    sysmap = defaultdict(lambda: [None, None])
+    klen = len(histkey)
+    for i, key in enumerate(keys):
+        if len(key) == klen + 1 and key[:klen] == histkey:
+            print("Processing " + histnames[i])
+            if os.path.isabs(histnames[i]):
+                histname = histnames[i]
+            else:
+                histname = os.path.join(dirname, histnames[i])
+            sysname = key[klen]
+            if sysname.endswith("_down"):
+                sysidx = 1
+                sysname = sysname[:-len("_down")]
+            elif sysname.endswith("_up"):
+                sysidx = 0
+                sysname = sysname[:-len("_up")]
+            else:
+                raise RuntimeError(f"Invalid sysname {sysname}, expecting it "
+                                   "to end with '_up' or '_down'.")
+            sysmap[sysname][sysidx] = coffea.util.load(histname)
+    for key, updown in sysmap.items():
+        if None in updown:
+            raise RuntimeError(f"Missing variation for systematic {key}")
+    return sysmap
 
 
-class ParticleComparisonHistograms(object):
-    def __init__(self, particle_name, data_hist, pred_hist):
-        self.particle_name = particle_name
-        self.data_hist = data_hist
-        self.pred_hist = pred_hist
-
-    @classmethod
-    def create_empty(cls, particle_name):
-        bins = (
-            coffea.hist.Cat("proc", "Process", "integral"),
-            coffea.hist.Cat("chan", "Channel"),
-            coffea.hist.Bin(
-                "pt", "{} $p_{{T}}$ in GeV".format(particle_name), 20, 0, 200),
-            coffea.hist.Bin(
-                "eta", r"{} $\eta$".format(particle_name), 26, -2.6, 2.6),
-            coffea.hist.Bin(
-                "phi", r"{} $\varphi$".format(particle_name), 38, -3.8, 3.8)
-        )
-        data_hist = coffea.hist.Hist("Counts", *bins)
-        pred_hist = coffea.hist.Hist("Counts", *bins)
-        return cls(particle_name, data_hist, pred_hist)
-
-    def fill(self, proc, chan, pt, eta, phi, weight=1):
-        if proc.lower() == "data":
-            hist = self.data_hist
-        else:
-            hist = self.pred_hist
-        hist.fill(proc=proc, chan=chan, pt=pt, eta=eta, phi=phi, weight=weight)
-
-    def fill_from_data(self, proc, chan, data, weight=1):
-        pt = data[self.particle_name + "_pt"].flatten()
-        eta = data[self.particle_name + "_eta"].flatten()
-        phi = data[self.particle_name + "_phi"].flatten()
-        if isinstance(weight, np.ndarray):
-            counts = data[self.particle_name + "_pt"].counts
-            weight = np.repeat(weight, counts)
-        self.fill(proc, chan, pt, eta, phi, weight)
-
-    def plotratio(self, chan, namebase, colors={}, cmsyear=None):
-        axes = ["pt", "eta", "phi"]
-        for sumax in itertools.combinations(axes, len(axes) - 1):
-            data_hist = self.data_hist.sum(*sumax, overflow="all")
-            pred_hist = self.pred_hist.sum(*sumax, overflow="all")
-            cmphist = ComparisonHistogram(data_hist, pred_hist)
-            new_namebase = namebase + "_" + next(iter(set(axes) - set(sumax)))
-            cmphist.plotratio(chan, new_namebase, colors, cmsyear)
-
-    def plot2ddiff(self, outaxis, chan, namebase):
-        data_hist = (self.data_hist.integrate("chan", int_range=chan)
-                                   .sum("proc", outaxis, overflow="all"))
-        pred_hist = (self.pred_hist.integrate("chan", int_range=chan)
-                                   .sum("proc", outaxis, overflow="all"))
-        pred_count, pred_err = pred_hist.values(
-            sumw2=True, overflow="allnan")[()]
-        data_count, data_err = data_hist.values(
-            sumw2=True, overflow="allnan")[()]
-        err = np.sqrt(data_err + pred_err)
-        err[err == 0] = 1
-
-        sig = (data_count - pred_count) / err
-        sig_hist = pred_hist.copy(content=False)
-        sig_hist._sumw[()] = sig
-        sig_hist._sumw2 = None
-        sig_hist.label = "(Data - Pred) / Err"
-
-        display_max = abs(sig_hist.values()[()]).max()
-        patch_opts = {
-            "cmap": "RdBu",
-            "vmin": -display_max,
-            "vmax": display_max,
-        }
-        coffea.hist.plot2d(sig_hist, sig_hist.axes()[0], patch_opts=patch_opts)
-        plt.savefig(namebase + ".svg")
-        plt.close()
-
-        coffea.hist.plot2d(data_hist, sig_hist.axes()[0])
-        plt.savefig(namebase + "_data.svg")
-        plt.close()
-        coffea.hist.plot2d(pred_hist, sig_hist.axes()[0])
-        plt.savefig(namebase + "_pred.svg")
-        plt.close()
-
-    def save(self, fname_data, fname_pred):
-        coffea.util.save(self.data_hist, fname_data)
-        coffea.util.save(self.pred_hist, fname_pred)
-
-
-def get_channel_masks(data):
-    p0 = abs(data["Lepton_pdgId"][:, 0])
-    p1 = abs(data["Lepton_pdgId"][:, 1])
-    return {
-        "ee": (p0 == 11) & (p1 == 11),
-        "mm": (p0 == 13) & (p1 == 13),
-        "em": p0 != p1,
-    }
-
-
-def apply_cuts(data, name, cuts, negcuts, weight=None):
-    cutsel = None
-    if cuts is not None:
-        cutsel = (data["cutflags"] & cuts) == cuts
-    if negcuts is not None:
-        if cutsel is None:
-            cutsel = np.full(data["cutflags"].size, True)
-        cutsel &= (~data["cutflags"] & negcuts) == negcuts
-    if cutsel is not None:
-        print("{}: {} events passing cuts, {} total".format(name,
-                                                            cutsel.sum(),
-                                                            data.size))
-        data = data[cutsel]
-        if weight is not None:
-            weight = weight[cutsel]
+def prepare(hist, dense_axis, chan):
+    chan_axis = hist.axis("chan")
+    if "proc" in hist.fields:
+        proc_axis = hist.axis("proc")
+        hist = hist.project(dense_axis, chan_axis, proc_axis)
     else:
-        print("{}: {} events".format(name, data.size))
-    if weight is not None:
-        return data, weight
-    else:
-        return data
+        hist = hist.project(dense_axis, chan_axis)
+    hist = hist.integrate(chan_axis, int_range=chan)
+    return hist
 
 
-parser = ArgumentParser()
+def compute_systematic(nominal_hist, syshists, scales=None):
+    nominal_hist = nominal_hist.sum("proc")
+    nom = nominal_hist.values()[()]
+    uncerts = []
+    for up_hist, down_hist in syshists.values():
+        up = up_hist.values()[()]
+        down = down_hist.values()[()]
+        diff = np.stack([down, up]) - nom
+        lo = np.minimum(np.min(diff, axis=0), 0)
+        hi = np.maximum(np.max(diff, axis=0), 0)
+        uncerts.append((lo, hi))
+    if len(uncerts) == 0:
+        return np.array([[0], [0]])
+    uncerts = np.array(uncerts)
+    if scales is not None:
+        uncerts *= scales
+    return np.sqrt((uncerts ** 2).sum(axis=0))
+
+
+def plot(data_hist, pred_hist, sys, namebase, colors={}, cmsyear=None):
+    fig, (ax1, ax2) = plt.subplots(
+        nrows=2, sharex=True, gridspec_kw={"height_ratios": [3, 1]})
+    coffea.hist.plot1d(pred_hist,
+                       ax=ax1,
+                       overlay="proc",
+                       clear=False,
+                       stack=True,
+                       fill_opts={}, error_opts={
+                           "hatch": "////",
+                           "facecolor": "#00000000",
+                           "label": "Uncertainty"},
+                       sys=sys)
+    coffea.hist.plot1d(data_hist,
+                       ax=ax1,
+                       overlay="proc",
+                       clear=False,
+                       error_opts={
+                           "color": "black",
+                           "marker": "o",
+                           "markersize": 4})
+    coffea.hist.plotratio(data_hist.sum("proc"),
+                          pred_hist.sum("proc"),
+                          ax=ax2,
+                          error_opts={"fmt": "ok", "markersize": 4},
+                          denom_fill_opts={},
+                          unc="num",
+                          sys=sys)
+    ax2.axhline(1, linestyle="--", color="black", linewidth=0.5)
+    for handle, label in zip(*ax1.get_legend_handles_labels()):
+        if label in colors:
+            handle.set_color(colors[label])
+    ax1.legend(ncol=2)
+    ax1.set_xlabel("")
+    ax1.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    ax2.set_ylabel("Data / Pred.")
+    ax2.set_ylim(0.75, 1.25)
+    fig.subplots_adjust(hspace=0)
+    if cmsyear is not None:
+        ax1 = hep.cms.cmslabel(
+            ax1, data=True, paper=False, year=cmsyear, lumi=LUMIS[cmsyear])
+    ax1.autoscale(axis="y")
+    plt.tight_layout()
+    fig.savefig(namebase + ".svg")
+    ax1.autoscale(axis="y")
+    ax1.set_yscale("log")
+    plt.tight_layout()
+    fig.savefig(namebase + "_log.svg")
+    plt.close()
+
+
+parser = ArgumentParser(
+    description="Plot histograms from previously created histograms")
 parser.add_argument("config", help="Path to a configuration file")
 parser.add_argument(
-    "eventdir", help="Path to the directory with the events. Event files need "
-    "to be in subdirectories named by their dataset")
-parser.add_argument(
-    "--eventext", default=".hdf5", help="File extension of the event files. "
-    "Defaults to \".hdf5\"")
-parser.add_argument(
-    "--outdir", default="plots", help="Path where to output the plots. By "
-    "default a subdirectiory \"plots\"")
+    "histfile", nargs="+", help="Coffea file with a single histogram")
 parser.add_argument(
     "--labels", help="Path to a JSON file mapping the MC dataset names to "
     "proper names for plotting")
 parser.add_argument(
-    "--cuts", type=int, help="Plot only events that pass the cuts "
-    "corresponding to this number")
+    "--outdir", help="Output directory. If not given, output to the directory "
+    "where histfile is located")
 parser.add_argument(
-    "--negcuts", type=int, help="Plot only events that do not pass the cuts "
-    "corresponding to this number")
-parser.add_argument(
-    "--dyscale", type=float, nargs=3,
-    metavar=("ee_scale", "em_scale", "mm_scale"), help="Scale DY samples "
-    "according to a channel-dependent factor")
-parser.add_argument(
-    "--debug", nargs=2, metavar=("data_hist", "pred_hist"))
+    "--ignoresys", action="append", help="Ignore a specific systematic. "
+    "Can be specified multiple times.")
 args = parser.parse_args()
 
-if args.debug is not None:
-    data_hist = coffea.util.load(args.debug[0])
-    pred_hist = coffea.util.load(args.debug[1])
-    lep_hists = ParticleComparisonHistograms("Lepton", data_hist, pred_hist)
-    sys.exit(0)
-
 config = Config(args.config)
-
-exp_datasets = get_event_files(
-    args.eventdir, args.eventext, config["exp_datasets"])
-if "dataset_for_systematics" in config:
-    mc_datasets = {}
-    for dsname, files in config["mc_datasets"].items():
-        if dsname in config["dataset_for_systematics"]:
-            continue
-        mc_datasets[dsname] = files
-else:
-    mc_datasets = config["mc_datasets"]
-mc_datasets = get_event_files(
-    args.eventdir, args.eventext, mc_datasets)
-
+mc_colors = {}
 if args.labels:
     with open(args.labels) as f:
         labels_map = json.load(f)
+        axis_labelmap = defaultdict(lambda: (list(),))
+        for dsname, label in labels_map.items():
+            axis_labelmap[label][0].append(dsname)
+        for label in axis_labelmap.keys():
+            mc_colors[label] = "C" + str(len(axis_labelmap)
+                                         - len(mc_colors) - 1)
 else:
-    labels_map = None
+    axis_labelmap = None
+for histfilename in args.histfile:
+    srcdir = os.path.dirname(histfilename)
+    if args.outdir is None:
+        outdir = srcdir
+    else:
+        outdir = args.outdir
+    os.makedirs(outdir, exist_ok=True)
+    namebase, fileext = os.path.splitext(os.path.basename(histfilename))
+    hist = coffea.util.load(histfilename)
+    syshists = get_syshists(srcdir, os.path.basename(histfilename))
+    scales = np.ones(len(syshists))
+    if "tmass" in syshists:
+        scales[list(syshists.keys()).index("tmass")] = 0.5
 
-lep_hists = ParticleComparisonHistograms.create_empty("Lepton")
-jet_hists = ParticleComparisonHistograms.create_empty("Jet")
-njets_hist = ComparisonHistogram.frombin(
-    coffea.hist.Bin("njets", "Number of jets", np.arange(10)), "Counts")
-met_hist = ComparisonHistogram.frombin(
-    coffea.hist.Bin(
-        "met", "Missing transverse momentum", 20, 0, 200), "Counts")
-mll_hist = ComparisonHistogram.frombin(
-    coffea.hist.Bin(
-        "mll", "Invariant mass of the lepton system", 20, 0, 200), "Counts")
-branches = ["Lepton_pt",
-            "Lepton_eta",
-            "Lepton_phi",
-            "Lepton_pdgId",
-            "Jet_pt",
-            "Jet_eta",
-            "Jet_phi",
-            "MET_pt",
-            "mll",
-            "cutflags"]
+    proc_axis = coffea.hist.Cat("proc", "Process", "placement")
 
-mc_colors = {}
-for name, weight, data in montecarlo_iterate(mc_datasets,
-                                             None,
-                                             branches):
-    data, weight = apply_cuts(data, name, args.cuts, args.negcuts, weight)
+    data_dsnames = list(config["exp_datasets"].keys())
+    data_hist = hist.group(
+        hist.axis("dsname"), proc_axis, {"Data": (data_dsnames,)})
 
-    is_dy = name.startswith("DYJets")
-    if labels_map:
-        if name in labels_map:
-            name = labels_map[name]
-        else:
-            print("No label given for {}".format(name))
-    if name not in mc_colors:
-        mc_colors[name] = "C" + str(len(mc_colors))
-    for chan_name, sel in get_channel_masks(data).items():
-        if args.dyscale is not None and is_dy:
-            weight[sel] *= args.dyscale[["ee", "em", "mm"].index(chan_name)]
+    mc_dsnames = config["mc_datasets"].keys()
+    if axis_labelmap is not None:
+        pred_hist = hist.group(hist.axis("dsname"), proc_axis, axis_labelmap)
+    else:
+        mapping = {key: (key,) for key in mc_dsnames}
+        pred_hist = hist.group(hist.axis("dsname"), proc_axis, mapping)
 
-        lep_hists.fill_from_data(name, chan_name, data[sel], weight[sel])
-        jet_hists.fill_from_data(name, chan_name, data[sel], weight[sel])
-        njets_hist.fill(proc=name,
-                        chan=chan_name,
-                        njets=data[sel]["Jet_pt"].counts,
-                        weight=weight[sel])
-        met_hist.fill(proc=name,
-                      chan=chan_name,
-                      met=data[sel]["MET_pt"].flatten(),
-                      weight=weight[sel])
-        mll_hist.fill(proc=name,
-                      chan=chan_name,
-                      mll=data[sel]["mll"],
-                      weight=weight[sel])
-
-for name, data in expdata_iterate(exp_datasets, branches):
-    data = apply_cuts(data, name, args.cuts, args.negcuts)
-
-    for chan_name, sel in get_channel_masks(data).items():
-        lep_hists.fill_from_data("Data", chan_name, data[sel])
-        jet_hists.fill_from_data("Data", chan_name, data[sel])
-        njets_hist.fill("Data",
-                        chan=chan_name,
-                        njets=data[sel]["Jet_pt"].counts)
-        met_hist.fill("Data",
-                      chan=chan_name,
-                      met=data[sel]["MET_pt"].flatten())
-        mll_hist.fill("Data",
-                      chan=chan_name,
-                      mll=data[sel]["mll"])
-
-os.makedirs(args.outdir, exist_ok=True)
-getout = partial(os.path.join, args.outdir)
-lep_hists.save(getout("hist_l_data.coffea"), getout("hist_l_mc.coffea"))
-for chan in ("ee", "mm", "em"):
-    lep_hists.plotratio(chan, getout(f"{chan}_lepton"), mc_colors)
-    lep_hists.plot2ddiff("pt", chan, getout(f"diff_{chan}_lep"))
-    jet_hists.plotratio(chan, getout(f"{chan}_jet"), mc_colors)
-    jet_hists.plot2ddiff("pt", chan, getout(f"diff_{chan}_jet"))
-    njets_hist.plotratio(chan, getout(f"{chan}_jet_n"), mc_colors)
-    met_hist.plotratio(chan, getout(f"{chan}_met"), mc_colors)
-    mll_hist.plotratio(chan, getout(f"{chan}_mll"), mc_colors)
+    for dense in hist.dense_axes():
+        for chan in (idn.name for idn in pred_hist.axis("chan").identifiers()):
+            data_prepared = prepare(data_hist, dense, chan)
+            pred_prepared = prepare(pred_hist, dense, chan)
+            syshists_prep = {k: [prepare(vi, dense, chan) for vi in v]
+                             for k, v in syshists.items()}
+            sys = compute_systematic(pred_prepared,
+                                     syshists_prep,
+                                     scales[:, None, None])
+            plot(data_prepared, pred_prepared, sys, os.path.join(
+                outdir, f"{namebase}_{chan}"), colors=mc_colors)

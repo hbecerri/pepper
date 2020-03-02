@@ -274,8 +274,20 @@ output = coffea.processor.run_uproot_job(
     chunksize=args.chunksize)
 
 os.makedirs(args.histdir, exist_ok=True)
+jsonname = "hists.json"
+selhists_forjson = {}
 for key, hist in output["sel_hists"].items():
     if hist.values() == {}:
         continue
     fname = "_".join(key) + ".coffea"
     coffea.util.save(hist, os.path.join(args.histdir, fname))
+    selhists_forjson[key] = fname
+with open(os.path.join(args.histdir, jsonname), "a+") as f:
+    try:
+        selhists_injson = {tuple(k): v for k, v in zip(*json.load(f))}
+    except json.decoder.JSONDecodeError:
+        selhists_injson = {}
+selhists_injson.update(selhists_forjson)
+with open(os.path.join(args.histdir, jsonname), "w") as f:
+    json.dump([[tuple(k) for k in selhists_injson.keys()],
+               list(selhists_injson.values())], f, indent=4)
