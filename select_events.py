@@ -220,6 +220,8 @@ hist_dict = {
     "nbjet": partial(
         make_onedim_hist, "Number of b-tagged jets", (np.arange(10),),
         nbjets_datafunc),
+    "bdisc": partial(
+        make_onedim_hist, "B-tag discriminant", (20, 0, 1), ("Jet", "btag")),
 }
 
 processor = Processor(config, os.path.realpath(args.eventdir), hist_dict)
