@@ -20,7 +20,9 @@ LUMIS = {
 }
 
 
-def get_syshists(dirname, fname):
+def get_syshists(dirname, fname, ignore=None):
+    if ignore is None:
+        ignore = []
     keys, histnames = json.load(open(os.path.join(dirname, "hists.json")))
     try:
         histkey = keys[histnames.index(fname)]
@@ -30,12 +32,14 @@ def get_syshists(dirname, fname):
     klen = len(histkey)
     for i, key in enumerate(keys):
         if len(key) == klen + 1 and key[:klen] == histkey:
+            sysname = key[klen]
+            if any(x in sysname for x in ignore):
+                continue
             print("Processing " + histnames[i])
             if os.path.isabs(histnames[i]):
                 histname = histnames[i]
             else:
                 histname = os.path.join(dirname, histnames[i])
-            sysname = key[klen]
             if sysname.endswith("_down"):
                 sysidx = 1
                 sysname = sysname[:-len("_down")]
@@ -171,7 +175,8 @@ for histfilename in args.histfile:
     os.makedirs(outdir, exist_ok=True)
     namebase, fileext = os.path.splitext(os.path.basename(histfilename))
     hist = coffea.util.load(histfilename)
-    syshists = get_syshists(srcdir, os.path.basename(histfilename))
+    syshists = get_syshists(srcdir, os.path.basename(histfilename),
+                            args.ignoresys)
     scales = np.ones(len(syshists))
     if "tmass" in syshists:
         scales[list(syshists.keys()).index("tmass")] = 0.5
