@@ -2,6 +2,7 @@
 
 import os
 from functools import partial
+from collections import defaultdict
 import numpy as np
 import awkward
 import coffea
@@ -422,7 +423,7 @@ class Processor(processor.ProcessorABC):
         """
         self.config = config
         if destdir is not None:
-            self.destdir = os.path.realdir(destdir)
+            self.destdir = os.path.realpath(destdir)
         else:
             self.destdir = None
         self.sel_hists = sel_hists if sel_hists is not None else {}
@@ -574,7 +575,7 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.met_requirement, "MET > %d GeV"
                          % self.config["ee/mm_min_met"])
 
-        '''lep, antilep = self.pick_leps(selector.final)
+        lep, antilep = self.pick_leps(selector.final)
         b, bbar = self.choose_bs(selector.final, lep, antilep)
         neutrino, antineutrino = kinreco(lep["p4"], antilep["p4"],
                                          b["p4"], bbar["p4"],
@@ -599,7 +600,7 @@ class Processor(processor.ProcessorABC):
         reco_objects.set_column(self.wplus, "Wplus")
         reco_objects.set_column(self.top, "top")
         reco_objects.set_column(self.antitop, "antitop")
-        reco_objects.set_column(self.ttbar, "ttbar")'''
+        reco_objects.set_column(self.ttbar, "ttbar")
 
         output["cutflow"][dsname] = selector.cutflow
         output["ch_cutflows"][dsname] = selector.channel_cutflows
@@ -645,7 +646,13 @@ class Processor(processor.ProcessorABC):
                     # In order to have the hists specific to dedicated
                     # systematic datasets contain also all the events from
                     # unaffected datasets, copy the nominal hists
+                    systoreplace = defaultdict(list)
                     for sysds, (replace, sys) in dsforsys.items():
+                        systoreplace[sys].append(replace)
+                    for sys, replacements in systoreplace.items():
+                        # If the dataset is replaced in this sys, don't copy
+                        if dsname in replacements:
+                            continue
                         accumulator[(cut, histname, sys)] =\
                             accumulator[(cut, histname)].copy()
 
@@ -661,6 +668,12 @@ class Processor(processor.ProcessorABC):
             selector.set_systematic("MEfac",
                                     data["LHEScaleWeight"][:, 5],
                                     data["LHEScaleWeight"][:, 3])
+
+            # Fix for the PSWeight: NanoAOD divides by XWGTUP. This is wrong,
+            # if the cross section isn't multiplied in HepMC
+            psweight = (data["PSWeight"]
+                        * data["LHEWeight_originalXWGTUP"]
+                        / data["genWeight"])
         else:
             selector.set_systematic("MEren",
                                     np.full(data.size, 1),
@@ -668,13 +681,15 @@ class Processor(processor.ProcessorABC):
             selector.set_systematic("MEfac",
                                     np.full(data.size, 1),
                                     np.full(data.size, 1))
+            psweight = data["PSWeight"]
+
         # Parton shower scale
         selector.set_systematic("PSisr",
-                                data["PSWeight"][:, 2],
-                                data["PSWeight"][:, 0])
+                                psweight[:, 2],
+                                psweight[:, 0])
         selector.set_systematic("PSfsr",
-                                data["PSWeight"][:, 3],
-                                data["PSWeight"][:, 1])
+                                psweight[:, 3],
+                                psweight[:, 1])
 
     def add_crosssection_scale(self, selector, dsname):
         num_events = selector.num_selected
