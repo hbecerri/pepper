@@ -8,7 +8,7 @@ import numpy as np
 def create_hist_dict(config_folder):
     hist_config = json.load(open(os.path.join(config_folder,
                                               "hist_config.json")))
-    return {key: Hist_def(val) for key, val in hist_config.items()}
+    return {key: HistDefinition(val) for key, val in hist_config.items()}
 
 
 def jet_mult(data):
@@ -18,7 +18,7 @@ def jet_mult(data):
         return None
 
 
-class Hist_def():
+class HistDefinition():
     def __init__(self, config):
         self.dataset_axis = hist.Cat("dataset", "")
         self.axes = [hist.Bin(**kwargs) for kwargs in config["bins"]]
