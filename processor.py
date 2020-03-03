@@ -301,8 +301,6 @@ class Selector(object):
         """
         if factor is not None:
             factor = self._pad_npcolumndata(factor, 1, mask)
-            print(self.systematics["weight"], factor)
-            time.sleep(10)
             self.systematics["weight"] = self.systematics["weight"] * factor
         if updown is not None:
             self.set_systematic(name, updown[0], updown[1], mask)
