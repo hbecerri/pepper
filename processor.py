@@ -193,19 +193,21 @@ class Selector(object):
     def cutflow(self):
         """Return an ordered dict of cut name -> selected events"""
         return self._cutflow
- 
+
     def _add_channel_cutflow(self, name):
         passing_all = self._cuts.all(*(self._cuts.names or []))
         for ch in self.channel_cutflows.keys():
             if self.systematics is not None:
-                num = self.systematics["weight"][passing_all][self.final[ch]].flatten().sum()
+                num = (self.systematics["weight"][passing_all]
+                       [self.final[ch]].flatten().sum())
             else:
                 num = self.final[ch].sum()
             self.channel_cutflows[ch][name] = num
 
     def initalise_channel_cutflows(self, ch_setters):
-        self.channel_cutflows=processor.dict_accumulator(
-            {ch: processor.defaultdict_accumulator(int) for ch in ch_setters.keys()})
+        self.channel_cutflows = processor.dict_accumulator(
+            {ch: processor.defaultdict_accumulator(int)
+             for ch in ch_setters.keys()})
         for ch, func in ch_setters.items():
             self.set_column(func, ch)
         self._add_channel_cutflow(self._cuts.names[-1])
@@ -222,12 +224,12 @@ class Selector(object):
                   or a tuple of this array and a dict.
                   The array has the same length as the table and indicates if
                   an event is not cut (True).
-                  The dict maps names of scale factors to a tuples of the form
-                  (sf, (up, down)) where sf, up and down are arrays of floats
-                  giving central, up and down variation for a scale factor for
-                  each event, thus making only sense in case of MC. In case of
-                  no up/down variations (sf, None) is a valid value. `up` and
-                  `down` must be given relative to sf.
+                  The dict maps names of scale factors to either the SFs or
+                  tuples of the form (sf, up, down) where sf, up and down are
+                  arrays of floats giving central, up and down variation for a
+                  scale factor for each event, thus making only sense in case
+                  of MC. In case of no up/down variations (sf, None) is a valid
+                  value. `up` and `down` must be given relative to sf.
                   accept does not get called if num_selected is already 0.
         name -- A label to assoiate within the cutflow
         """
@@ -253,7 +255,12 @@ class Selector(object):
         else:
             mask = accepted
         for weightname, factors in weight.items():
-            self.modify_weight(weightname, factors[0], factors[1], mask)
+            if isinstance(factors, tuple):
+                factor = factors[0]
+                updown = (factors[1], factors[2])
+            else:
+                factor = factors
+            self.modify_weight(weightname, factor, updown, mask)
         if self.on_cutdone is not None:
             self.on_cutdone(data=self.final,
                             systematics=self.final_systematics,
@@ -372,8 +379,6 @@ class Selector(object):
             if col not in data:
                 continue
             return_dict[prefix + col] = utils.misc.jagged_reduce(data[col])
-        if self.systematics is not None:
-            return_dict["weight"] = self.weight
         return return_dict
 
     def get_columns_from_config(self, to_save, prefix=""):
@@ -422,7 +427,10 @@ class Processor(processor.ProcessorABC):
                       callables get caleld after the reconstruction.
         """
         self.config = config
-        self.destdir = destdir
+        if destdir is not None:
+            self.destdir = os.path.realdir(destdir)
+        else:
+            self.destdir = None
         self.sel_hists = sel_hists if sel_hists is not None else {}
         self.reco_hists = reco_hists if reco_hists is not None else {}
 
@@ -473,7 +481,8 @@ class Processor(processor.ProcessorABC):
             "cutflow": processor.defaultdict_accumulator(
                 partial(processor.defaultdict_accumulator, int)),
             "ch_cutflows": processor.dict_accumulator(
-            {ch: processor.defaultdict_accumulator(int) for ch in channels})
+                {ch: processor.defaultdict_accumulator(int)
+                 for ch in channels})
         })
         return self._accumulator
 
@@ -501,6 +510,7 @@ class Processor(processor.ProcessorABC):
             outf = awkward.hdf5(f)
             out_dict = selector.get_columns_from_config(
                 self.config["selector_cols_to_save"])
+            out_dict["weight"] = selector.weight
             out_dict.update(reco_selector.get_columns_from_config(
                 self.config["reco_cols_to_save"], "reco"))
             out_dict["cutflags"] = selector.get_cuts()
@@ -526,7 +536,7 @@ class Processor(processor.ProcessorABC):
 
         if self.config["compute_systematics"] and is_mc:
             self.add_generator_uncertainies(selector)
-            self.add_crosssection_uncertainties(selector, dsname)
+            self.add_crosssection_scale(selector, dsname)
 
         selector.add_cut(partial(self.blinding, is_mc), "Blinding")
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
@@ -539,7 +549,9 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(partial(self.met_filters, is_mc), "MET filters")
 
         selector.set_column(self.build_lepton_column, "Lepton")
-        selector.initalise_channel_cutflows({"ee": self.set_ee, "emu": self.set_emu, "mumu": self.set_mumu, "None": self.set_no_lep_pair})
+        selector.initalise_channel_cutflows(
+            {"ee": self.set_ee, "emu": self.set_emu,
+             "mumu": self.set_mumu, "None": self.set_no_lep_pair})
         selector.add_cut(partial(self.lepton_pair, is_mc), "At least 2 leps")
         selector.set_column(self.same_flavor, "is_same_flavor")
         selector.set_column(self.mll, "mll")
@@ -563,14 +575,10 @@ class Processor(processor.ProcessorABC):
                          % self.config["num_jets_atleast"])
         selector.add_cut(self.hem_cut, "HEM cut")
         selector.add_cut(self.jet_pt_requirement, "Jet pt req")
-        selector.add_cut(self.btag_cut, "At least %d btag"
+        selector.add_cut(partial(self.btag_cut, is_mc), "At least %d btag"
                          % self.config["num_atleast_btagged"])
         selector.add_cut(self.met_requirement, "MET > %d GeV"
                          % self.config["ee/mm_min_met"])
-
-        if is_mc:
-            if self.btagweighters is not None:
-                selector.set_column(self.compute_weight_btag, "weight_btag")
 
         '''lep, antilep = self.pick_leps(selector.final)
         b, bbar = self.choose_bs(selector.final, lep, antilep)
@@ -609,30 +617,34 @@ class Processor(processor.ProcessorABC):
 
     def fill_accumulator(self, hist_dict, accumulator, is_mc, dsname, data,
                          systematics, cut):
-        if systematics is not None:
+        do_systematics = (self.config["compute_systematics"]
+                          and systematics is not None)
+        if do_systematics:
             weight = systematics["weight"].flatten()
         else:
             weight = None
         for histname, fill_func in hist_dict.items():
             dsforsys = self.config["dataset_for_systematics"]
-            nominal_hist = fill_func(data=data,
-                                     dsname=dsname,
-                                     is_mc=is_mc,
-                                     weight=weight)
-            # If this ds is dedicated for a systematic, save hist accordingly
             if dsname in dsforsys:
                 # But only if we want to compute systematics
-                if systematics is not None:
+                if do_systematics:
                     replacename, sysname = dsforsys[dsname]
-                    accumulator[(cut, histname, sysname)] = nominal_hist
+                    sys_hist = fill_func(data=data,
+                                         dsname=replacename,
+                                         is_mc=is_mc,
+                                         weight=weight)
+                    accumulator[(cut, histname, sysname)] = sys_hist
             else:
-                accumulator[(cut, histname)] = nominal_hist
+                accumulator[(cut, histname)] = fill_func(data=data,
+                                                         dsname=dsname,
+                                                         is_mc=is_mc,
+                                                         weight=weight)
 
-                if systematics is not None:
+                if do_systematics:
                     for syscol in systematics.columns:
                         if syscol == "weight":
                             continue
-                        sysweight = weight * systematics[syscol]
+                        sysweight = weight * systematics[syscol].flatten()
                         hist = fill_func(data=data, dsname=dsname, is_mc=is_mc,
                                          weight=sysweight)
                         accumulator[(cut, histname, syscol)] = hist
@@ -640,20 +652,28 @@ class Processor(processor.ProcessorABC):
                     # systematic datasets contain also all the events from
                     # unaffected datasets, copy the nominal hists
                     for sysds, (replace, sys) in dsforsys.items():
-                        if nominal_hist is not None:
-                            accumulator[(cut, histname, sys)] = nominal_hist.copy()
+                        accumulator[(cut, histname, sys)] =\
+                            accumulator[(cut, histname)].copy()
 
     def add_generator_uncertainies(self, selector):
         # Matrix-element renormalization and factorization scale
         # Get describtion of individual columns of this branch with
         # Events->GetBranch("LHEScaleWeight")->GetTitle() in ROOT
         data = selector.masked
-        selector.set_systematic("MEren",
-                                data["LHEScaleWeight"][:, 7],
-                                data["LHEScaleWeight"][:, 1])
-        selector.set_systematic("MEfac",
-                                data["LHEScaleWeight"][:, 5],
-                                data["LHEScaleWeight"][:, 3])
+        if "LHEScaleWeight" in data:
+            selector.set_systematic("MEren",
+                                    data["LHEScaleWeight"][:, 7],
+                                    data["LHEScaleWeight"][:, 1])
+            selector.set_systematic("MEfac",
+                                    data["LHEScaleWeight"][:, 5],
+                                    data["LHEScaleWeight"][:, 3])
+        else:
+            selector.set_systematic("MEren",
+                                    np.full(data.size, 1),
+                                    np.full(data.size, 1))
+            selector.set_systematic("MEfac",
+                                    np.full(data.size, 1),
+                                    np.full(data.size, 1))
         # Parton shower scale
         selector.set_systematic("PSisr",
                                 data["PSWeight"][:, 2],
@@ -662,9 +682,12 @@ class Processor(processor.ProcessorABC):
                                 data["PSWeight"][:, 3],
                                 data["PSWeight"][:, 1])
 
-    def add_crosssection_uncertainties(self, selector, dsname):
-        xsuncerts = self.config["crosssection_uncertainty"]
+    def add_crosssection_scale(self, selector, dsname):
         num_events = selector.num_selected
+        lumifactors = self.config["mc_lumifactors"]
+        factor = np.full(num_events, lumifactors[dsname])
+        selector.modify_weight("lumi_factor", factor)
+        xsuncerts = self.config["crosssection_uncertainty"]
         for name, affected_datasets in xsuncerts.items():
             for affected_dataset, uncert in affected_datasets.items():
                 if dsname == affected_dataset:
@@ -927,7 +950,7 @@ class Processor(processor.ProcessorABC):
             up = sffunc(eta=eles.sceta, pt=eles.pt, variation="up").prod()
             down = sffunc(eta=eles.sceta, pt=eles.pt, variation="down").prod()
             key = "electronsf{}".format(i)
-            weights[key] = (central, (up / central, down / central))
+            weights[key] = (central, up / central, down / central)
         # Muon identification and isolation efficiency
         for i, sffunc in enumerate(self.muon_sf):
             central = sffunc(abseta=abs(muons.eta), pt=muons.pt).prod()
@@ -936,7 +959,7 @@ class Processor(processor.ProcessorABC):
             down = sffunc(
                 abseta=abs(muons.eta), pt=muons.pt, variation="down").prod()
             key = "muonsf{}".format(i)
-            weights[key] = (central, (up / central, down / central))
+            weights[key] = (central, up / central, down / central)
         return weights
 
     def lepton_pair(self, is_mc, data):
@@ -956,7 +979,7 @@ class Processor(processor.ProcessorABC):
 
     def mll(self, data):
         return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
-        
+
     def dilep_pt(self, data):
         return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).pt
 
@@ -1181,26 +1204,33 @@ class Processor(processor.ProcessorABC):
             n[mask] += (pt_min < data["Jet"].pt[mask, i]).astype(int)
         return n >= self.config["jet_pt_num_satisfied"]
 
-    def btag_cut(self, data):
-        num_btagged = data["Jet"]["btagged"].sum()
-        return num_btagged >= self.config["num_atleast_btagged"]
-
-    def met_requirement(self, data):
-        is_sf = data["is_same_flavor"]
-        met = data["MET_pt"]
-        return ~is_sf | (met > self.config["ee/mm_min_met"])
-
-    def compute_weight_btag(self, data, variation="central"):
-        if self.config["num_atleast_btagged"] == 0:
-            return np.full(data.size, 1.)
+    def compute_weight_btag(self, data):
         jets = data["Jet"]
         wp = self.config["btag"].split(":", 1)[1]
         flav = jets["hadronFlavour"]
         eta = jets.eta
         pt = jets.pt
         discr = jets["btag"]
-        return np.prod(list(weighter(wp, flav, eta, pt, discr, variation)
-                       for weighter in self.btagweighters), axis=0)
+        weight = {}
+        for i, weighter in enumerate(self.btagweighters):
+            central = weighter(wp, flav, eta, pt, discr, "central")
+            up = weighter(wp, flav, eta, pt, discr, "up")
+            down = weighter(wp, flav, eta, pt, discr, "down")
+            weight[f"btagsf{i}"] = (central, up / central, down / central)
+        return weight
+
+    def btag_cut(self, is_mc, data):
+        num_btagged = data["Jet"]["btagged"].sum()
+        is_tagged = num_btagged >= self.config["num_atleast_btagged"]
+        if is_mc and self.config["compute_systematics"]:
+            return (is_tagged, self.compute_weight_btag(data[is_tagged]))
+        else:
+            return is_tagged
+
+    def met_requirement(self, data):
+        is_sf = data["is_same_flavor"]
+        met = data["MET"].pt
+        return ~is_sf | (met > self.config["ee/mm_min_met"])
 
     def pick_leps(self, data):
         lep_pair = data["Lepton"][:, :2]

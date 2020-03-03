@@ -5,6 +5,7 @@ import numpy as np
 import coffea
 import awkward
 from collections import namedtuple
+import warnings
 
 
 def get_evaluator(filename):
@@ -35,7 +36,10 @@ BTAG_WP_CUTS = {
 class BTagWeighter(object):
     def __init__(self, sf_filename, eff_filename, tagger, year):
         self.eff_evaluator = get_evaluator(eff_filename)
-        self.sf_evaluator = get_evaluator(sf_filename)
+        # Suppress RuntimeWarning that Coffea raises for 2018 scale factors
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.sf_evaluator = get_evaluator(sf_filename)
 
         # Tagger name of CSV is unknown, have not API for it. Workaround
         somekey = next(iter(self.sf_evaluator.keys()))

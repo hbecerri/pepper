@@ -27,12 +27,16 @@ args = parser.parse_args()
 config = Config(args.config)
 store, datasets = config[["store", "mc_datasets"]]
 datasets = expand_datasetdict(datasets, store)[0]
+if "dataset_for_systematics" in config:
+    dsforsys = config["dataset_for_systematics"]
+else:
+    dsforsys = {}
 crosssections = json.load(open(args.crosssections))
 counts = defaultdict(int)
 num_files = len(list(chain(*datasets.values())))
 i = 0
 for process_name, proc_datasets in datasets.items():
-    if process_name not in crosssections:
+    if process_name not in crosssections and process_name not in dsforsys:
         print("Could not find crosssection for {}".format(process_name))
         continue
     for path in proc_datasets:
@@ -41,10 +45,14 @@ for process_name, proc_datasets in datasets.items():
         print("[{}/{}] Processed {}".format(i + 1, num_files, path))
         i += 1
 factors = {}
-for key in crosssections.keys():
-    factors[key] = crosssections[key] * args.lumi / counts[key]
+for key in counts.keys():
+    if key in dsforsys:
+        xs = crosssections[dsforsys[key][0]]
+    else:
+        xs = crosssections[key]
+    factors[key] = xs * args.lumi / counts[key]
     print("{}: {} fb, {} events, factor of {:.3e}".format(key,
-                                                          crosssections[key],
+                                                          xs,
                                                           counts[key],
                                                           factors[key]))
 

@@ -6,8 +6,10 @@ import numpy as np
 
 
 def create_hist_dict(config_folder):
-    hist_config = json.load(open(os.path.join(config_folder, "hist_config.json")))
-    return {key:Hist_def(val) for key, val in hist_config.items()}
+    hist_config = json.load(open(os.path.join(config_folder,
+                                              "hist_config.json")))
+    return {key: Hist_def(val) for key, val in hist_config.items()}
+
 
 def jet_mult(data):
     if "Jet" in data:
@@ -15,17 +17,6 @@ def jet_mult(data):
     else:
         return None
 
-def get_pt(data):
-    try:
-        return data.pt
-    except:
-        return None
-
-def get_eta(data):
-    try:
-        return data.eta
-    except:
-        return None
 
 class Hist_def():
     def __init__(self, config):
@@ -36,34 +27,37 @@ class Hist_def():
         self.fill_methods = config["fill"]
 
     def __call__(self, data, dsname, is_mc, weight):
-        channels=["ee", "emu", "mumu", "None"]
+        channels = ["ee", "emu", "mumu", "None"]
         if channels[0] in data:
             channel_axis = hist.Cat("channel", "")
-            _hist = hist.Hist("Counts", self.dataset_axis, channel_axis, *self.axes)
-            
+            _hist = hist.Hist("Counts", self.dataset_axis,
+                              channel_axis, *self.axes)
+
             for ch in channels:
-                fill_vals = {name: self.pick_data(method, data, data[ch]) for name, method in self.fill_methods.items()}
+                fill_vals = {name: self.pick_data(method, data, data[ch])
+                             for name, method in self.fill_methods.items()}
                 if all([val is not None for val in fill_vals.values()]):
                     if is_mc:
                         _hist.fill(dataset=dsname,
-                                      channel=ch,
-                                      **fill_vals,
-                                      weight=weight[data[ch]])
+                                   channel=ch,
+                                   **fill_vals,
+                                   weight=weight[data[ch]])
                     else:
                         _hist.fill(dataset=dsname,
-                                      channel=ch,
-                                      **fill_vals)
+                                   channel=ch,
+                                   **fill_vals)
         else:
             _hist = hist.Hist("Counts", self.dataset_axis, *self.axes)
-            fill_vals = {name: self.pick_data(method, data) for name, method in self.fill_methods.items()}
+            fill_vals = {name: self.pick_data(method, data)
+                         for name, method in self.fill_methods.items()}
             if all([val is not None for val in fill_vals.values()]):
                 if is_mc:
                     _hist.fill(dataset=dsname,
-                                  **fill_vals,
-                                  weight=weight)
+                               **fill_vals,
+                               weight=weight)
                 else:
                     _hist.fill(dataset=dsname,
-                                  **fill_vals)
+                               **fill_vals)
         return _hist
 
     def pick_data(self, method, data, mask=None):
@@ -81,7 +75,7 @@ class Hist_def():
                         if sel["key"] in data:
                             data = data[sel["key"]]
                         else:
-                            data=None
+                            data = None
                     elif "prop" in sel:
                         data = getattr(data, sel["prop"])
 
@@ -100,6 +94,5 @@ class Hist_def():
         else:
             return None
 
-func_dict = {"jet_mult": jet_mult,
-             "get_pt": get_pt,
-             "get_eta": get_eta}
+
+func_dict = {"jet_mult": jet_mult}

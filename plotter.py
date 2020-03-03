@@ -139,8 +139,8 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
 
 
 def plot_cps(hist_set, plot_name, lumifactors,
-                  plot_kwargs, show=False, save_dir=None,
-                  channels=["ee", "emu", "mumu"], cuts="All"):
+             plot_kwargs, show=False, save_dir=None,
+             channels=["ee", "emu", "mumu"], cuts="All"):
     def _plot(plot, lumifactors, plot_kwargs,
               show=False, save_dir=None, save_name=None):
         plot.scale(lumifactors, axis="dataset")
@@ -153,12 +153,13 @@ def plot_cps(hist_set, plot_name, lumifactors,
         if save_dir is not None:
             plt.savefig(os.path.join(save_dir, save_name + ".pdf"))
         plt.clf()
-    
+
     for key in hist_set.keys():
         if cuts == "All":
             plot_this_one = (len(key) == 2) & (key[1] == plot_name)
         elif type(cuts) == list:
-            plot_this_one = (len(key) == 2) & (key[1] == plot_name) & (key[0] in cuts)
+            plot_this_one = ((len(key) == 2) & (key[1] == plot_name)
+                             & (key[0] in cuts))
         if plot_this_one:
             hists = hist_set[key]
             ax_names = [ax.name for ax in hists.axes()]
@@ -167,15 +168,15 @@ def plot_cps(hist_set, plot_name, lumifactors,
                     for ch in channels:
                         plot = hists.integrate("channel", [ch])
                         _plot(plot, lumifactors, plot_kwargs,
-                            show, save_dir,
-                            key[0] + "_" + plot_name + "_" + ch)
+                              show, save_dir,
+                              key[0] + "_" + plot_name + "_" + ch)
             elif channels == "Sum":
                 if "channel" in ax_names:
                     plot = hists.integrate("channel")
                 else:
                     plot = hists
                 _plot(plot, lumifactors, plot_kwargs,
-                      show, save_dir, 
+                      show, save_dir,
                       key[0] + "_" + plot_name)
 
 
@@ -282,7 +283,7 @@ plt.savefig(os.path.join(plot_config["hist_dir"], "MET.pdf"))
 plt.show(block=True)
 plt.clf()'''
 
-plot_kwargs={"data": "Data",
+plot_kwargs = {"data": "Data",
                "sigs": plot_config["signals"],
                "sig_scaling": 1000,
                "labels": labels,
@@ -300,117 +301,117 @@ for ch in ["ee", "emu", "mumu"]:
                             plot_config["hist_dir"], "trial.pdf"))'''
 
 plot_cps(output["sel_hists"],
-              "MET",
-              lumifactors,
-              plot_kwargs,
-              False,
-              plot_config["hist_dir"],
-              "Sum",
-              ["MET > 40 GeV"])
+         "MET",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
 
 plot_kwargs["x_ax_name"] = "Mll"
 plot_cps(output["sel_hists"],
-              "Mll",
-              lumifactors,
-              plot_kwargs,
-              False,
-              plot_config["hist_dir"],
-              "Sum",
-              ["MET > 40 GeV"])
+         "Mll",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
 
 plot_kwargs["x_ax_name"] = "dilep_pt"
 plot_cps(output["sel_hists"],
-              "dilep_pt",
-              lumifactors,
-              plot_kwargs,
-              False,
-              plot_config["hist_dir"],
-              "Sum",
-              ["MET > 40 GeV"])
+         "dilep_pt",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
 
 plot_kwargs["x_ax_name"] = "jet_mult"
 plot_cps(output["sel_hists"],
-              "jet_mult",
-              lumifactors,
-              plot_kwargs,
-              False,
-              plot_config["hist_dir"],
-              "Sum",
-              ["MET > 40 GeV"])
+         "jet_mult",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
 
 plot_kwargs["x_ax_name"] = "pt"
 plot_cps(output["sel_hists"],
-              "1st_lep_pt",
-              lumifactors,
-              plot_kwargs,
-              False,
-              plot_config["hist_dir"],
-              "Sum",
-              ["MET > 40 GeV"])
+         "1st_lep_pt",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
 
 plot_cps(output["sel_hists"],
-              "2nd_lep_pt",
-              lumifactors,
-              plot_kwargs,
-              False,
-              plot_config["hist_dir"],
-              "Sum",
-              ["MET > 40 GeV"])
+         "2nd_lep_pt",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
 
 plot_cps(output["sel_hists"],
-              "1st_jet_pt",
-              lumifactors,
-              plot_kwargs,
-              False,
-              plot_config["hist_dir"],
-              "Sum",
-              ["MET > 40 GeV"])
+         "1st_jet_pt",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
 
 plot_cps(output["sel_hists"],
-              "2nd_jet_pt",
-              lumifactors,
-              plot_kwargs,
-              False,
-              plot_config["hist_dir"],
-              "Sum",
-              ["MET > 40 GeV"])
+         "2nd_jet_pt",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
 
 plot_kwargs["x_ax_name"] = "eta"
 plot_cps(output["sel_hists"],
-              "1st_lep_eta",
-              lumifactors,
-              plot_kwargs,
-              False,
-              plot_config["hist_dir"],
-              "Sum",
-              ["MET > 40 GeV"])
+         "1st_lep_eta",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
 
 plot_cps(output["sel_hists"],
-              "2nd_lep_eta",
-              lumifactors,
-              plot_kwargs,
-              False,
-              plot_config["hist_dir"],
-              "Sum",
-              ["MET > 40 GeV"])
+         "2nd_lep_eta",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
 
 plot_cps(output["sel_hists"],
-              "1st_jet_eta",
-              lumifactors,
-              plot_kwargs,
-              False,
-              plot_config["hist_dir"],
-              "Sum",
-              ["MET > 40 GeV"])
+         "1st_jet_eta",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
 
 plot_cps(output["sel_hists"],
-              "2nd_jet_eta",
-              lumifactors,
-              plot_kwargs,
-              False,
-              plot_config["hist_dir"],
-              "Sum",
-              ["MET > 40 GeV"])
+         "2nd_jet_eta",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
 
 """plot_channels(output["sel_hists"],
               "Puppi_MET",
