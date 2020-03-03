@@ -577,32 +577,33 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.met_requirement, "MET > %d GeV"
                          % self.config["ee/mm_min_met"])
 
-        lep, antilep = self.pick_leps(selector.final)
-        b, bbar = self.choose_bs(selector.final, lep, antilep)
-        neutrino, antineutrino = kinreco(lep["p4"], antilep["p4"],
-                                         b["p4"], bbar["p4"],
-                                         selector.final["MET_pt"],
-                                         selector.final["MET_phi"])
-        if is_mc:
-            weight = selector.final_systematics["weight"]
-        else:
-            weight = np.full(selector.final.size, 1.)
-        reco_cb = partial(self.fill_accumulator,
-                          hist_dict=self.reco_hists,
-                          accumulator=output["reco_hists"],
-                          is_mc=is_mc,
-                          dsname=dsname)
-        reco_objects = Selector(awkward.Table(lep=lep, antilep=antilep,
-                                              b=b, bbar=bbar,
-                                              neutrino=neutrino,
-                                              antineutrino=antineutrino),
-                                weight, reco_cb)
-        reco_objects.add_cut(self.passing_reco, "Reco")
-        reco_objects.set_column(self.wminus, "Wminus")
-        reco_objects.set_column(self.wplus, "Wplus")
-        reco_objects.set_column(self.top, "top")
-        reco_objects.set_column(self.antitop, "antitop")
-        reco_objects.set_column(self.ttbar, "ttbar")
+        if self.config["do_ttbar_reconstruction"]:
+            lep, antilep = self.pick_leps(selector.final)
+            b, bbar = self.choose_bs(selector.final, lep, antilep)
+            neutrino, antineutrino = kinreco(lep["p4"], antilep["p4"],
+                                             b["p4"], bbar["p4"],
+                                             selector.final["MET_pt"],
+                                             selector.final["MET_phi"])
+            if is_mc:
+                weight = selector.final_systematics["weight"]
+            else:
+                weight = np.full(selector.final.size, 1.)
+            reco_cb = partial(self.fill_accumulator,
+                              hist_dict=self.reco_hists,
+                              accumulator=output["reco_hists"],
+                              is_mc=is_mc,
+                              dsname=dsname)
+            reco_objects = Selector(awkward.Table(lep=lep, antilep=antilep,
+                                                  b=b, bbar=bbar,
+                                                  neutrino=neutrino,
+                                                  antineutrino=antineutrino),
+                                    weight, reco_cb)
+            reco_objects.add_cut(self.passing_reco, "Reco")
+            reco_objects.set_column(self.wminus, "Wminus")
+            reco_objects.set_column(self.wplus, "Wplus")
+            reco_objects.set_column(self.top, "top")
+            reco_objects.set_column(self.antitop, "antitop")
+            reco_objects.set_column(self.ttbar, "ttbar")
 
         output["cutflow"][dsname] = selector.cutflow
         output["ch_cutflows"][dsname] = selector.channel_cutflows
