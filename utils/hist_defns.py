@@ -9,33 +9,6 @@ def create_hist_dict(config_folder):
     hist_config = json.load(open(os.path.join(config_folder, "hist_config.json")))
     return {key:Hist_def(val) for key, val in hist_config.items()}
 
-
-def first_lep(data):
-    if "Lepton" in data:
-        return data["Lepton"][:, 0]
-    else:
-        return None
-
-def second_lep(data):
-    if "Lepton" in data:
-        return data["Lepton"][:, 1]
-    else:
-        return None
-
-def first_jet(data):
-    if "Jet" in data:
-        min1jet = (data["Jet"].counts>0)
-        return data["Jet"][min1jet][:, 0]
-    else:
-        return None
-
-def second_jet(data):
-    if "Jet" in data:
-        min2jets = (data["Jet"].counts>1)
-        return data["Jet"][min2jets][:, 1]
-    else:
-        return None
-
 def jet_mult(data):
     if "Jet" in data:
         return data["Jet"].counts
@@ -109,6 +82,8 @@ class Hist_def():
                             data = data[sel["key"]]
                         else:
                             data=None
+                    elif "prop" in sel:
+                        data = getattr(data, sel["prop"])
 
                     if "slice" in sel and data is not None:
                         data = data[sel["slice"]]
@@ -125,10 +100,6 @@ class Hist_def():
         else:
             return None
 
-func_dict = {"first_lep": first_lep,
-             "second_lep": second_lep,
-             "first_jet": first_jet,
-             "second_jet": second_jet,
-             "jet_mult": jet_mult,
+func_dict = {"jet_mult": jet_mult,
              "get_pt": get_pt,
              "get_eta": get_eta}

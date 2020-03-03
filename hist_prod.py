@@ -89,7 +89,7 @@ destdir = \
     chunksize=100000)
 """
 output = coffea.processor.run_uproot_job(
-    fileset,
+    smallfileset,
     treename="Events",
     processor_instance=Processor(config, "None", hist_dict),
     executor=parsl_executor,
