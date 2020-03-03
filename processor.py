@@ -577,7 +577,7 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.met_requirement, "MET > %d GeV"
                          % self.config["ee/mm_min_met"])
 
-        '''lep, antilep = self.pick_leps(selector.final)
+        lep, antilep = self.pick_leps(selector.final)
         b, bbar = self.choose_bs(selector.final, lep, antilep)
         neutrino, antineutrino = kinreco(lep["p4"], antilep["p4"],
                                          b["p4"], bbar["p4"],
@@ -602,7 +602,7 @@ class Processor(processor.ProcessorABC):
         reco_objects.set_column(self.wplus, "Wplus")
         reco_objects.set_column(self.top, "top")
         reco_objects.set_column(self.antitop, "antitop")
-        reco_objects.set_column(self.ttbar, "ttbar")'''
+        reco_objects.set_column(self.ttbar, "ttbar")
 
         output["cutflow"][dsname] = selector.cutflow
         output["ch_cutflows"][dsname] = selector.channel_cutflows
