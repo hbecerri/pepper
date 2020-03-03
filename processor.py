@@ -405,10 +405,6 @@ class Selector(object):
         return self._cuts.mask[self._cuts.all(*cuts)]
 
 
-class Empty_err(Exception):
-    pass
-
-
 class Processor(processor.ProcessorABC):
     def __init__(self, config, destdir,
                  sel_hists=None, reco_hists=None):
@@ -610,8 +606,8 @@ class Processor(processor.ProcessorABC):
         output["cutflow"][dsname] = selector.cutflow
         output["ch_cutflows"][dsname] = selector.channel_cutflows
 
-        '''if self.destdir is not None:
-            self._save_per_event_info(dsname, selector, reco_objects)'''
+        if self.destdir is not None:
+            self._save_per_event_info(dsname, selector, reco_objects)
 
         return output
 

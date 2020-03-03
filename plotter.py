@@ -118,26 +118,6 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
         ax.set_ylim(10**-2, 10**3)
 
 
-"""def plot_cps(hist_set, plot_name, lumifactors,
-             plot_kwargs, show=False, save_dir=None):
-    for key in hist_set.keys():
-        if (len(key) == 2) & (key[1] == plot_name):
-            hists = hist_set[key]
-            ax_names = [ax.name for ax in hists.axes]
-            if "channel" in ax_names:
-                plot = hists.integrate("channel")
-            else:
-                plot = hists
-            plot.scale(lumifactors, axis="dataset")
-            plot_data_mc(plot, **plot_kwargs)
-            if show:
-                plt.show(block=True)
-            if save_dir is not None:
-                plt.savefig(os.path.join(
-                    save_dir, key[0] + "_" + plot_name + ".pdf"))
-            plt.clf()"""
-
-
 def plot_cps(hist_set, plot_name, lumifactors,
              plot_kwargs, show=False, save_dir=None,
              channels=["ee", "emu", "mumu"], cuts="All"):
@@ -247,58 +227,12 @@ plt.show(block=True)
 
 plt.style.use(mplhep.cms.style.ROOT)
 
-'''MET_hist = output[
-MET_hist.scale(lumifactors, axis="dataset")
-
-names_axis = hist.Cat("names", "")
-
-lim_MET = MET_hist.group("dataset", names_axis, plot_config["process_names"])
-fout = uproot.recreate(
-    os.path.join(plot_config["limit_hist_dir"], "MET_hists.root"))
-for proc in plot_config["process_names"].keys():
-    proc_MET = lim_MET.integrate("names", [proc])
-    if len(proc_MET.values().values())>0:
-        fout[proc] = coffea.hist.export1d(proc_MET)
-fout.close()
-
-labelmap = defaultdict(list)
-for key, val in labels.items():
-    cutvals = np.array(list(output["cutflow: "][key].values()))
-    if len(cutvals) > 0 and cutvals[-1] > 0:
-        labelmap[val].append(key)
-
-sortedlabels = sorted(labelsset, key=(
-    lambda x: sum([(MET_hist.integrate("vals")).values()[(y,)]
-              for y in labelmap[x]])))
-for key in sortedlabels:
-    labelmap[key] = labelmap.pop(key)
-    colours[key] = colours.pop(key)
-
-labels_axis = hist.Cat("labels", "", sorting="placement")
-
-MET = MET_hist.group("dataset", labels_axis, labelmap)
-plot_data_mc(MET, "Data", ["DM Chi1 PS100 x100", "DM Chi1 S100 x100"],
-             100, None, colours, "labels")
-plt.savefig(os.path.join(plot_config["hist_dir"], "MET.pdf"))
-plt.show(block=True)
-plt.clf()'''
-
 plot_kwargs = {"data": "Data",
                "sigs": plot_config["signals"],
                "sig_scaling": 1000,
                "labels": labels,
                "colours": colours,
                "x_ax_name": "MET"}
-'''
-hists = output["sel_hists"][("MET > 40 GeV", "Puppi_MET")]
-for ch in ["ee", "emu", "mumu"]:
-    plot = hists.integrate("channel", [ch])
-    plot.scale(lumifactors, axis="dataset")
-    plot_data_mc(plot, **plot_kwargs)
-    fig = plt.gcf()
-    fig.suptitle("MET > 40 GeV" + " " + "Puppi MET" + " " + ch)
-    plt.savefig(os.path.join(
-                            plot_config["hist_dir"], "trial.pdf"))'''
 
 plot_cps(output["sel_hists"],
          "MET",
@@ -412,23 +346,3 @@ plot_cps(output["sel_hists"],
          plot_config["hist_dir"],
          "Sum",
          ["MET > 40 GeV"])
-
-"""plot_channels(output["sel_hists"],
-              "Puppi_MET",
-              lumifactors,
-              plot_kwargs,
-              False,
-              plot_config["hist_dir"])
-
-plot_channels(output["sel_hists"],
-              "MET_sig",
-              lumifactors,
-              {"data": "Data",
-               "sigs": ["DM Chi1 PS100 x1000", "DM Chi1 S100 x1000"],
-               "sig_scaling": 1000,
-               "labels": labels,
-               "colours": colours,
-               "x_ax_name": "MET_sig",
-               "y_scale":"log"},
-              False,
-              plot_config["hist_dir"])"""
