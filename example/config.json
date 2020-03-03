@@ -3,6 +3,7 @@
     "datadir": "data",
     "store": "/pnfs/desy.de/cms/tier2/store",
     "genhist_path": "$DATADIR/GenHists.root",
+    "blinding_denom": null,
     "lumimask": "$DATADIR/Cert_314472-325175_13TeV_PromptReco_Collisions18_JSON.txt",
     "electron_sf": [
         [

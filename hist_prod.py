@@ -1,4 +1,3 @@
-from coffea import hist
 from coffea.analysis_objects import JaggedCandidateArray as JCA
 from coffea.util import awkward, numpy
 from coffea.util import numpy as np
@@ -24,44 +23,7 @@ import json
 import utils.config as config_utils
 import utils.datasets as dataset_utils
 from processor import Processor
-
-
-def fill_MET(data, dsname, is_mc):
-    dataset_axis = hist.Cat("dataset", "")
-    MET_axis = hist.Bin("MET", "MET [GeV]", 100, 0, 400)
-    MET_hist = hist.Hist("Counts", dataset_axis, MET_axis)
-    if is_mc:
-        MET_hist.fill(dataset=dsname, MET=data["MET_pt"],
-                      weight=data["genWeight"])
-    else:
-        MET_hist.fill(dataset=dsname, MET=data["MET_pt"])
-    return MET_hist
-
-
-def fill_Mll(data, dsname, is_mc):
-    dataset_axis = hist.Cat("dataset", "")
-    Mll_axis = hist.Bin("Mll", "Mll [GeV]", 100, 0, 400)
-    Mll_hist = hist.Hist("Counts", dataset_axis, Mll_axis)
-    if "Mll" in data:
-        if is_mc:
-            Mll_hist.fill(dataset=dsname, Mll=data["Mll"],
-                          weight=data["genWeight"])
-        else:
-            Mll_hist.fill(dataset=dsname, Mll=data["Mll"])
-    return Mll_hist
-
-
-# https://stackoverflow.com/questions/50916422/python-typeerror-object-of-type-int64-is-not-json-serializable/50916741
-class NpEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        elif isinstance(obj, np.floating):
-            return float(obj)
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        else:
-            return super(NpEncoder, self).default(obj)
+from utils.hist_defns import create_hist_dict
 
 
 wrk_init = """
@@ -71,6 +33,8 @@ export PYTHONPATH=\
 export PYTHONPATH=\
 /nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea:$PYTHONPATH
 """
+
+hist_dict = create_hist_dict("ttDM_config")
 
 nproc = 1
 condor_cfg = """
@@ -98,7 +62,7 @@ parsl_config = Config(
 )
 dfk = load(parsl_config)
 
-config = config_utils.Config("example/config.json")
+config = config_utils.Config("ttDM_config/config.json")
 store = config["store"]
 mc_fileset, _ = dataset_utils.expand_datasetdict(config["mc_datasets"], store)
 data_fileset, _ = dataset_utils.expand_datasetdict(config["exp_datasets"],
@@ -116,23 +80,24 @@ smallfileset = {key: [val[0]] for key, val in fileset.items()}
 destdir = \
     "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
 
-hist_dict = {"MET": fill_MET,
-             "Mll": fill_Mll}
-
 """output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
-    processor_instance=Processor(config, "None", selector_hist_set),
+    processor_instance=Processor(config, "None", hist_dict),
     executor=coffea.processor.iterative_executor,
     executor_args={"workers": 4},
     chunksize=100000)
 """
 output = coffea.processor.run_uproot_job(
-    fileset,
+    smallfileset,
     treename="Events",
     processor_instance=Processor(config, "None", hist_dict),
     executor=parsl_executor,
     executor_args={"tailtimeout": None},
     chunksize=500000)
 
+print(output["ch_cutflows"])
+
+print("saving")
 coffea.util.save(output, "out_hists/output.coffea")
+print("saved")

@@ -13,6 +13,7 @@ import coffea.processor as processor
 import uproot
 from uproot_methods import TLorentzVectorArray
 import h5py
+import time
 
 import utils.config
 import utils.misc
@@ -98,6 +99,7 @@ class Selector(object):
         self.on_cutdone = on_cutdone
 
         self._cutflow = processor.defaultdict_accumulator(int)
+        self.channel_cutflows = None
         if weight is not None:
             tabled = awkward.Table({"weight": weight})
             counts = np.full(self.table.size, 1)
@@ -193,6 +195,24 @@ class Selector(object):
         """Return an ordered dict of cut name -> selected events"""
         return self._cutflow
 
+    def _add_channel_cutflow(self, name):
+        passing_all = self._cuts.all(*(self._cuts.names or []))
+        for ch in self.channel_cutflows.keys():
+            if self.systematics is not None:
+                num = (self.systematics["weight"][passing_all]
+                       [self.final[ch]].flatten().sum())
+            else:
+                num = self.final[ch].sum()
+            self.channel_cutflows[ch][name] = num
+
+    def initalise_channel_cutflows(self, ch_setters):
+        self.channel_cutflows = processor.dict_accumulator(
+            {ch: processor.defaultdict_accumulator(int)
+             for ch in ch_setters.keys()})
+        for ch, func in ch_setters.items():
+            self.set_column(func, ch)
+        self._add_channel_cutflow(self._cuts.names[-1])
+
     def add_cut(self, accept, name):
         """Adds a cut
 
@@ -228,6 +248,8 @@ class Selector(object):
             cut = accepted
         self._cuts.add_cut(name, cut)
         self._add_cutflow(name)
+        if self.channel_cutflows is not None:
+            self._add_channel_cutflow(name)
         if not self._frozen:
             self._current_cuts.append(name)
             mask = None
@@ -279,6 +301,8 @@ class Selector(object):
         """
         if factor is not None:
             factor = self._pad_npcolumndata(factor, 1, mask)
+            print(self.systematics["weight"], factor)
+            time.sleep(10)
             self.systematics["weight"] = self.systematics["weight"] * factor
         if updown is not None:
             self.set_systematic(name, updown[0], updown[1], mask)
@@ -447,11 +471,15 @@ class Processor(processor.ProcessorABC):
 
     @property
     def accumulator(self):
+        channels = ["ee", "emu", "mumu", "None"]
         self._accumulator = processor.dict_accumulator({
             "sel_hists": processor.dict_accumulator(),
             "reco_hists": processor.dict_accumulator(),
             "cutflow": processor.defaultdict_accumulator(
                 partial(processor.defaultdict_accumulator, int)),
+            "ch_cutflows": processor.dict_accumulator(
+                {ch: processor.defaultdict_accumulator(int)
+                 for ch in channels})
         })
         return self._accumulator
 
@@ -507,6 +535,7 @@ class Processor(processor.ProcessorABC):
             self.add_generator_uncertainies(selector)
             self.add_crosssection_scale(selector, dsname)
 
+        selector.add_cut(partial(self.blinding, is_mc), "Blinding")
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
         pos_triggers, neg_triggers = utils.misc.get_trigger_paths_for(
@@ -517,9 +546,13 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(partial(self.met_filters, is_mc), "MET filters")
 
         selector.set_column(self.build_lepton_column, "Lepton")
+        selector.initalise_channel_cutflows(
+            {"ee": self.set_ee, "emu": self.set_emu,
+             "mumu": self.set_mumu, "None": self.set_no_lep_pair})
         selector.add_cut(partial(self.lepton_pair, is_mc), "At least 2 leps")
         selector.set_column(self.same_flavor, "is_same_flavor")
         selector.set_column(self.mll, "mll")
+        selector.set_column(self.dilep_pt, "dilep_pt")
 
         selector.freeze_selection()
 
@@ -535,16 +568,16 @@ class Processor(processor.ProcessorABC):
             selector.set_column(self.compute_jer_factor, "jerfac")
         selector.set_column(self.build_jet_column, "Jet")
         selector.set_column(self.build_met_column, "MET")
-        selector.add_cut(self.hem_cut, "HEM cut")
         selector.add_cut(self.has_jets, "#Jets >= %d"
                          % self.config["num_jets_atleast"])
+        selector.add_cut(self.hem_cut, "HEM cut")
         selector.add_cut(self.jet_pt_requirement, "Jet pt req")
         selector.add_cut(partial(self.btag_cut, is_mc), "At least %d btag"
                          % self.config["num_atleast_btagged"])
         selector.add_cut(self.met_requirement, "MET > %d GeV"
                          % self.config["ee/mm_min_met"])
 
-        lep, antilep = self.pick_leps(selector.final)
+        '''lep, antilep = self.pick_leps(selector.final)
         b, bbar = self.choose_bs(selector.final, lep, antilep)
         neutrino, antineutrino = kinreco(lep["p4"], antilep["p4"],
                                          b["p4"], bbar["p4"],
@@ -569,9 +602,10 @@ class Processor(processor.ProcessorABC):
         reco_objects.set_column(self.wplus, "Wplus")
         reco_objects.set_column(self.top, "top")
         reco_objects.set_column(self.antitop, "antitop")
-        reco_objects.set_column(self.ttbar, "ttbar")
+        reco_objects.set_column(self.ttbar, "ttbar")'''
 
         output["cutflow"][dsname] = selector.cutflow
+        output["ch_cutflows"][dsname] = selector.channel_cutflows
 
         if self.destdir is not None:
             self._save_per_event_info(dsname, selector, reco_objects)
@@ -674,6 +708,15 @@ class Processor(processor.ProcessorABC):
             selector.set_systematic(name + "XS",
                                     np.full(num_events, 1 + uncert),
                                     np.full(num_events, 1 - uncert))
+
+    def blinding(self, is_mc, data):
+        if (not is_mc) and (self.config["blinding_denom"] is not None):
+            return np.where(np.mod(data["event"],
+                                   self.config["blinding_denom"]) == 0,
+                            True,
+                            False)
+        else:
+            return np.full(len(data["event"]), True)
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
@@ -849,14 +892,14 @@ class Processor(processor.ProcessorABC):
         ge = self.electron_cuts(data, good_lep=True)
         gm = self.muon_cuts(data, good_lep=True)
         for key in keys:
-            arr = awkward.concatenate([data["Electron_" + key][ge],
-                                       data["Muon_" + key][gm]], axis=1)
+            arr = self.safe_concat(data["Electron_" + key], ge,
+                                   data["Muon_" + key], gm)
             offsets = arr.offsets
             lep_dict[key] = arr.flatten()  # Could use concatenate here
         # Add supercluster eta, which only is given for electrons
-        arr = awkward.concatenate([(data["Electron_eta"][ge]
-                                    + data["Electron_deltaEtaSC"][ge]),
-                                   data["Muon_eta"][gm]], axis=1)
+        arr = self.safe_concat(data["Electron_eta"]
+                               + data["Electron_deltaEtaSC"], ge,
+                               data["Muon_eta"], gm)
         lep_dict["sceta"] = arr.flatten()
 
         leptons = Jca.candidatesfromoffsets(offsets, **lep_dict)
@@ -864,6 +907,47 @@ class Processor(processor.ProcessorABC):
         # Sort leptons by pt
         leptons = leptons[leptons.pt.argsort()]
         return leptons
+
+    def safe_concat(self, a, a_in, b, b_in):
+        if len(a.flatten()) > 0 and len(b.flatten()) > 0:
+            arr = awkward.concatenate([a[a_in], b[b_in]], axis=1)
+        elif len(a.flatten()) > 0:
+            arr = a[a_in]
+        elif len(b.flatten()) > 0:
+            arr = b[b_in]
+        else:
+            arr = awkward.JaggedArray.fromcounts([0], [])
+        return arr
+
+    def set_no_lep_pair(self, data):
+        return data["Lepton"].counts < 2
+
+    def set_ee(self, data):
+        leps = data["Lepton"]
+        twoleps = leps[leps.counts > 1]
+        ee = ((np.abs(twoleps[:, 0].pdgId) == 11)
+              & (np.abs(twoleps[:, 1].pdgId) == 11))
+        arr = (leps.counts > 1)
+        arr[arr] = ee
+        return arr
+
+    def set_emu(self, data):
+        leps = data["Lepton"]
+        twoleps = leps[leps.counts > 1]
+        emu = (np.abs(twoleps[:, 0].pdgId)
+               != np.abs(twoleps[:, 1].pdgId))
+        arr = (leps.counts > 1)
+        arr[arr] = emu
+        return arr
+
+    def set_mumu(self, data):
+        leps = data["Lepton"]
+        twoleps = leps[leps.counts > 1]
+        mumu = ((np.abs(twoleps[:, 0].pdgId) == 13)
+                & (np.abs(twoleps[:, 1].pdgId) == 13))
+        arr = (leps.counts > 1)
+        arr[arr] = mumu
+        return arr
 
     def compute_lepton_sf(self, data):
         is_ele = abs(data["Lepton"].pdgId) == 11
@@ -906,6 +990,9 @@ class Processor(processor.ProcessorABC):
 
     def mll(self, data):
         return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
+
+    def dilep_pt(self, data):
+        return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).pt
 
     def compute_jer_factor(self, data, variation="central"):
         # Coffea offers a class named JetTransformer for this. Unfortunately

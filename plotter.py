@@ -30,7 +30,8 @@ matplotlib.interactive(True)
 
 
 def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
-                 labels=None, colours=None, axis=None):
+                 labels=None, colours=None, axis=None,
+                 x_ax_name="x_ax", y_scale="linear"):
     if colours is not None:
         colours = colours.copy()
     if labels is not None:
@@ -38,8 +39,10 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
         labelmap = defaultdict(list)
         for key, val in labels.items():
             labelmap[val].append(key)
+
+#        print((hists.integrate(x_ax_name)).values())
         sortedlabels = sorted(labelsset, key=(
-            lambda x: sum([(hists.integrate("MET")).values()[(y,)]
+            lambda x: sum([(hists.integrate(x_ax_name)).values()[(y,)]
                            for y in labelmap[x]])))
         for key in sortedlabels:
             labelmap[key] = labelmap.pop(key)
@@ -57,6 +60,7 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
     fig, (ax, rax) = plt.subplots(2, 1, figsize=(7, 7),
                                   gridspec_kw={"height_ratios": (3, 1)},
                                   sharex=True)
+    ax = mplhep.cms.cmslabel(ax, data=False, paper=False, year='2018')
     fig.subplots_adjust(hspace=0)
     sig_colours = {}
     if colours is not None:
@@ -78,19 +82,15 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
     hist.plot1d(bkgd_hist, overlay=axis, stack=True,
                 ax=ax, clear=False, fill_opts=fill_opts, error_opts=err_opts)
     bkgdh = bkgd_hist.sum(axis)
-    for sig in sigs:
-        if len(list(sig_colours.values())) > 0:
-            err_opts = {'color': sig_colours[sig]}
-        else:
-            err_opts = {}
-        sig_hist = hists[sig].copy()
-        sig_hist = sig_hist.sum(axis)
-        sig_hist.scale(sig_scaling)
-        sig_hist.add(bkgdh)
-        hist.plot1d(sig_hist,
-                    ax=ax,
-                    clear=False,
-                    error_opts=err_opts)
+    if len(list(sig_colours.values())) > 0:
+        ax.set_prop_cycle(cycler(color=list(sig_colours.values())[::-1]))
+    sig_hist = hists[sigs].copy()
+    sig_hist.scale(sig_scaling)
+    hist.plot1d(sig_hist,
+                ax=ax,
+                clear=False,
+                overlay=axis,
+                stack=False)
     data_err_opts = {
         'linestyle': 'none',
         'marker': '.',
@@ -99,10 +99,11 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
         'elinewidth': 1,
     }
     hist.plot1d(
-        hists.integrate(axis, [data]),
+        hists[data],
         ax=ax,
         clear=False,
-        error_opts=data_err_opts)
+        error_opts=data_err_opts,
+        overlay=axis)
     hist.plotratio(hists.integrate(axis, [data]),
                    bkgdh,
                    ax=rax,
@@ -112,31 +113,61 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
                    unc='num')
     rax.set_ylabel('Ratio')
     rax.set_ylim(0, 2)
+    ax.set_yscale(y_scale)
+    if y_scale == "log":
+        ax.set_ylim(10**-2, 10**3)
 
 
-def plot_cps(hist_set, plot_name, lumifactors, read_kwargs,
-             plot_kwargs, show=False, save_dir=None):
+def plot_cps(hist_set, plot_name, lumifactors,
+             plot_kwargs, show=False, save_dir=None,
+             channels=["ee", "emu", "mumu"], cuts="All"):
+    def _plot(plot, lumifactors, plot_kwargs,
+              show=False, save_dir=None, save_name=None):
+        plot.scale(lumifactors, axis="dataset")
+        plot_data_mc(plot, **plot_kwargs)
+        fig = plt.gcf()
+        fig.suptitle(save_name)
+        fig.set_size_inches(16, 12)
+        if show:
+            plt.show(block=True)
+        if save_dir is not None:
+            plt.savefig(os.path.join(save_dir, save_name + ".pdf"))
+        plt.clf()
+
     for key in hist_set.keys():
-        if (len(key) == 2) & (key[1] == plot_name):
-            plot = hist_set[key]
-            plot.scale(lumifactors, axis="dataset")
-            plot_data_mc(plot, **plot_kwargs)
-            if show:
-                plt.show(block=True)
-            if save_dir is not None:
-                plt.savefig(os.path.join(
-                    save_dir, key[0] + "_" + plot_name + ".pdf"))
-            plt.clf()
+        if cuts == "All":
+            plot_this_one = (len(key) == 2) & (key[1] == plot_name)
+        elif type(cuts) == list:
+            plot_this_one = ((len(key) == 2) & (key[1] == plot_name)
+                             & (key[0] in cuts))
+        if plot_this_one:
+            hists = hist_set[key]
+            ax_names = [ax.name for ax in hists.axes()]
+            if type(channels) is list:
+                if "channel" in ax_names:
+                    for ch in channels:
+                        plot = hists.integrate("channel", [ch])
+                        _plot(plot, lumifactors, plot_kwargs,
+                              show, save_dir,
+                              key[0] + "_" + plot_name + "_" + ch)
+            elif channels == "Sum":
+                if "channel" in ax_names:
+                    plot = hists.integrate("channel")
+                else:
+                    plot = hists
+                _plot(plot, lumifactors, plot_kwargs,
+                      show, save_dir,
+                      key[0] + "_" + plot_name)
 
 
-config = config_utils.Config("example/config.json")
+config = config_utils.Config("ttDM_config/config.json")
 store = config["store"]
 mc_fileset, _ = dataset_utils.expand_datasetdict(config["mc_datasets"], store)
 data_fileset, _ = dataset_utils.expand_datasetdict(config["exp_datasets"],
                                                    store)
 data_fileset.update(mc_fileset)
 fileset = data_fileset
-plot_config = config_utils.Config("example/plot_config.json")
+plot_config = config_utils.Config("ttDM_config/plot_config2.json")
 labels = plot_config["labels"]
 colours = plot_config["colours"]
 xsecs = plot_config["cross-sections"]
@@ -159,7 +190,7 @@ for dataset in fileset.keys():
     else:
         eff = cutvals[-1]/cutvals[0]
         if dataset in mc_fileset.keys():
-            lumifactors[dataset] = 0.333358160 * xsecs[dataset]/cutvals[0]
+            lumifactors[dataset] = 0.994800992266 * xsecs[dataset]/cutvals[0]
             # 59.688059536
         else:
             lumifactors[dataset] = 1
@@ -196,50 +227,122 @@ plt.show(block=True)
 
 plt.style.use(mplhep.cms.style.ROOT)
 
-'''MET_hist = output[
-MET_hist.scale(lumifactors, axis="dataset")
+plot_kwargs = {"data": "Data",
+               "sigs": plot_config["signals"],
+               "sig_scaling": 1000,
+               "labels": labels,
+               "colours": colours,
+               "x_ax_name": "MET"}
 
-names_axis = hist.Cat("names", "")
-
-lim_MET = MET_hist.group("dataset", names_axis, plot_config["process_names"])
-fout = uproot.recreate(
-    os.path.join(plot_config["limit_hist_dir"], "MET_hists.root"))
-for proc in plot_config["process_names"].keys():
-    proc_MET = lim_MET.integrate("names", [proc])
-    if len(proc_MET.values().values())>0:
-        fout[proc] = coffea.hist.export1d(proc_MET)
-fout.close()
-
-labelmap = defaultdict(list)
-for key, val in labels.items():
-    cutvals = np.array(list(output["cutflow: "][key].values()))
-    if len(cutvals) > 0 and cutvals[-1] > 0:
-        labelmap[val].append(key)
-
-sortedlabels = sorted(labelsset, key=(
-    lambda x: sum([(MET_hist.integrate("vals")).values()[(y,)]
-              for y in labelmap[x]])))
-for key in sortedlabels:
-    labelmap[key] = labelmap.pop(key)
-    colours[key] = colours.pop(key)
-
-labels_axis = hist.Cat("labels", "", sorting="placement")
-
-MET = MET_hist.group("dataset", labels_axis, labelmap)
-plot_data_mc(MET, "Data", ["DM Chi1 PS100 x100", "DM Chi1 S100 x100"],
-             100, None, colours, "labels")
-plt.savefig(os.path.join(plot_config["hist_dir"], "MET.pdf"))
-plt.show(block=True)
-plt.clf()'''
-
-plot_cps(output["Selector_hists"],
+plot_cps(output["sel_hists"],
          "MET",
          lumifactors,
-         {"dsnames": list(fileset.keys()), "x_label": "MET (GeV)"},
-         {"data": "Data",
-          "sigs": [],
-          "sig_scaling": 100,
-          "labels": labels,
-          "colours": colours},
+         plot_kwargs,
          False,
-         plot_config["hist_dir"])
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
+
+plot_kwargs["x_ax_name"] = "Mll"
+plot_cps(output["sel_hists"],
+         "Mll",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
+
+plot_kwargs["x_ax_name"] = "dilep_pt"
+plot_cps(output["sel_hists"],
+         "dilep_pt",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
+
+plot_kwargs["x_ax_name"] = "jet_mult"
+plot_cps(output["sel_hists"],
+         "jet_mult",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
+
+plot_kwargs["x_ax_name"] = "pt"
+plot_cps(output["sel_hists"],
+         "1st_lep_pt",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
+
+plot_cps(output["sel_hists"],
+         "2nd_lep_pt",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
+
+plot_cps(output["sel_hists"],
+         "1st_jet_pt",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
+
+plot_cps(output["sel_hists"],
+         "2nd_jet_pt",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
+
+plot_kwargs["x_ax_name"] = "eta"
+plot_cps(output["sel_hists"],
+         "1st_lep_eta",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
+
+plot_cps(output["sel_hists"],
+         "2nd_lep_eta",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
+
+plot_cps(output["sel_hists"],
+         "1st_jet_eta",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
+
+plot_cps(output["sel_hists"],
+         "2nd_jet_eta",
+         lumifactors,
+         plot_kwargs,
+         False,
+         plot_config["hist_dir"],
+         "Sum",
+         ["MET > 40 GeV"])
