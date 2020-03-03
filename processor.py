@@ -400,7 +400,7 @@ class Processor(processor.ProcessorABC):
         """
         self.config = config
         if destdir is not None:
-            self.destdir = os.path.realdir(destdir)
+            self.destdir = os.path.realpath(destdir)
         else:
             self.destdir = None
         self.sel_hists = sel_hists if sel_hists is not None else {}
