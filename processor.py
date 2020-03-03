@@ -2,6 +2,7 @@
 
 import os
 from functools import partial
+from collections import defaultdict
 import numpy as np
 import awkward
 import coffea
@@ -613,7 +614,13 @@ class Processor(processor.ProcessorABC):
                     # In order to have the hists specific to dedicated
                     # systematic datasets contain also all the events from
                     # unaffected datasets, copy the nominal hists
+                    systoreplace = defaultdict(list)
                     for sysds, (replace, sys) in dsforsys.items():
+                        systoreplace[sys].append(replace)
+                    for sys, replacements in systoreplace.items():
+                        # If the dataset is replaced in this sys, don't copy
+                        if dsname in replacements:
+                            continue
                         accumulator[(cut, histname, sys)] =\
                             accumulator[(cut, histname)].copy()
 
