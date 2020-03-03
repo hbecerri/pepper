@@ -89,12 +89,14 @@ destdir = \
     chunksize=100000)
 """
 output = coffea.processor.run_uproot_job(
-    smallfileset,
+    fileset,
     treename="Events",
     processor_instance=Processor(config, "None", hist_dict),
     executor=parsl_executor,
     executor_args={"tailtimeout": None},
     chunksize=500000)
+
+print(output["ch_cutflows"])
 
 print("saving")
 coffea.util.save(output, "out_hists/output.coffea")
