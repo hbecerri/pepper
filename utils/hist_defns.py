@@ -36,7 +36,7 @@ class HistDefinition():
             for ch in channels:
                 fill_vals = {name: self.pick_data(method, data, data[ch])
                              for name, method in self.fill_methods.items()}
-                if all([val is not None for val in fill_vals.values()]):
+                if None in not fill_vals.values():
                     if is_mc:
                         _hist.fill(dataset=dsname,
                                    channel=ch,
@@ -50,7 +50,7 @@ class HistDefinition():
             _hist = hist.Hist("Counts", self.dataset_axis, *self.axes)
             fill_vals = {name: self.pick_data(method, data)
                          for name, method in self.fill_methods.items()}
-            if all([val is not None for val in fill_vals.values()]):
+            if None in not fill_vals.values():
                 if is_mc:
                     _hist.fill(dataset=dsname,
                                **fill_vals,
@@ -62,37 +62,33 @@ class HistDefinition():
 
     def pick_data(self, method, data, mask=None):
         for sel in method:
-            if data is not None:
-                if type(sel) is str:
-                    if sel in data:
-                        data = data[sel]
-                    else:
-                        data = None
-                elif isinstance(sel, dict):
-                    if "function" in sel:
-                        data = func_dict[sel["function"]](data)
-                    elif "key" in sel:
-                        if sel["key"] in data:
-                            data = data[sel["key"]]
-                        else:
-                            data = None
-                    elif "prop" in sel:
-                        data = getattr(data, sel["prop"])
-
-                    if "slice" in sel and data is not None:
-                        data = data[sel["slice"]]
-                    if "jagged_slice" in sel and data is not None:
-                        safe = data[data.counts > sel["jagged_slice"]]
-                        data = np.empty(len(data))
-                        data = safe[:, sel["jagged_slice"]]
+            if isinstance(sel, str):
+                if sel in data:
+                    data = data[sel]
                 else:
-                    data = None
+                    break
+            elif isinstance(sel, dict):
+                if "function" in sel:
+                    data = func_dict[sel["function"]](data)
+                elif "key" in sel:
+                    if sel["key"] in data:
+                        data = data[sel["key"]]
+                    else:
+                        break
+                elif "prop" in sel:
+                    data = getattr(data, sel["prop"])
+
+                if "slice" in sel and data is not None:
+                    data = data[sel["slice"]]
+                if "jagged_slice" in sel and data is not None:
+                    safe = data[data.counts > sel["jagged_slice"]]
+                    data = np.empty(len(data))
+                    data = safe[:, sel["jagged_slice"]]
+        else:
+            data = None
         if data is not None and mask is not None:
             return data[mask]
-        elif data is not None:
-            return data
-        else:
-            return None
+        return data
 
 
 func_dict = {"jet_mult": jet_mult}
