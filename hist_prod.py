@@ -34,7 +34,7 @@ export PYTHONPATH=\
 /nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea:$PYTHONPATH
 """
 
-hist_dict = create_hist_dict("ttDM_config")
+hist_dict = create_hist_dict("example/hist_config.json")
 
 nproc = 1
 condor_cfg = """
@@ -83,7 +83,7 @@ destdir = \
 """output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
-    processor_instance=Processor(config, "None", hist_dict),
+    processor_instance=Processor(config, None, hist_dict),
     executor=coffea.processor.iterative_executor,
     executor_args={"workers": 4},
     chunksize=100000)
@@ -91,7 +91,7 @@ destdir = \
 output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
-    processor_instance=Processor(config, "None", hist_dict),
+    processor_instance=Processor(config, None, hist_dict),
     executor=parsl_executor,
     executor_args={"tailtimeout": None},
     chunksize=500000)

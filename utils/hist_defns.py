@@ -5,9 +5,8 @@ import awkward
 import numpy as np
 
 
-def create_hist_dict(config_folder):
-    hist_config = json.load(open(os.path.join(config_folder,
-                                              "hist_config.json")))
+def create_hist_dict(config_json):
+    hist_config = json.load(open(config_json))
     return {key: HistDefinition(val) for key, val in hist_config.items()}
 
 
@@ -41,7 +40,7 @@ func_dict = {
 }
 
 
-class HistDefinitionError():
+class HistDefinitionError(Exception):
     pass
 
 
@@ -77,7 +76,7 @@ class HistDefinition():
             if hasattr(data, "size"):
                 if size is not None and data.size != size:
                     raise HistDefinitionError(f"Got inconsistent filling size "
-                                              "({size} and {data.size})")
+                                              f"({size} and {data.size})")
                 size = data.size
         prepared = {}
         for key, data in fill_vals.items():
@@ -86,7 +85,7 @@ class HistDefinition():
                 if key in jagged:
                     data = data.flatten()
                 elif key in flat and counts is not None:
-                    fill_vals[key] = np.repeat(data, counts)
+                    data = np.repeat(data, counts[mask])
             prepared[key] = data
         return prepared
 
@@ -152,7 +151,7 @@ class HistDefinition():
                     n = sel["leading"]
                     if n <= 0:
                         raise HistDefinitionError("'leading' must be positive")
-                    sel["slice"] = [[None], [n - 1, n]]
+                    data = data[:, n - 1]
                 if "slice" in sel:
                     slidef = sel["slice"]
                     if isinstance(slidef, int):
