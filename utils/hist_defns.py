@@ -124,6 +124,8 @@ class HistDefinition():
                     if sel not in func_dict:
                         raise HistDefinitionError(f"Unknown function {sel}")
                     data = func_dict[sel["function"]](data)
+                    if data is None:
+                        break
                 elif "key" in sel:
                     try:
                         data = data[sel["key"]]
