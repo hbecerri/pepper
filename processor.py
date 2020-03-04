@@ -261,6 +261,7 @@ class Selector(object):
                 updown = (factors[1], factors[2])
             else:
                 factor = factors
+                updown = None
             self.modify_weight(weightname, factor, updown, mask)
         if self.on_cutdone is not None:
             self.on_cutdone(data=self.final,
@@ -531,6 +532,7 @@ class Processor(processor.ProcessorABC):
 
         if self.config["compute_systematics"] and is_mc:
             self.add_generator_uncertainies(selector)
+        if is_mc:
             self.add_crosssection_scale(selector, dsname)
 
         selector.add_cut(partial(self.blinding, is_mc), "Blinding")
@@ -615,7 +617,7 @@ class Processor(processor.ProcessorABC):
                          systematics, cut):
         do_systematics = (self.config["compute_systematics"]
                           and systematics is not None)
-        if do_systematics:
+        if systematics is not None:
             weight = systematics["weight"].flatten()
         else:
             weight = None
@@ -697,16 +699,17 @@ class Processor(processor.ProcessorABC):
         lumifactors = self.config["mc_lumifactors"]
         factor = np.full(num_events, lumifactors[dsname])
         selector.modify_weight("lumi_factor", factor)
-        xsuncerts = self.config["crosssection_uncertainty"]
-        for name, affected_datasets in xsuncerts.items():
-            for affected_dataset, uncert in affected_datasets.items():
-                if dsname == affected_dataset:
-                    break
-            else:
-                uncert = 0
-            selector.set_systematic(name + "XS",
-                                    np.full(num_events, 1 + uncert),
-                                    np.full(num_events, 1 - uncert))
+        if self.config["compute_systematics"]:
+            xsuncerts = self.config["crosssection_uncertainty"]
+            for name, affected_datasets in xsuncerts.items():
+                for affected_dataset, uncert in affected_datasets.items():
+                    if dsname == affected_dataset:
+                        break
+                else:
+                    uncert = 0
+                selector.set_systematic(name + "XS",
+                                        np.full(num_events, 1 + uncert),
+                                        np.full(num_events, 1 - uncert))
 
     def blinding(self, is_mc, data):
         if (not is_mc) and (self.config["blinding_denom"] is not None):
@@ -957,24 +960,33 @@ class Processor(processor.ProcessorABC):
         # Electron identification efficiency
         for i, sffunc in enumerate(self.electron_sf):
             central = sffunc(eta=eles.sceta, pt=eles.pt).prod()
-            up = sffunc(eta=eles.sceta, pt=eles.pt, variation="up").prod()
-            down = sffunc(eta=eles.sceta, pt=eles.pt, variation="down").prod()
             key = "electronsf{}".format(i)
-            weights[key] = (central, up / central, down / central)
+            if self.config["compute_systematics"]:
+                up = sffunc(
+                    eta=eles.sceta, pt=eles.pt,variation="up").prod()
+                down = sffunc(
+                    eta=eles.sceta, pt=eles.pt, variation="down").prod()
+                weights[key] = (central, up / central, down / central)
+            else:
+                weights[key] = central
         # Muon identification and isolation efficiency
         for i, sffunc in enumerate(self.muon_sf):
             central = sffunc(abseta=abs(muons.eta), pt=muons.pt).prod()
-            up = sffunc(
-                abseta=abs(muons.eta), pt=muons.pt, variation="up").prod()
-            down = sffunc(
-                abseta=abs(muons.eta), pt=muons.pt, variation="down").prod()
             key = "muonsf{}".format(i)
-            weights[key] = (central, up / central, down / central)
+            if self.config["compute_systematics"]:
+                up = sffunc(
+                    abseta=abs(muons.eta), pt=muons.pt, variation="up").prod()
+                down = sffunc(
+                    abseta=abs(muons.eta), pt=muons.pt,
+                    variation="down").prod()
+                weights[key] = (central, up / central, down / central)
+            else:
+                weights[key] = central
         return weights
 
     def lepton_pair(self, is_mc, data):
         accept = data["Lepton"].counts >= 2
-        if self.config["compute_systematics"] and is_mc:
+        if is_mc:
             return (accept, self.compute_lepton_sf(data[accept]))
         else:
             return accept
@@ -1193,7 +1205,7 @@ class Processor(processor.ProcessorABC):
         add_ele = self.electron_cuts(data, good_lep=False)
         add_muon = self.muon_cuts(data, good_lep=False)
         accept = add_ele.sum() + add_muon.sum() <= 2
-        if self.config["compute_systematics"] and is_mc:
+        if is_mc:
             return (accept, self.compute_lepton_sf(data[accept]))
         else:
             return accept
@@ -1224,15 +1236,18 @@ class Processor(processor.ProcessorABC):
         weight = {}
         for i, weighter in enumerate(self.btagweighters):
             central = weighter(wp, flav, eta, pt, discr, "central")
-            up = weighter(wp, flav, eta, pt, discr, "up")
-            down = weighter(wp, flav, eta, pt, discr, "down")
-            weight[f"btagsf{i}"] = (central, up / central, down / central)
+            if self.config["compute_systematics"]:
+                up = weighter(wp, flav, eta, pt, discr, "up")
+                down = weighter(wp, flav, eta, pt, discr, "down")
+                weight[f"btagsf{i}"] = (central, up / central, down / central)
+            else:
+                weight[f"btagsf{i}"] = central
         return weight
 
     def btag_cut(self, is_mc, data):
         num_btagged = data["Jet"]["btagged"].sum()
         is_tagged = num_btagged >= self.config["num_atleast_btagged"]
-        if is_mc and self.config["compute_systematics"]:
+        if is_mc:
             return (is_tagged, self.compute_weight_btag(data[is_tagged]))
         else:
             return is_tagged
