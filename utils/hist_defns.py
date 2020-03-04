@@ -128,7 +128,7 @@ class HistDefinition():
                     break
             elif isinstance(sel, dict):
                 if "function" in sel:
-                    if sel not in func_dict:
+                    if sel["function"] not in func_dict.keys():
                         raise HistDefinitionError(f"Unknown function {sel}")
                     data = func_dict[sel["function"]](data)
                     if data is None:
