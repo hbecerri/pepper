@@ -36,7 +36,7 @@ class HistDefinition():
             for ch in channels:
                 fill_vals = {name: self.pick_data(method, data, data[ch])
                              for name, method in self.fill_methods.items()}
-                if None not in fill_vals.values():
+                if all(val is not None for val in fill_vals.values()):
                     if is_mc:
                         _hist.fill(dataset=dsname,
                                    channel=ch,
@@ -50,7 +50,7 @@ class HistDefinition():
             _hist = hist.Hist("Counts", self.dataset_axis, *self.axes)
             fill_vals = {name: self.pick_data(method, data)
                          for name, method in self.fill_methods.items()}
-            if None not in fill_vals.values():
+            if all(val is not None for val in fill_vals.values()):
                 if is_mc:
                     _hist.fill(dataset=dsname,
                                **fill_vals,
