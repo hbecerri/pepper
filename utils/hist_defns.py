@@ -119,12 +119,15 @@ class HistDefinition():
                         raise HistDefinitionError(f"Unknown function {sel}")
                     data = func_dict[sel["function"]](data)
                 elif "key" in sel:
-                    if sel["key"] in data:
+                    try:
                         data = data[sel["key"]]
-                    else:
+                    except KeyError:
                         break
                 elif "attribute" in sel:
-                    data = getattr(data, sel["attribute"])
+                    try:
+                        data = getattr(data, sel["attribute"])
+                    except AttributeError:
+                        break
 
                 if "slice" in sel and data is not None:
                     data = data[sel["slice"]]
