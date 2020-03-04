@@ -18,6 +18,29 @@ def jet_mult(data):
         return None
 
 
+func_dict = {
+    "sin": np.sin,
+    "cos": np.cos,
+    "tan": np.tan,
+    "arcsin": np.arcsin,
+    "arccos": np.arccos,
+    "arctan": np.arctan,
+    "sinh": np.sinh,
+    "cosh": np.cosh,
+    "tanh": np.tanh,
+    "arcsinh": np.arcsinh,
+    "arccosh": np.arccosh,
+    "arctanh": np.arctanh,
+    "exp": np.exp,
+    "log": np.log,
+    "sqrt": np.sqrt,
+    "abs": np.abs,
+    "sign": np.sign,
+
+    "jet_mult": jet_mult,
+}
+
+
 class HistDefinitionError():
     pass
 
@@ -92,26 +115,47 @@ class HistDefinition():
                     data = data()
             elif isinstance(sel, dict):
                 if "function" in sel:
+                    if sel not in func_dict:
+                        raise HistDefinitionError(f"Unknown function {sel}")
                     data = func_dict[sel["function"]](data)
                     if data is None:
                         break
                 elif "key" in sel:
-                    if sel["key"] in data:
+                    try:
                         data = data[sel["key"]]
-                    else:
+                    except KeyError:
                         break
-                elif "prop" in sel:
-                    data = getattr(data, sel["prop"])
+                elif "attribute" in sel:
+                    try:
+                        data = getattr(data, sel["attribute"])
+                    except AttributeError:
+                        break
 
-                if "slice" in sel and data is not None:
-                    data = data[sel["slice"]]
-                if "jagged_slice" in sel and data is not None:
-                    safe = data[data.counts > sel["jagged_slice"]]
-                    data = np.empty(len(data))
-                    data = safe[:, sel["jagged_slice"]]
+                if "leading" in sel:
+                    if "slice" in sel:
+                        raise HistDefinitionError(
+                            "'leading' and 'slice' can't be specified at the "
+                            "same time")
+                    n = sel["leading"]
+                    if n <= 0:
+                        raise HistDefinitionError("'leading' must be positive")
+                    sel["slice"] = [[None], [n - 1, n]]
+                if "slice" in sel:
+                    slidef = sel["slice"]
+                    if isinstance(slidef, int):
+                        # Simple stop slice
+                        sli = slidef
+                    elif isinstance(slidef, list):
+                        # Multi-dimensional slice
+                        sli = tuple(slice(*x) for x in slidef)
+                    else:
+                        sli = slice(*slidef)
+                    if (isinstance(data, awkward.JaggedArray)
+                            and isinstance(sli, list)
+                            and len(sli) >= 2):
+                        # Jagged slice, ignore events that have too few counts
+                        data = data[data.counts > sli[1].stop]
+                    data = data[sli]
         else:
             return data
         return None
-
-
-func_dict = {"jet_mult": jet_mult}

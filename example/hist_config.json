@@ -13,8 +13,8 @@
         "fill": {
             "pt": [
                 "Lepton",
-                {"prop": "pt",
-                 "jagged_slice": 0}
+                {"attribute": "pt",
+                 "leading": 1}
             ]
         }
     },
@@ -32,8 +32,8 @@
         "fill": {
             "pt": [
                 "Lepton",
-                {"prop": "pt",
-                 "jagged_slice": 1}
+                {"attribute": "pt",
+                 "leading": 2}
             ]
         }
     },
@@ -51,8 +51,8 @@
         "fill": {
             "eta": [
                 "Lepton",
-                {"prop": "eta",
-                 "jagged_slice": 0}
+                {"attribute": "eta",
+                 "leading": 1}
             ]
         }
     },
@@ -70,8 +70,8 @@
         "fill": {
             "eta": [
                 "Lepton",
-                {"prop": "eta",
-                 "jagged_slice": 1}
+                {"attribute": "eta",
+                 "leading": 2}
             ]
         }
     },
@@ -89,8 +89,8 @@
         "fill": {
             "pt": [
                 "Jet",
-                {"prop": "pt",
-                 "jagged_slice": 0}
+                {"attribute": "pt",
+                 "leading": 1}
             ]
         }
     },
@@ -108,8 +108,8 @@
         "fill": {
             "pt": [
                 "Jet",
-                {"prop": "pt",
-                 "jagged_slice": 1}
+                {"attribute": "pt",
+                 "leading": 2}
             ]
         }
     },
@@ -127,8 +127,8 @@
         "fill": {
             "eta": [
                 "Jet",
-                {"prop": "eta",
-                 "jagged_slice": 0}
+                {"attribute": "eta",
+                 "leading": 1}
             ]
         }
     },
@@ -147,8 +147,8 @@
         "fill": {
             "eta": [
                 "Jet",
-                {"prop": "eta",
-                 "jagged_slice": 1}
+                {"attribute": "eta",
+                 "leading": 2}
             ]
         }
     },
