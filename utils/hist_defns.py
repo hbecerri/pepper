@@ -55,10 +55,11 @@ class HistDefinition():
 
     @staticmethod
     def _prepare_fills(fill_vals, mask=None):
-        # Flatten jaggedness, pad flat arrays if needed, apply mask
+        # Check size, flatten jaggedness, pad flat arrays if needed, apply mask
         if mask is None:
             mask = slice(None)
         counts = None
+        size = None
         jagged = []
         flat = []
         for key, data in fill_vals.items():
@@ -68,11 +69,16 @@ class HistDefinition():
                 if counts is not None and counts != data.counts:
                     raise HistDefinitionError(
                         f"Got JaggedArrays for histogram filling with "
-                        "disagreeing counts ({counts} and {data.counts}")
+                        "inconsistent counts ({counts} and {data.counts}")
                 counts = data.counts
                 jagged.append(key)
             else:
                 flat.append(key)
+            if hasattr(data, "size"):
+                if size is not None and data.size != size:
+                    raise HistDefinitionError(f"Got inconsistent filling size "
+                                              "({size} and {data.size})")
+                size = data.size
         for key in jagged:
             fill_vals[key] = fill_vals[key][mask].flatten()
         if counts is not None:
