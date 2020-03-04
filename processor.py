@@ -963,7 +963,7 @@ class Processor(processor.ProcessorABC):
             key = "electronsf{}".format(i)
             if self.config["compute_systematics"]:
                 up = sffunc(
-                    eta=eles.sceta, pt=eles.pt,variation="up").prod()
+                    eta=eles.sceta, pt=eles.pt, variation="up").prod()
                 down = sffunc(
                     eta=eles.sceta, pt=eles.pt, variation="down").prod()
                 weights[key] = (central, up / central, down / central)
