@@ -1,6 +1,7 @@
 import os
 import json
 from coffea import hist
+import awkward
 import numpy as np
 
 
@@ -17,6 +18,10 @@ def jet_mult(data):
         return None
 
 
+class HistDefinitionError():
+    pass
+
+
 class HistDefinition():
     def __init__(self, config):
         self.dataset_axis = hist.Cat("dataset", "")
@@ -24,6 +29,30 @@ class HistDefinition():
         if "cats" in config:
             self.axes.extend([hist.Cat(**kwargs) for kwargs in config["cats"]])
         self.fill_methods = config["fill"]
+
+    @staticmethod
+    def _prepare_fills(fill_vals):
+        # Flatten jaggedness, pad flat arrays if needed
+        counts = None
+        jagged = []
+        flat = []
+        for key, data in fill_vals.items():
+            if data is None:
+                continue
+            elif isinstance(data, awkward.JaggedArray):
+                if counts is not None and counts != data.counts:
+                    raise HistDefinitionError(
+                        f"Got JaggedArrays for histogram filling with "
+                        "disagreeing counts ({counts} and {data.counts}")
+                counts = data.counts
+                jagged.append(key)
+            else:
+                flat.append(key)
+        for key in jagged:
+            fill_vals[key] = fill_vals[key].flatten()
+        if counts is not None:
+            for key in flat:
+                fill_vals[key] = np.repeat(fill_vals[key], counts)
 
     def __call__(self, data, dsname, is_mc, weight):
         channels = ["ee", "emu", "mumu", "None"]
@@ -37,6 +66,7 @@ class HistDefinition():
                              for name, method in self.fill_methods.items()}
                 if weight is not None:
                     fill_vals["weight"] = weight[data[ch]]
+                self._prepare_fills(fill_vals)
                 if all(val is not None for val in fill_vals.values()):
                     _hist.fill(dataset=dsname, channel=ch, **fill_vals)
         else:
@@ -45,6 +75,7 @@ class HistDefinition():
                          for name, method in self.fill_methods.items()}
             if weight is not None:
                 fill_vals["weight"] = weight
+            self._prepare_fills(fill_vals)
             if all(val is not None for val in fill_vals.values()):
                 _hist.fill(dataset=dsname, **fill_vals)
         return _hist
@@ -79,7 +110,7 @@ class HistDefinition():
                     data = np.empty(len(data))
                     data = safe[:, sel["jagged_slice"]]
         else:
-            return data.flatten()
+            return data
         return None
 
 
