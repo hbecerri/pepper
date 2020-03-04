@@ -81,11 +81,12 @@ class HistDefinition():
                 size = data.size
         prepared = {}
         for key, data in fill_vals.items():
-            data = data[mask]
-            if key in jagged:
-                data = data.flatten()
-            elif key in flat and counts is not None:
-                fill_vals[key] = np.repeat(data, counts)
+            if data is not None:
+                data = data[mask]
+                if key in jagged:
+                    data = data.flatten()
+                elif key in flat and counts is not None:
+                    fill_vals[key] = np.repeat(data, counts)
             prepared[key] = data
         return prepared
 
