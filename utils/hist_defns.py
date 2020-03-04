@@ -93,6 +93,8 @@ class HistDefinition():
             elif isinstance(sel, dict):
                 if "function" in sel:
                     data = func_dict[sel["function"]](data)
+                    if data is None:
+                        break
                 elif "key" in sel:
                     if sel["key"] in data:
                         data = data[sel["key"]]
