@@ -85,10 +85,11 @@ class HistDefinition():
                     data = np.empty(len(data))
                     data = safe[:, sel["jagged_slice"]]
         else:
-            data = None
-        if data is not None and mask is not None:
-            return data[mask]
-        return data
+            if mask is not None:
+                return data[mask]
+            else:
+                return data
+        return None
 
 
 func_dict = {"jet_mult": jet_mult}
