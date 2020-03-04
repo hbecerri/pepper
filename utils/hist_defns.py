@@ -31,8 +31,10 @@ class HistDefinition():
         self.fill_methods = config["fill"]
 
     @staticmethod
-    def _prepare_fills(fill_vals):
-        # Flatten jaggedness, pad flat arrays if needed
+    def _prepare_fills(fill_vals, mask=None):
+        # Flatten jaggedness, pad flat arrays if needed, apply mask
+        if mask is None:
+            mask = slice(None)
         counts = None
         jagged = []
         flat = []
@@ -49,32 +51,28 @@ class HistDefinition():
             else:
                 flat.append(key)
         for key in jagged:
-            fill_vals[key] = fill_vals[key].flatten()
+            fill_vals[key] = fill_vals[key][mask].flatten()
         if counts is not None:
             for key in flat:
-                fill_vals[key] = np.repeat(fill_vals[key], counts)
+                fill_vals[key] = np.repeat(fill_vals[key][mask], counts)
 
     def __call__(self, data, dsname, is_mc, weight):
         channels = ["ee", "emu", "mumu", "None"]
+        fill_vals = {name: self.pick_data(method, data)
+                     for name, method in self.fill_methods.items()}
+        if weight is not None:
+            fill_vals["weight"] = weight
         if channels[0] in data:
             channel_axis = hist.Cat("channel", "")
             _hist = hist.Hist("Counts", self.dataset_axis,
                               channel_axis, *self.axes)
 
             for ch in channels:
-                fill_vals = {name: self.pick_data(method, data)[data[ch]]
-                             for name, method in self.fill_methods.items()}
-                if weight is not None:
-                    fill_vals["weight"] = weight[data[ch]]
-                self._prepare_fills(fill_vals)
+                self._prepare_fills(fill_vals, data[ch])
                 if all(val is not None for val in fill_vals.values()):
                     _hist.fill(dataset=dsname, channel=ch, **fill_vals)
         else:
             _hist = hist.Hist("Counts", self.dataset_axis, *self.axes)
-            fill_vals = {name: self.pick_data(method, data)
-                         for name, method in self.fill_methods.items()}
-            if weight is not None:
-                fill_vals["weight"] = weight
             self._prepare_fills(fill_vals)
             if all(val is not None for val in fill_vals.values()):
                 _hist.fill(dataset=dsname, **fill_vals)
