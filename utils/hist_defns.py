@@ -1,6 +1,5 @@
 import os
 import json
-
 from coffea import hist
 import numpy as np
 
@@ -36,28 +35,18 @@ class HistDefinition():
             for ch in channels:
                 fill_vals = {name: self.pick_data(method, data)[data[ch]]
                              for name, method in self.fill_methods.items()}
+                if weight is not None:
+                    fill_vals["weight"] = weight[data[ch]]
                 if all(val is not None for val in fill_vals.values()):
-                    if is_mc:
-                        _hist.fill(dataset=dsname,
-                                   channel=ch,
-                                   **fill_vals,
-                                   weight=weight[data[ch]])
-                    else:
-                        _hist.fill(dataset=dsname,
-                                   channel=ch,
-                                   **fill_vals)
+                    _hist.fill(dataset=dsname, channel=ch, **fill_vals)
         else:
             _hist = hist.Hist("Counts", self.dataset_axis, *self.axes)
             fill_vals = {name: self.pick_data(method, data)
                          for name, method in self.fill_methods.items()}
+            if weight is not None:
+                fill_vals["weight"] = weight
             if all(val is not None for val in fill_vals.values()):
-                if is_mc:
-                    _hist.fill(dataset=dsname,
-                               **fill_vals,
-                               weight=weight)
-                else:
-                    _hist.fill(dataset=dsname,
-                               **fill_vals)
+                _hist.fill(dataset=dsname, **fill_vals)
         return _hist
 
     def pick_data(self, method, data):
