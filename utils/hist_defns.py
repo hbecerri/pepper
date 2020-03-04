@@ -18,6 +18,29 @@ def jet_mult(data):
         return None
 
 
+func_dict = {
+    "sin": np.sin,
+    "cos": np.cos,
+    "tan": np.tan,
+    "arcsin": np.arcsin,
+    "arccos": np.arccos,
+    "arctan": np.arctan,
+    "sinh": np.sinh,
+    "cosh": np.cosh,
+    "tanh": np.tanh,
+    "arcsinh": np.arcsinh,
+    "arccosh": np.arccosh,
+    "arctanh": np.arctanh,
+    "exp": np.exp,
+    "log": np.log,
+    "sqrt": np.sqrt,
+    "abs": np.abs,
+    "sign": np.sign,
+
+    "jet_mult": jet_mult,
+}
+
+
 class HistDefinitionError():
     pass
 
@@ -92,6 +115,8 @@ class HistDefinition():
                     data = data()
             elif isinstance(sel, dict):
                 if "function" in sel:
+                    if sel not in func_dict:
+                        raise HistDefinitionError(f"Unknown function {sel}")
                     data = func_dict[sel["function"]](data)
                 elif "key" in sel:
                     if sel["key"] in data:
@@ -111,5 +136,3 @@ class HistDefinition():
             return data
         return None
 
-
-func_dict = {"jet_mult": jet_mult}
