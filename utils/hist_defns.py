@@ -123,8 +123,8 @@ class HistDefinition():
                         data = data[sel["key"]]
                     else:
                         break
-                elif "prop" in sel:
-                    data = getattr(data, sel["prop"])
+                elif "attribute" in sel:
+                    data = getattr(data, sel["attribute"])
 
                 if "slice" in sel and data is not None:
                     data = data[sel["slice"]]
