@@ -119,6 +119,8 @@ class HistDefinition():
                         break
                 if callable(data):
                     data = data()
+                if data is None:
+                    break
             elif isinstance(sel, dict):
                 if "function" in sel:
                     if sel not in func_dict:
