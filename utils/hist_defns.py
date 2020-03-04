@@ -81,9 +81,10 @@ class HistDefinition():
                 size = data.size
         for key in jagged:
             fill_vals[key] = fill_vals[key][mask].flatten()
-        if counts is not None:
-            for key in flat:
-                fill_vals[key] = np.repeat(fill_vals[key][mask], counts)
+        for key in flat:
+            fill_vals[key] = fill_vals[key][mask]
+            if counts is not None:
+                fill_vals[key] = np.repeat(fill_vals[key], counts)
 
     def __call__(self, data, dsname, is_mc, weight):
         channels = ["ee", "emu", "mumu", "None"]
