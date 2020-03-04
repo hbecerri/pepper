@@ -34,7 +34,7 @@ class HistDefinition():
                               channel_axis, *self.axes)
 
             for ch in channels:
-                fill_vals = {name: self.pick_data(method, data, data[ch])
+                fill_vals = {name: self.pick_data(method, data)[data[ch]]
                              for name, method in self.fill_methods.items()}
                 if all(val is not None for val in fill_vals.values()):
                     if is_mc:
@@ -60,7 +60,7 @@ class HistDefinition():
                                **fill_vals)
         return _hist
 
-    def pick_data(self, method, data, mask=None):
+    def pick_data(self, method, data):
         for sel in method:
             if isinstance(sel, str):
                 try:
@@ -90,11 +90,7 @@ class HistDefinition():
                     data = np.empty(len(data))
                     data = safe[:, sel["jagged_slice"]]
         else:
-            data = data.flatten()
-            if mask is not None:
-                return data[mask]
-            else:
-                return data
+            return data.flatten()
         return None
 
 
