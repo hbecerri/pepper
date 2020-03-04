@@ -14,7 +14,7 @@
             "pt": [
                 "Lepton",
                 {"attribute": "pt",
-                 "jagged_slice": 0}
+                 "leading": 1}
             ]
         }
     },
@@ -33,7 +33,7 @@
             "pt": [
                 "Lepton",
                 {"attribute": "pt",
-                 "jagged_slice": 1}
+                 "leading": 2}
             ]
         }
     },
@@ -52,7 +52,7 @@
             "eta": [
                 "Lepton",
                 {"attribute": "eta",
-                 "jagged_slice": 0}
+                 "leading": 1}
             ]
         }
     },
@@ -71,7 +71,7 @@
             "eta": [
                 "Lepton",
                 {"attribute": "eta",
-                 "jagged_slice": 1}
+                 "leading": 2}
             ]
         }
     },
@@ -90,7 +90,7 @@
             "pt": [
                 "Jet",
                 {"attribute": "pt",
-                 "jagged_slice": 0}
+                 "leading": 1}
             ]
         }
     },
@@ -109,7 +109,7 @@
             "pt": [
                 "Jet",
                 {"attribute": "pt",
-                 "jagged_slice": 1}
+                 "leading": 2}
             ]
         }
     },
@@ -128,7 +128,7 @@
             "eta": [
                 "Jet",
                 {"attribute": "eta",
-                 "jagged_slice": 0}
+                 "leading": 1}
             ]
         }
     },
@@ -148,7 +148,7 @@
             "eta": [
                 "Jet",
                 {"attribute": "eta",
-                 "jagged_slice": 1}
+                 "leading": 2}
             ]
         }
     },

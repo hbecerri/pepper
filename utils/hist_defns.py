@@ -129,13 +129,31 @@ class HistDefinition():
                     except AttributeError:
                         break
 
-                if "slice" in sel and data is not None:
-                    data = data[sel["slice"]]
-                if "jagged_slice" in sel and data is not None:
-                    safe = data[data.counts > sel["jagged_slice"]]
-                    data = np.empty(len(data))
-                    data = safe[:, sel["jagged_slice"]]
+                if "leading" in sel:
+                    if "slice" in sel:
+                        raise HistDefinitionError(
+                            "'leading' and 'slice' can't be specified at the "
+                            "same time")
+                    n = sel["leading"]
+                    if n <= 0:
+                        raise HistDefinitionError("'leading' must be positive")
+                    sel["slice"] = [[None], [n - 1, n]]
+                if "slice" in sel:
+                    slidef = sel["slice"]
+                    if isinstance(slidef, int):
+                        # Simple stop slice
+                        sli = slidef
+                    elif isinstance(slidef, list):
+                        # Multi-dimensional slice
+                        sli = tuple(slice(*x) for x in slidef)
+                    else:
+                        sli = slice(*slidef)
+                    if (isinstance(data, awkward.JaggedArray)
+                            and isinstance(sli, list)
+                            and len(sli) >= 2):
+                        # Jagged slice, ignore events that have too few counts
+                        data = data[data.counts > sli[1].stop]
+                    data = data[sli]
         else:
             return data
         return None
-
