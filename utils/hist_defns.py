@@ -79,12 +79,15 @@ class HistDefinition():
                     raise HistDefinitionError(f"Got inconsistent filling size "
                                               "({size} and {data.size})")
                 size = data.size
-        for key in jagged:
-            fill_vals[key] = fill_vals[key][mask].flatten()
-        for key in flat:
-            fill_vals[key] = fill_vals[key][mask]
-            if counts is not None:
-                fill_vals[key] = np.repeat(fill_vals[key], counts)
+        prepared = {}
+        for key, data in fill_vals.items():
+            data = data[mask]
+            if key in jagged:
+                data = data.flatten()
+            elif key in flat and counts is not None:
+                fill_vals[key] = np.repeat(data, counts)
+            prepared[key] = data
+        return prepared
 
     def __call__(self, data, dsname, is_mc, weight):
         channels = ["ee", "emu", "mumu", "None"]
@@ -98,14 +101,14 @@ class HistDefinition():
                               channel_axis, *self.axes)
 
             for ch in channels:
-                self._prepare_fills(fill_vals, data[ch])
-                if all(val is not None for val in fill_vals.values()):
-                    _hist.fill(dataset=dsname, channel=ch, **fill_vals)
+                prepared = self._prepare_fills(fill_vals, data[ch])
+                if all(val is not None for val in prepared.values()):
+                    _hist.fill(dataset=dsname, channel=ch, **prepared)
         else:
             _hist = hist.Hist("Counts", self.dataset_axis, *self.axes)
-            self._prepare_fills(fill_vals)
-            if all(val is not None for val in fill_vals.values()):
-                _hist.fill(dataset=dsname, **fill_vals)
+            prepared = self._prepare_fills(fill_vals)
+            if all(val is not None for val in prepared.values()):
+                _hist.fill(dataset=dsname, **prepared)
         return _hist
 
     def pick_data(self, method, data):
