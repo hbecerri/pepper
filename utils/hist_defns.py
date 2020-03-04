@@ -63,10 +63,15 @@ class HistDefinition():
     def pick_data(self, method, data, mask=None):
         for sel in method:
             if isinstance(sel, str):
-                if sel in data:
-                    data = data[sel]
-                else:
-                    break
+                try:
+                    data = getattr(data, sel)
+                except AttributeError:
+                    try:
+                        data = data[sel]
+                    except KeyError:
+                        break
+                if callable(data):
+                    data = data()
             elif isinstance(sel, dict):
                 if "function" in sel:
                     data = func_dict[sel["function"]](data)
@@ -85,6 +90,7 @@ class HistDefinition():
                     data = np.empty(len(data))
                     data = safe[:, sel["jagged_slice"]]
         else:
+            data = data.flatten()
             if mask is not None:
                 return data[mask]
             else:
