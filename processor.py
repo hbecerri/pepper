@@ -507,8 +507,9 @@ class Processor(processor.ProcessorABC):
             out_dict = selector.get_columns_from_config(
                 self.config["selector_cols_to_save"])
             out_dict["weight"] = selector.weight
-            out_dict.update(reco_selector.get_columns_from_config(
-                self.config["reco_cols_to_save"], "reco"))
+            if reco_selector is not None:
+                out_dict.update(reco_selector.get_columns_from_config(
+                    self.config["reco_cols_to_save"], "reco"))
             out_dict["cutflags"] = selector.get_cuts()
 
             for key in out_dict.keys():
@@ -605,6 +606,8 @@ class Processor(processor.ProcessorABC):
             reco_objects.set_column(self.top, "top")
             reco_objects.set_column(self.antitop, "antitop")
             reco_objects.set_column(self.ttbar, "ttbar")
+        else:
+            reco_objects = None
 
         if self.destdir is not None:
             self._save_per_event_info(dsname, selector, reco_objects)
