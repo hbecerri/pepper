@@ -635,7 +635,7 @@ class Processor(processor.ProcessorABC):
 
         return output
 
-    def get_channels(self, data):
+    def get_present_channels(self, data):
         if all(x in data.columns for x in ("is_ee", "is_mm", "is_em")):
             return ("is_ee", "is_mm", "is_em")
         else:
@@ -649,6 +649,7 @@ class Processor(processor.ProcessorABC):
             weight = systematics["weight"].flatten()
         else:
             weight = None
+        channels = self.get_present_channels(data)
         for histname, fill_func in hist_dict.items():
             dsforsys = self.config["dataset_for_systematics"]
             if dsname in dsforsys:
@@ -656,12 +657,14 @@ class Processor(processor.ProcessorABC):
                 if do_systematics:
                     replacename, sysname = dsforsys[dsname]
                     sys_hist = fill_func(data=data,
+                                         channels=channels,
                                          dsname=replacename,
                                          is_mc=is_mc,
                                          weight=weight)
                     accumulator[(cut, histname, sysname)] = sys_hist
             else:
                 accumulator[(cut, histname)] = fill_func(data=data,
+                                                         channels=channels,
                                                          dsname=dsname,
                                                          is_mc=is_mc,
                                                          weight=weight)
@@ -671,7 +674,8 @@ class Processor(processor.ProcessorABC):
                         if syscol == "weight":
                             continue
                         sysweight = weight * systematics[syscol].flatten()
-                        hist = fill_func(data=data, dsname=dsname, is_mc=is_mc,
+                        hist = fill_func(data=data, channels=channels,
+                                         dsname=dsname, is_mc=is_mc,
                                          weight=sysweight)
                         accumulator[(cut, histname, syscol)] = hist
                     # In order to have the hists specific to dedicated

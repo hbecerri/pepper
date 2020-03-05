@@ -89,13 +89,12 @@ class HistDefinition():
             prepared[key] = data
         return prepared
 
-    def __call__(self, data, dsname, is_mc, weight):
-        channels = ["ee", "emu", "mumu", "None"]
+    def __call__(self, data, channels, dsname, is_mc, weight):
         fill_vals = {name: self.pick_data(method, data)
                      for name, method in self.fill_methods.items()}
         if weight is not None:
             fill_vals["weight"] = weight
-        if channels[0] in data:
+        if channels is not None:
             channel_axis = hist.Cat("channel", "")
             _hist = hist.Hist("Counts", self.dataset_axis,
                               channel_axis, *self.axes)
