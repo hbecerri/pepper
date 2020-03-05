@@ -57,13 +57,14 @@ def get_syshists(dirname, fname, ignore=None):
 
 
 def prepare(hist, dense_axis, chan):
-    chan_axis = hist.axis("chan")
+    project_axes = [dense_axis]
+    if "channel" in hist.fields:
+        project_axes.append(hist.axis("channel"))
     if "proc" in hist.fields:
-        proc_axis = hist.axis("proc")
-        hist = hist.project(dense_axis, chan_axis, proc_axis)
-    else:
-        hist = hist.project(dense_axis, chan_axis)
-    hist = hist.integrate(chan_axis, int_range=chan)
+        project_axes.append(hist.axis("proc"))
+    hist = hist.project(*project_axes)
+    if "channel" in hist.fields:
+        hist = hist.integrate(hist.axis("channel"), int_range=chan)
     return hist
 
 
@@ -175,6 +176,7 @@ for histfilename in args.histfile:
     os.makedirs(outdir, exist_ok=True)
     namebase, fileext = os.path.splitext(os.path.basename(histfilename))
     hist = coffea.util.load(histfilename)
+    dsaxis = hist.axis("dataset")
     syshists = get_syshists(srcdir, os.path.basename(histfilename),
                             args.ignoresys)
     scales = np.ones(len(syshists))
@@ -184,18 +186,21 @@ for histfilename in args.histfile:
     proc_axis = coffea.hist.Cat("proc", "Process", "placement")
 
     data_dsnames = list(config["exp_datasets"].keys())
-    data_hist = hist.group(
-        hist.axis("dsname"), proc_axis, {"Data": (data_dsnames,)})
+    data_hist = hist.group(dsaxis, proc_axis, {"Data": (data_dsnames,)})
 
     mc_dsnames = config["mc_datasets"].keys()
     if axis_labelmap is not None:
-        pred_hist = hist.group(hist.axis("dsname"), proc_axis, axis_labelmap)
+        pred_hist = hist.group(dsaxis, proc_axis, axis_labelmap)
     else:
         mapping = {key: (key,) for key in mc_dsnames}
-        pred_hist = hist.group(hist.axis("dsname"), proc_axis, mapping)
+        pred_hist = hist.group(dsaxis, proc_axis, mapping)
 
+    if "channel" in hist.fields:
+        channels = (idn.name for idn in hist.axis("channel").identifiers())
+    else:
+        channels = "all"
     for dense in hist.dense_axes():
-        for chan in (idn.name for idn in pred_hist.axis("chan").identifiers()):
+        for chan in channels:
             data_prepared = prepare(data_hist, dense, chan)
             pred_prepared = prepare(pred_hist, dense, chan)
             syshists_prep = {k: [prepare(vi, dense, chan) for vi in v]
