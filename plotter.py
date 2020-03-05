@@ -174,16 +174,16 @@ xsecs = plot_config["cross-sections"]
 
 output = coffea.util.load("out_hists/output.coffea")
 cutvalues = dict((k, np.zeros(
-    len(output["cutflow"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"])))
+    len(output["cutflows"]["all"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"])))
     for k in set(labels.values()))
 cuteffs = dict((k, np.zeros(len(
-    output["cutflow"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]) - 1))
+    output["cutflows"]["all"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]) - 1))
     for k in set(labels.values()))
 # currently assumes one always runs over a dilepton sample-
 # might be nice to relax this
 lumifactors = defaultdict(int)
 for dataset in fileset.keys():
-    cutvals = np.array(list(output["cutflow"][dataset].values()))
+    cutvals = np.array(list(output["cutflows"]["all"][dataset].values()))
     if len(cutvals) == 0:
         eff = 0
         lumifactors[dataset] = 0

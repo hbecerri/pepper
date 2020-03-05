@@ -492,15 +492,10 @@ class Processor(processor.ProcessorABC):
 
     @property
     def accumulator(self):
-        channels = ["ee", "emu", "mumu", "None"]
         self._accumulator = processor.dict_accumulator({
             "sel_hists": processor.dict_accumulator(),
             "reco_hists": processor.dict_accumulator(),
-            "cutflow": processor.defaultdict_accumulator(
-                partial(processor.defaultdict_accumulator, int)),
-            "ch_cutflows": processor.dict_accumulator(
-                {ch: processor.defaultdict_accumulator(int)
-                 for ch in channels})
+            "cutflows": processor.dict_accumulator(),
         })
         return self._accumulator
 
@@ -544,6 +539,7 @@ class Processor(processor.ProcessorABC):
         sel_cb = partial(self.fill_accumulator,
                          hist_dict=self.sel_hists,
                          accumulator=output["sel_hists"],
+                         chaccumulator=output["cutflows"],
                          is_mc=is_mc,
                          dsname=dsname)
         if is_mc:
@@ -613,6 +609,7 @@ class Processor(processor.ProcessorABC):
             reco_cb = partial(self.fill_accumulator,
                               hist_dict=self.reco_hists,
                               accumulator=output["reco_hists"],
+                              chaccumulator=output["cutflows"],
                               is_mc=is_mc,
                               dsname=dsname)
             reco_objects = Selector(awkward.Table(lep=lep, antilep=antilep,
@@ -627,9 +624,6 @@ class Processor(processor.ProcessorABC):
             reco_objects.set_column(self.antitop, "antitop")
             reco_objects.set_column(self.ttbar, "ttbar")
 
-        output["cutflow"][dsname] = selector.cutflow
-        output["ch_cutflows"][dsname] = selector.channel_cutflows
-
         if self.destdir is not None:
             self._save_per_event_info(dsname, selector, reco_objects)
 
@@ -639,10 +633,23 @@ class Processor(processor.ProcessorABC):
         if all(x in data.columns for x in ("is_ee", "is_mm", "is_em")):
             return ("is_ee", "is_mm", "is_em")
         else:
-            return None
+            return tuple()
 
-    def fill_accumulator(self, hist_dict, accumulator, is_mc, dsname, data,
-                         systematics, cut):
+    def fill_cutflows(self, accumulator, dsname, data, systematics, cut):
+        if systematics is not None:
+            weight = systematics["weight"].flatten()
+        else:
+            weight = np.ones(data.size)
+        if "all" not in accumulator:
+            accumulator["all"] = processor.defaultdict_accumulator(int)
+        accumulator["all"][cut] = weight.sum()
+        for ch in self.get_present_channels(data):
+            if ch not in accumulator:
+                accumulator[ch] = processor.defaultdict_accumulator(int)
+            accumulator[ch][cut] = weight[data[ch]].sum()
+
+    def fill_accumulator(self, hist_dict, accumulator, chaccumulator,
+                         is_mc, dsname, data, systematics, cut):
         do_systematics = (self.config["compute_systematics"]
                           and systematics is not None)
         if systematics is not None:
@@ -690,6 +697,7 @@ class Processor(processor.ProcessorABC):
                             continue
                         accumulator[(cut, histname, sys)] =\
                             accumulator[(cut, histname)].copy()
+        self.fill_cutflows(chaccumulator, dsname, data, systematics, cut)
 
     def add_generator_uncertainies(self, selector):
         # Matrix-element renormalization and factorization scale

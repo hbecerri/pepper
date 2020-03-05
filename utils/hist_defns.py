@@ -94,7 +94,7 @@ class HistDefinition():
                      for name, method in self.fill_methods.items()}
         if weight is not None:
             fill_vals["weight"] = weight
-        if channels is not None:
+        if channels is not None and len(channels) > 0:
             channel_axis = hist.Cat("channel", "")
             _hist = hist.Hist("Counts", self.dataset_axis,
                               channel_axis, *self.axes)
