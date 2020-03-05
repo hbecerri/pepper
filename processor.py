@@ -415,14 +415,10 @@ class Processor(processor.ProcessorABC):
             self.destdir = os.path.realpath(destdir)
         else:
             self.destdir = None
-        if "sel_hists" in self.config:
-            self.sel_hists = self.config["sel_hists"]
-        else:
-            self.sel_hists = {}
-        if "reco_hists" in self.config:
-            self.reco_hists = self.config["reco_hists"]
-        else:
-            self.reco_hists = {}
+        self.sel_hists = self._get_hists_from_config(
+            self.config, "sel_hists", "sel_hists_to_do")
+        self.reco_hists = self._get_hists_from_config(
+            self.config, "reco_hists", "reco_hists_to_do")
 
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]
@@ -461,6 +457,21 @@ class Processor(processor.ProcessorABC):
             self.hist_mlb_path = self.config["genhist_path"]
         else:
             print("No Mlb hist for picking b jets specified")
+
+    @staticmethod
+    def _get_hists_from_config(config, key, todokey):
+        if key in config:
+            hists = config[key]
+        else:
+            hists = {}
+        if todokey in config and len(config[todokey]) > 0:
+            new_hists = {}
+            for name in config[todokey]:
+                if name in hists:
+                    new_hists[name] = hists[name]
+            hists = new_hists
+            print("Doing only the histograms: " + ", ".join(hists.keys()))
+        return hists
 
     @property
     def accumulator(self):
