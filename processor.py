@@ -102,8 +102,6 @@ class Selector(object):
         self._frozen = False
         self.on_cutdone = on_cutdone
 
-        self._cutflow = processor.defaultdict_accumulator(int)
-        self.channel_cutflows = None
         if weight is not None:
             tabled = awkward.Table({"weight": weight})
             counts = np.full(self.table.size, 1)
@@ -114,7 +112,6 @@ class Selector(object):
         # Add a dummy cut to inform about event number and circumvent error
         # when calling all or require before adding actual cuts
         self._cuts.add_cut("Preselection", np.full(self.table.size, True))
-        self._add_cutflow("Events preselection")
 
     @property
     def masked(self):
@@ -177,14 +174,6 @@ class Selector(object):
 
         self._frozen = True
 
-    def _add_cutflow(self, name):
-        passing_all = self._cuts.all(*(self._cuts.names or []))
-        if self.systematics is not None:
-            num = self.systematics["weight"][passing_all].flatten().sum()
-        else:
-            num = passing_all.sum()
-        self._cutflow[name] = num
-
     @property
     def _cur_sel(self):
         """Get a bool mask describing the current selection"""
@@ -193,29 +182,6 @@ class Selector(object):
     @property
     def num_selected(self):
         return self._cur_sel.sum()
-
-    @property
-    def cutflow(self):
-        """Return an ordered dict of cut name -> selected events"""
-        return self._cutflow
-
-    def _add_channel_cutflow(self, name):
-        passing_all = self._cuts.all(*(self._cuts.names or []))
-        for ch in self.channel_cutflows.keys():
-            if self.systematics is not None:
-                num = (self.systematics["weight"][passing_all]
-                       [self.final[ch]].flatten().sum())
-            else:
-                num = self.final[ch].sum()
-            self.channel_cutflows[ch][name] = num
-
-    def initalise_channel_cutflows(self, ch_setters):
-        self.channel_cutflows = processor.dict_accumulator(
-            {ch: processor.defaultdict_accumulator(int)
-             for ch in ch_setters.keys()})
-        for ch, func in ch_setters.items():
-            self.set_column(func, ch)
-        self._add_channel_cutflow(self._cuts.names[-1])
 
     def add_cut(self, accept, name):
         """Adds a cut
@@ -236,9 +202,9 @@ class Selector(object):
                   of MC. In case of no up/down variations (sf, None) is a valid
                   value. `up` and `down` must be given relative to sf.
                   accept does not get called if num_selected is already 0.
-        name -- A label to assoiate within the cutflow
+        name -- A label to assoiate wit the cut
         """
-        if name in self._cutflow:
+        if name in self._cuts.names:
             raise ValueError("A cut with name {} already exists".format(name))
         accepted = accept(self.masked)
         if isinstance(accepted, tuple):
@@ -251,9 +217,6 @@ class Selector(object):
         else:
             cut = accepted
         self._cuts.add_cut(name, cut)
-        self._add_cutflow(name)
-        if self.channel_cutflows is not None:
-            self._add_channel_cutflow(name)
         if not self._frozen:
             self._current_cuts.append(name)
             mask = None
@@ -527,7 +490,6 @@ class Processor(processor.ProcessorABC):
             out_dict.update(reco_selector.get_columns_from_config(
                 self.config["reco_cols_to_save"], "reco"))
             out_dict["cutflags"] = selector.get_cuts()
-            out_dict["cutflow"] = selector.cutflow
 
             for key in out_dict.keys():
                 outf[key] = out_dict[key]
@@ -564,9 +526,6 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(partial(self.met_filters, is_mc), "MET filters")
 
         selector.set_column(self.build_lepton_column, "Lepton")
-        selector.initalise_channel_cutflows(
-            {"ee": self.set_ee, "emu": self.set_emu,
-             "mumu": self.set_mumu, "None": self.set_no_lep_pair})
         selector.add_cut(partial(self.lepton_pair, is_mc), "At least 2 leps")
         selector.set_multiple_columns(self.channel_masks)
         selector.set_column(self.mll, "mll")
