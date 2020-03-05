@@ -395,8 +395,7 @@ class Selector(object):
 
 
 class Processor(processor.ProcessorABC):
-    def __init__(self, config, destdir,
-                 sel_hists=None, reco_hists=None):
+    def __init__(self, config, destdir):
         """Create a new Processor
 
         Arguments:
@@ -416,8 +415,14 @@ class Processor(processor.ProcessorABC):
             self.destdir = os.path.realpath(destdir)
         else:
             self.destdir = None
-        self.sel_hists = sel_hists if sel_hists is not None else {}
-        self.reco_hists = reco_hists if reco_hists is not None else {}
+        if "sel_hists" in self.config:
+            self.sel_hists = self.config["sel_hists"]
+        else:
+            self.sel_hists = {}
+        if "reco_hists" in self.config:
+            self.reco_hists = self.config["reco_hists"]
+        else:
+            self.reco_hists = {}
 
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]

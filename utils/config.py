@@ -9,6 +9,7 @@ import coffea
 from coffea.lookup_tools.extractor import file_converters
 
 from . import btagging
+from .hist_defns import HistDefinition
 
 
 class ScaleFactors(object):
@@ -210,6 +211,15 @@ class Config(object):
                                   "dict")
             self._cache[key] = uncerts
             return uncerts
+        elif key in ("sel_hists", "reco_hists"):
+            hists = self._get_maybe_external(key)
+            if not isinstance(hists, dict):
+                raise ConfigError(f"{key} must eiter be "
+                                  "list or a path to JSON file containing a "
+                                  "dict")
+            hists = {k: HistDefinition(c) for k, c in hists.items()}
+            self._cache[key] = hists
+            return hists
         elif key in ("genhist_path", "store", "lumimask", "mc_lumifactors"):
             self._cache[key] = self._get_path(key)
             return self._cache[key]
