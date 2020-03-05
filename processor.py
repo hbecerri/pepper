@@ -583,7 +583,7 @@ class Processor(processor.ProcessorABC):
                                              selector.final["MET_pt"],
                                              selector.final["MET_phi"])
             if is_mc:
-                weight = selector.final_systematics["weight"]
+                weight = selector.final_systematics["weight"].flatten()
             else:
                 weight = np.full(selector.final.size, 1.)
             reco_cb = [partial(self.fill_hists,
