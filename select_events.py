@@ -16,90 +16,6 @@ from utils.datasets import expand_datasetdict
 from processor import Processor
 
 
-def get_channel_masks(data):
-    if "Lepton" not in data:
-        return {"all": np.full(data.size, True)}
-    p0 = abs(data["Lepton"]["pdgId"][:, 0])
-    p1 = abs(data["Lepton"]["pdgId"][:, 1])
-    return {
-        "ee": (p0 == 11) & (p1 == 11),
-        "mm": (p0 == 13) & (p1 == 13),
-        "em": p0 != p1,
-    }
-
-
-def make_particle_hist(particle_name, data, dsname, is_mc, weight):
-    """pt, eta, phi histogram. Due to the high dimensionality, a histogram has
-    82080 bins, considering a single dataset source, so its memory intensive.
-    """
-    hist = coffea.hist.Hist(
-        "Counts",
-        coffea.hist.Cat("dsname", "Dataset name", "integral"),
-        coffea.hist.Cat("chan", "Channel", "integral"),
-        coffea.hist.Bin(
-            "pt", "{} $p_{{\\mathrm{{T}}}}$ (GeV)".format(particle_name), 20,
-            0, 200),
-        coffea.hist.Bin(
-            "eta", r"{} $\eta$".format(particle_name), 26, -2.6, 2.6),
-        coffea.hist.Bin(
-            "phi", r"{} $\varphi$".format(particle_name), 38, -3.8, 3.8)
-    )
-    if particle_name in data:
-        for chan, mask in get_channel_masks(data).items():
-            pt = data[particle_name].pt[mask].flatten()
-            eta = data[particle_name].eta[mask].flatten()
-            phi = data[particle_name].phi[mask].flatten()
-            if weight is not None:
-                chan_weight = np.repeat(weight[mask],
-                                        data[particle_name][mask].counts)
-                hist.fill(dsname=dsname, chan=chan, pt=pt, eta=eta, phi=phi,
-                          weight=chan_weight)
-            else:
-                hist.fill(dsname=dsname, chan=chan, pt=pt, eta=eta, phi=phi)
-    return hist
-
-
-def make_onedim_hist(xlabel, binopts, datasource, data, dsname, is_mc, weight):
-    hist = coffea.hist.Hist(
-        "Counts",
-        coffea.hist.Cat("dsname", "Dataset name", "integral"),
-        coffea.hist.Cat("chan", "Channel", "integral"),
-        coffea.hist.Bin("x", xlabel, *binopts)
-    )
-    if callable(datasource):
-        x = datasource(data)
-    elif isinstance(datasource, tuple):
-        if datasource[0] not in data:
-            x = None
-        else:
-            x = getattr(data[datasource[0]], datasource[1])
-    else:
-        if datasource not in data:
-            x = None
-        else:
-            x = data[datasource]
-    if x is not None:
-        for chan, mask in get_channel_masks(data).items():
-            x_masked = x[mask]
-            if weight is not None:
-                if isinstance(x_masked, awkward.JaggedArray):
-                    chan_weight = np.repeat(weight[mask], x_masked.counts)
-                    hist.fill(dsname=dsname, chan=chan, x=x_masked.flatten(),
-                              weight=chan_weight)
-                else:
-                    hist.fill(dsname=dsname, chan=chan, x=x_masked,
-                              weight=weight[mask])
-            else:
-                hist.fill(dsname=dsname, chan=chan, x=x_masked.flatten())
-    return hist
-
-
-def nbjets_datafunc(data):
-    if "Jet" not in data:
-        return None
-    return data["Jet"]["btagged"].sum()
-
-
 parser = ArgumentParser(description="Select events from nanoAODs")
 parser.add_argument("config", help="Path to a configuration file")
 parser.add_argument(
@@ -195,43 +111,7 @@ if args.eventdir is not None:
 # Create histdir and in case of errors, raise them now (before processing)
 os.makedirs(args.histdir, exist_ok=True)
 
-hist_dict = {
-    "nvtx": partial(
-        make_onedim_hist, "Number of good reconstructed primary vertices",
-        (20, 0, 100), "PV_npvsGood"),
-    "Leptonpt": partial(
-        make_onedim_hist, "Lepton $p_{{\\mathrm{{T}}}}$ (GeV)", (20, 0, 200),
-        ("Lepton", "pt")),
-    "Leptoneta": partial(
-        make_onedim_hist, r"Lepton $\eta$", (26, -2.6, 2.6),
-        ("Lepton", "eta")),
-    "Leptonphi": partial(
-        make_onedim_hist, r"Lepton $\varphi$", (38, -3.8, 3.8),
-        ("Lepton", "phi")),
-    "Jetpt": partial(
-        make_onedim_hist, "Jet $p_{{\\mathrm{{T}}}}$ (GeV)", (20, 0, 200),
-        ("Jet", "pt")),
-    "Jeteta": partial(
-        make_onedim_hist, r"Jet $\eta$", (26, -2.6, 2.6), ("Jet", "eta")),
-    "Jetphi": partial(
-        make_onedim_hist, r"Jet $\varphi$", (38, -3.8, 3.8), ("Jet", "phi")),
-    "METpt": partial(
-        make_onedim_hist, "MET $p_{{\\mathrm{{T}}}}$ (GeV)", (20, 0, 200),
-        ("MET", "pt")),
-    "METphi": partial(
-        make_onedim_hist, r"MET $\varphi$", (38, -3.8, 3.8), ("MET", "phi")),
-    "mll": partial(make_onedim_hist, "$M_{ll}$ (GeV)", (20, 0, 200), "mll"),
-    "njet": partial(
-        make_onedim_hist, "Number of jets", (np.arange(10),),
-        ("Jet", "counts")),
-    "nbjet": partial(
-        make_onedim_hist, "Number of b-tagged jets", (np.arange(10),),
-        nbjets_datafunc),
-    "bdisc": partial(
-        make_onedim_hist, "B-tag discriminant", (20, 0, 1), ("Jet", "btag")),
-}
-
-processor = Processor(config, args.eventdir, hist_dict)
+processor = Processor(config, args.eventdir)
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
     conor_config = ("requirements = (OpSysAndVer == \"SL6\" || OpSysAndVer =="
