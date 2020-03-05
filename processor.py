@@ -703,8 +703,8 @@ class Processor(processor.ProcessorABC):
         num_events = selector.num_selected
         lumifactors = self.config["mc_lumifactors"]
         factor = np.full(num_events, lumifactors[dsname])
-        if self.config["blinding_demon"] is not None:
-            factor /= self.config["blinding_demon"]
+        if self.config["blinding_denom"] is not None:
+            factor /= self.config["blinding_denom"]
         selector.modify_weight("lumi_factor", factor)
         if self.config["compute_systematics"]:
             xsuncerts = self.config["crosssection_uncertainty"]
