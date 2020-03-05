@@ -1,6 +1,6 @@
 import os
 import json
-from coffea import hist
+import coffea
 import awkward
 import numpy as np
 
@@ -46,10 +46,11 @@ class HistDefinitionError(Exception):
 
 class HistDefinition():
     def __init__(self, config):
-        self.dataset_axis = hist.Cat("dataset", "")
-        self.axes = [hist.Bin(**kwargs) for kwargs in config["bins"]]
+        self.dataset_axis = coffea.hist.Cat("dataset", "")
+        self.axes = [coffea.hist.Bin(**kwargs) for kwargs in config["bins"]]
         if "cats" in config:
-            self.axes.extend([hist.Cat(**kwargs) for kwargs in config["cats"]])
+            self.axes.extend(
+                [coffea.hist.Cat(**kwargs) for kwargs in config["cats"]])
         self.fill_methods = config["fill"]
 
     @staticmethod
@@ -95,20 +96,20 @@ class HistDefinition():
         if weight is not None:
             fill_vals["weight"] = weight
         if channels is not None and len(channels) > 0:
-            channel_axis = hist.Cat("channel", "")
-            _hist = hist.Hist("Counts", self.dataset_axis,
+            channel_axis = coffea.hist.Cat("channel", "")
+            hist = coffea.hist.Hist("Counts", self.dataset_axis,
                               channel_axis, *self.axes)
 
             for ch in channels:
                 prepared = self._prepare_fills(fill_vals, data[ch])
                 if all(val is not None for val in prepared.values()):
-                    _hist.fill(dataset=dsname, channel=ch, **prepared)
+                    hist.fill(dataset=dsname, channel=ch, **prepared)
         else:
-            _hist = hist.Hist("Counts", self.dataset_axis, *self.axes)
+            hist = coffea.hist.Hist("Counts", self.dataset_axis, *self.axes)
             prepared = self._prepare_fills(fill_vals)
             if all(val is not None for val in prepared.values()):
-                _hist.fill(dataset=dsname, **prepared)
-        return _hist
+                hist.fill(dataset=dsname, **prepared)
+        return hist
 
     def pick_data(self, method, data):
         for sel in method:
