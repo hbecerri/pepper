@@ -94,13 +94,19 @@ class Selector(object):
         table -- An `awkward.Table` or `LazyTable` holding the events' data
         weight -- A 1d numpy array of size equal to `table` size, describing
                   the events' weight or None
-        on_cutdown -- callable that gets called after a cut is done (`add_cut`)
+        on_cutdown -- callable or list of callables that get called after a
+                      cut is done (`add_cut`)
         """
         self.table = table
         self._cuts = PackedSelectionAccumulator()
         self._current_cuts = []
         self._frozen = False
-        self.on_cutdone = on_cutdone
+        if on_cutdone is None:
+            self.on_cutdone = []
+        elif isinstance(on_cutdone, list):
+            self.on_cutdone = on_cutdone.copy()
+        else:
+            self.on_cutdone = [on_cutdone]
 
         if weight is not None:
             tabled = awkward.Table({"weight": weight})
@@ -230,10 +236,8 @@ class Selector(object):
                 factor = factors
                 updown = None
             self.modify_weight(weightname, factor, updown, mask)
-        if self.on_cutdone is not None:
-            self.on_cutdone(data=self.final,
-                            systematics=self.final_systematics,
-                            cut=name)
+        for cb in self.on_cutdone:
+            cb(data=self.final, systematics=self.final_systematics, cut=name)
 
     def _pad_npcolumndata(self, data, defaultval=None, mask=None):
         padded = np.empty(self.table.size, dtype=data.dtype)
@@ -498,12 +502,13 @@ class Processor(processor.ProcessorABC):
         output = self.accumulator.identity()
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
-        sel_cb = partial(self.fill_accumulator,
-                         hist_dict=self.sel_hists,
-                         accumulator=output["sel_hists"],
-                         chaccumulator=output["cutflows"],
-                         is_mc=is_mc,
-                         dsname=dsname)
+        sel_cb = [partial(self.fill_hists,
+                          hist_dict=self.sel_hists,
+                          accumulator=output["sel_hists"],
+                          is_mc=is_mc,
+                          dsname=dsname),
+                  partial(self.fill_cutflows, accumulator=output["cutflows"],
+                          dsname=dsname)]
         if is_mc:
             genweight = df["genWeight"]
         else:
@@ -565,12 +570,14 @@ class Processor(processor.ProcessorABC):
                 weight = selector.final_systematics["weight"]
             else:
                 weight = np.full(selector.final.size, 1.)
-            reco_cb = partial(self.fill_accumulator,
-                              hist_dict=self.reco_hists,
-                              accumulator=output["reco_hists"],
-                              chaccumulator=output["cutflows"],
-                              is_mc=is_mc,
-                              dsname=dsname)
+            reco_cb = [partial(self.fill_hists,
+                               hist_dict=self.reco_hists,
+                               accumulator=output["reco_hists"],
+                               is_mc=is_mc,
+                               dsname=dsname),
+                       partial(self.fill_cutflows,
+                               accumulator=output["cutflows"],
+                               dsname=dsname)]
             reco_objects = Selector(awkward.Table(lep=lep, antilep=antilep,
                                                   b=b, bbar=bbar,
                                                   neutrino=neutrino,
@@ -607,8 +614,8 @@ class Processor(processor.ProcessorABC):
                 accumulator[ch] = processor.defaultdict_accumulator(int)
             accumulator[ch][cut] = weight[data[ch]].sum()
 
-    def fill_accumulator(self, hist_dict, accumulator, chaccumulator,
-                         is_mc, dsname, data, systematics, cut):
+    def fill_hists(self, hist_dict, accumulator, is_mc, dsname, data,
+                   systematics, cut):
         do_systematics = (self.config["compute_systematics"]
                           and systematics is not None)
         if systematics is not None:
@@ -656,7 +663,6 @@ class Processor(processor.ProcessorABC):
                             continue
                         accumulator[(cut, histname, sys)] =\
                             accumulator[(cut, histname)].copy()
-        self.fill_cutflows(chaccumulator, dsname, data, systematics, cut)
 
     def add_generator_uncertainies(self, selector):
         # Matrix-element renormalization and factorization scale
