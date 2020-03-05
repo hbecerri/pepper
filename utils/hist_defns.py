@@ -10,11 +10,9 @@ def create_hist_dict(config_json):
     return {key: HistDefinition(val) for key, val in hist_config.items()}
 
 
-def jet_mult(data):
-    if "Jet" in data:
-        return data["Jet"].counts
-    else:
-        return None
+def leaddiff(quantity):
+    """Returns the difference in quantity of the two leading particles."""
+    return quantity[:, 0] - quantity[:, 1]
 
 
 func_dict = {
@@ -36,7 +34,7 @@ func_dict = {
     "abs": np.abs,
     "sign": np.sign,
 
-    "jet_mult": jet_mult,
+    "leaddiff": leaddiff,
 }
 
 
@@ -46,7 +44,9 @@ class HistDefinitionError(Exception):
 
 class HistDefinition():
     def __init__(self, config):
-        self.dataset_axis = coffea.hist.Cat("dataset", "")
+        self.ylabel = "Counts"
+        self.dataset_axis = coffea.hist.Cat("dataset", "Dataset name")
+        self.channel_axis = coffea.hist.Cat("channel", "Channel")
         self.axes = [coffea.hist.Bin(**kwargs) for kwargs in config["bins"]]
         if "cats" in config:
             self.axes.extend(
@@ -96,16 +96,15 @@ class HistDefinition():
         if weight is not None:
             fill_vals["weight"] = weight
         if channels is not None and len(channels) > 0:
-            channel_axis = coffea.hist.Cat("channel", "")
-            hist = coffea.hist.Hist("Counts", self.dataset_axis,
-                              channel_axis, *self.axes)
+            hist = coffea.hist.Hist(
+                self.ylabel, self.dataset_axis, self.channel_axis, *self.axes)
 
             for ch in channels:
                 prepared = self._prepare_fills(fill_vals, data[ch])
                 if all(val is not None for val in prepared.values()):
                     hist.fill(dataset=dsname, channel=ch, **prepared)
         else:
-            hist = coffea.hist.Hist("Counts", self.dataset_axis, *self.axes)
+            hist = coffea.hist.Hist(self.ylabel, self.dataset_axis, *self.axes)
             prepared = self._prepare_fills(fill_vals)
             if all(val is not None for val in prepared.values()):
                 hist.fill(dataset=dsname, **prepared)
