@@ -79,6 +79,10 @@ class LazyTable(object):
         else:
             return self._slice.size
 
+    @property
+    def columns(self):
+        return self._df._dict.keys()
+
 
 class Selector(object):
     """Keeps track of the current event selection and data"""
@@ -310,16 +314,21 @@ class Selector(object):
         """Sets a column of the table
 
         Arguments:
-        column -- A function that will be called with a table of the currently
-                  selected events. It should return a numpy array or an
-                  awkward.JaggedArray with the same length as the table.
-                  Does not get called if num_selected is 0 already.
+        column -- Column data or a function that returns it.
+                  The function that will be called with a table of the
+                  currently selected events. Does not get called if
+                  `num_selected` is 0 already.
+                  The column data must be a numpy array or an
+                  awkward.JaggedArray with a size of `num_selected`.
         column_name -- The name of the column to set
 
         """
         if not isinstance(column_name, str):
             raise ValueError("column_name needs to be string")
-        data = column(self.masked)
+        if callable(column):
+            data = column(self.masked)
+        else:
+            data = column
 
         # Convert data to appropriate type if possible
         if isinstance(data, awkward.ChunkedArray):
@@ -337,6 +346,19 @@ class Selector(object):
         else:
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
+
+    def set_multiple_columns(self, columns):
+        """Sets multiple columns of the table
+
+        Arguments:
+        columns -- A dict of columns, with keys determining the column names.
+                   For requirements to the values, see `column` parameter of
+                   `set_column`.
+        """
+        if callable(columns):
+            columns = columns(self.masked)
+        for name, column in columns.items():
+            self.set_column(column, name)
 
     def get_columns(self, part_props={}, other_cols=set(), cuts="Current",
                     prefix=""):
@@ -550,7 +572,7 @@ class Processor(processor.ProcessorABC):
             {"ee": self.set_ee, "emu": self.set_emu,
              "mumu": self.set_mumu, "None": self.set_no_lep_pair})
         selector.add_cut(partial(self.lepton_pair, is_mc), "At least 2 leps")
-        selector.set_column(self.same_flavor, "is_same_flavor")
+        selector.set_multiple_columns(self.channel_masks)
         selector.set_column(self.mll, "mll")
         selector.set_column(self.dilep_pt, "dilep_pt")
 
@@ -612,6 +634,12 @@ class Processor(processor.ProcessorABC):
             self._save_per_event_info(dsname, selector, reco_objects)
 
         return output
+
+    def get_channels(self, data):
+        if all(x in data.columns for x in ("is_ee", "is_mm", "is_em")):
+            return ("is_ee", "is_mm", "is_em")
+        else:
+            return None
 
     def fill_accumulator(self, hist_dict, accumulator, is_mc, dsname, data,
                          systematics, cut):
@@ -923,6 +951,16 @@ class Processor(processor.ProcessorABC):
             arr = awkward.JaggedArray.fromcounts([0], [])
         return arr
 
+    def channel_masks(self, data):
+        leps = data["Lepton"]
+        firstpdg = abs(leps[:, 0].pdgId)
+        secondpdg = abs(leps[:, 1].pdgId)
+        channels = {}
+        channels["is_ee"] = (firstpdg == 11) & (secondpdg == 11)
+        channels["is_mm"] = (firstpdg == 13) & (secondpdg == 13)
+        channels["is_em"] = (~channels["is_ee"]) & (~channels["is_mm"])
+        return channels
+
     def set_no_lep_pair(self, data):
         return data["Lepton"].counts < 2
 
@@ -1215,8 +1253,8 @@ class Processor(processor.ProcessorABC):
     def z_window(self, data):
         m_min = self.config["z_boson_window_start"]
         m_max = self.config["z_boson_window_end"]
-        is_sf = data["is_same_flavor"]
-        return ~is_sf | ((data["mll"] <= m_min) | (m_max <= data["mll"]))
+        is_out_window = (data["mll"] <= m_min) | (m_max <= data["mll"])
+        return data["is_em"] | is_out_window
 
     def has_jets(self, data):
         return self.config["num_jets_atleast"] <= data["Jet"].counts
@@ -1255,9 +1293,8 @@ class Processor(processor.ProcessorABC):
             return is_tagged
 
     def met_requirement(self, data):
-        is_sf = data["is_same_flavor"]
         met = data["MET"].pt
-        return ~is_sf | (met > self.config["ee/mm_min_met"])
+        return data["is_em"] | (met > self.config["ee/mm_min_met"])
 
     def pick_leps(self, data):
         lep_pair = data["Lepton"][:, :2]
