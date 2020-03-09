@@ -537,7 +537,8 @@ class Processor(processor.ProcessorABC):
         if is_mc:
             self.add_crosssection_scale(selector, dsname)
 
-        selector.add_cut(partial(self.blinding, is_mc), "Blinding")
+        if self.config["blinding_denom"] is not None:
+            selector.add_cut(partial(self.blinding, is_mc), "Blinding")
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
         pos_triggers, neg_triggers = utils.misc.get_trigger_paths_for(
@@ -738,13 +739,10 @@ class Processor(processor.ProcessorABC):
                                         np.full(num_events, 1 - uncert))
 
     def blinding(self, is_mc, data):
-        if (not is_mc) and (self.config["blinding_denom"] is not None):
-            return np.where(np.mod(data["event"],
-                                   self.config["blinding_denom"]) == 0,
-                            True,
-                            False)
+        if not is_mc:
+            return np.mod(data["event"], self.config["blinding_denom"]) == 0
         else:
-            return np.full(len(data["event"]), True)
+            return np.full(data.size, True)
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
