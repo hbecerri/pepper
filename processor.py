@@ -1281,7 +1281,7 @@ class Processor(processor.ProcessorABC):
     def btag_cut(self, is_mc, data):
         num_btagged = data["Jet"]["btagged"].sum()
         is_tagged = num_btagged >= self.config["num_atleast_btagged"]
-        if is_mc:
+        if is_mc and self.btagweighters is not None:
             return (is_tagged, self.compute_weight_btag(data[is_tagged]))
         else:
             return is_tagged
