@@ -169,6 +169,7 @@ for key, hist in output["sel_hists"].items():
         continue
     cutnum = list(output["cutflows"]["all"].keys()).index(key[0]) + 1
     fname = "Cut {:03} {}.coffea".format(cutnum, "_".join(key))
+    fname = fname.replace("/", "")
     coffea.util.save(hist, os.path.join(args.histdir, fname))
     selhists_forjson[key] = fname
 with open(os.path.join(args.histdir, jsonname), "a+") as f:
