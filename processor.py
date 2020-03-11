@@ -533,7 +533,7 @@ class Processor(processor.ProcessorABC):
         selector = Selector(LazyTable(df), genweight, sel_cb)
 
         if self.config["compute_systematics"] and is_mc:
-            self.add_generator_uncertainies(selector)
+            self.add_generator_uncertainies(dsname, selector)
         if is_mc:
             self.add_crosssection_scale(selector, dsname)
 
@@ -684,18 +684,19 @@ class Processor(processor.ProcessorABC):
                         accumulator[(cut, histname, sys)] =\
                             accumulator[(cut, histname)].copy()
 
-    def add_generator_uncertainies(self, selector):
+    def add_generator_uncertainies(self, dsname, selector):
         # Matrix-element renormalization and factorization scale
         # Get describtion of individual columns of this branch with
         # Events->GetBranch("LHEScaleWeight")->GetTitle() in ROOT
         data = selector.masked
         if "LHEScaleWeight" in data:
+            norm = self.config["mc_lumifactors"][dsname + "_LHEScaleSumw"]
             selector.set_systematic("MEren",
-                                    data["LHEScaleWeight"][:, 7],
-                                    data["LHEScaleWeight"][:, 1])
+                                    data["LHEScaleWeight"][:, 7] * norm[7],
+                                    data["LHEScaleWeight"][:, 1] * norm[1])
             selector.set_systematic("MEfac",
-                                    data["LHEScaleWeight"][:, 5],
-                                    data["LHEScaleWeight"][:, 3])
+                                    data["LHEScaleWeight"][:, 5] * norm[5],
+                                    data["LHEScaleWeight"][:, 3] * norm[3])
 
             # Fix for the PSWeight: NanoAOD divides by XWGTUP. This is wrong,
             # if the cross section isn't multiplied in HepMC
