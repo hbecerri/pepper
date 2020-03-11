@@ -96,4 +96,4 @@ class BTagWeighter(object):
         p_data = sfeff[is_tagged].prod() * (1 - sfeff)[~is_tagged].prod()
 
         # TODO: What if one runs into numerical problems here?
-        return p_mc / p_data
+        return p_data / p_mc
