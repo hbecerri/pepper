@@ -956,36 +956,6 @@ class Processor(processor.ProcessorABC):
         channels["is_em"] = (~channels["is_ee"]) & (~channels["is_mm"])
         return channels
 
-    def set_no_lep_pair(self, data):
-        return data["Lepton"].counts < 2
-
-    def set_ee(self, data):
-        leps = data["Lepton"]
-        twoleps = leps[leps.counts > 1]
-        ee = ((np.abs(twoleps[:, 0].pdgId) == 11)
-              & (np.abs(twoleps[:, 1].pdgId) == 11))
-        arr = (leps.counts > 1)
-        arr[arr] = ee
-        return arr
-
-    def set_emu(self, data):
-        leps = data["Lepton"]
-        twoleps = leps[leps.counts > 1]
-        emu = (np.abs(twoleps[:, 0].pdgId)
-               != np.abs(twoleps[:, 1].pdgId))
-        arr = (leps.counts > 1)
-        arr[arr] = emu
-        return arr
-
-    def set_mumu(self, data):
-        leps = data["Lepton"]
-        twoleps = leps[leps.counts > 1]
-        mumu = ((np.abs(twoleps[:, 0].pdgId) == 13)
-                & (np.abs(twoleps[:, 1].pdgId) == 13))
-        arr = (leps.counts > 1)
-        arr[arr] = mumu
-        return arr
-
     def compute_lepton_sf(self, data):
         is_ele = abs(data["Lepton"].pdgId) == 11
         eles = data["Lepton"][is_ele]
