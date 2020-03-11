@@ -79,6 +79,10 @@ class LazyTable(object):
         else:
             return self._slice.size
 
+    @property
+    def columns(self):
+        return self._df._dict.keys()
+
 
 class Selector(object):
     """Keeps track of the current event selection and data"""
@@ -90,16 +94,20 @@ class Selector(object):
         table -- An `awkward.Table` or `LazyTable` holding the events' data
         weight -- A 1d numpy array of size equal to `table` size, describing
                   the events' weight or None
-        on_cutdown -- callable that gets called after a cut is done (`add_cut`)
+        on_cutdown -- callable or list of callables that get called after a
+                      cut is done (`add_cut`)
         """
         self.table = table
         self._cuts = PackedSelectionAccumulator()
         self._current_cuts = []
         self._frozen = False
-        self.on_cutdone = on_cutdone
+        if on_cutdone is None:
+            self.on_cutdone = []
+        elif isinstance(on_cutdone, list):
+            self.on_cutdone = on_cutdone.copy()
+        else:
+            self.on_cutdone = [on_cutdone]
 
-        self._cutflow = processor.defaultdict_accumulator(int)
-        self.channel_cutflows = None
         if weight is not None:
             tabled = awkward.Table({"weight": weight})
             counts = np.full(self.table.size, 1)
@@ -110,7 +118,6 @@ class Selector(object):
         # Add a dummy cut to inform about event number and circumvent error
         # when calling all or require before adding actual cuts
         self._cuts.add_cut("Preselection", np.full(self.table.size, True))
-        self._add_cutflow("Events preselection")
 
     @property
     def masked(self):
@@ -173,14 +180,6 @@ class Selector(object):
 
         self._frozen = True
 
-    def _add_cutflow(self, name):
-        passing_all = self._cuts.all(*(self._cuts.names or []))
-        if self.systematics is not None:
-            num = self.systematics["weight"][passing_all].flatten().sum()
-        else:
-            num = passing_all.sum()
-        self._cutflow[name] = num
-
     @property
     def _cur_sel(self):
         """Get a bool mask describing the current selection"""
@@ -189,29 +188,6 @@ class Selector(object):
     @property
     def num_selected(self):
         return self._cur_sel.sum()
-
-    @property
-    def cutflow(self):
-        """Return an ordered dict of cut name -> selected events"""
-        return self._cutflow
-
-    def _add_channel_cutflow(self, name):
-        passing_all = self._cuts.all(*(self._cuts.names or []))
-        for ch in self.channel_cutflows.keys():
-            if self.systematics is not None:
-                num = (self.systematics["weight"][passing_all]
-                       [self.final[ch]].flatten().sum())
-            else:
-                num = self.final[ch].sum()
-            self.channel_cutflows[ch][name] = num
-
-    def initalise_channel_cutflows(self, ch_setters):
-        self.channel_cutflows = processor.dict_accumulator(
-            {ch: processor.defaultdict_accumulator(int)
-             for ch in ch_setters.keys()})
-        for ch, func in ch_setters.items():
-            self.set_column(func, ch)
-        self._add_channel_cutflow(self._cuts.names[-1])
 
     def add_cut(self, accept, name):
         """Adds a cut
@@ -232,9 +208,9 @@ class Selector(object):
                   of MC. In case of no up/down variations (sf, None) is a valid
                   value. `up` and `down` must be given relative to sf.
                   accept does not get called if num_selected is already 0.
-        name -- A label to assoiate within the cutflow
+        name -- A label to assoiate wit the cut
         """
-        if name in self._cutflow:
+        if name in self._cuts.names:
             raise ValueError("A cut with name {} already exists".format(name))
         accepted = accept(self.masked)
         if isinstance(accepted, tuple):
@@ -247,9 +223,6 @@ class Selector(object):
         else:
             cut = accepted
         self._cuts.add_cut(name, cut)
-        self._add_cutflow(name)
-        if self.channel_cutflows is not None:
-            self._add_channel_cutflow(name)
         if not self._frozen:
             self._current_cuts.append(name)
             mask = None
@@ -263,10 +236,8 @@ class Selector(object):
                 factor = factors
                 updown = None
             self.modify_weight(weightname, factor, updown, mask)
-        if self.on_cutdone is not None:
-            self.on_cutdone(data=self.final,
-                            systematics=self.final_systematics,
-                            cut=name)
+        for cb in self.on_cutdone:
+            cb(data=self.final, systematics=self.final_systematics, cut=name)
 
     def _pad_npcolumndata(self, data, defaultval=None, mask=None):
         padded = np.empty(self.table.size, dtype=data.dtype)
@@ -310,16 +281,21 @@ class Selector(object):
         """Sets a column of the table
 
         Arguments:
-        column -- A function that will be called with a table of the currently
-                  selected events. It should return a numpy array or an
-                  awkward.JaggedArray with the same length as the table.
-                  Does not get called if num_selected is 0 already.
+        column -- Column data or a function that returns it.
+                  The function that will be called with a table of the
+                  currently selected events. Does not get called if
+                  `num_selected` is 0 already.
+                  The column data must be a numpy array or an
+                  awkward.JaggedArray with a size of `num_selected`.
         column_name -- The name of the column to set
 
         """
         if not isinstance(column_name, str):
             raise ValueError("column_name needs to be string")
-        data = column(self.masked)
+        if callable(column):
+            data = column(self.masked)
+        else:
+            data = column
 
         # Convert data to appropriate type if possible
         if isinstance(data, awkward.ChunkedArray):
@@ -337,6 +313,19 @@ class Selector(object):
         else:
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
+
+    def set_multiple_columns(self, columns):
+        """Sets multiple columns of the table
+
+        Arguments:
+        columns -- A dict of columns, with keys determining the column names.
+                   For requirements to the values, see `column` parameter of
+                   `set_column`.
+        """
+        if callable(columns):
+            columns = columns(self.masked)
+        for name, column in columns.items():
+            self.set_column(column, name)
 
     def get_columns(self, part_props={}, other_cols=set(), cuts="Current",
                     prefix=""):
@@ -406,8 +395,7 @@ class Selector(object):
 
 
 class Processor(processor.ProcessorABC):
-    def __init__(self, config, destdir,
-                 sel_hists=None, reco_hists=None):
+    def __init__(self, config, destdir):
         """Create a new Processor
 
         Arguments:
@@ -427,8 +415,10 @@ class Processor(processor.ProcessorABC):
             self.destdir = os.path.realpath(destdir)
         else:
             self.destdir = None
-        self.sel_hists = sel_hists if sel_hists is not None else {}
-        self.reco_hists = reco_hists if reco_hists is not None else {}
+        self.sel_hists = self._get_hists_from_config(
+            self.config, "sel_hists", "sel_hists_to_do")
+        self.reco_hists = self._get_hists_from_config(
+            self.config, "reco_hists", "reco_hists_to_do")
 
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]
@@ -469,17 +459,27 @@ class Processor(processor.ProcessorABC):
             print("No Mlb hist for picking b jets specified")
         self.mc_lumifactors = config["mc_lumifactors"]
 
+    @staticmethod
+    def _get_hists_from_config(config, key, todokey):
+        if key in config:
+            hists = config[key]
+        else:
+            hists = {}
+        if todokey in config and len(config[todokey]) > 0:
+            new_hists = {}
+            for name in config[todokey]:
+                if name in hists:
+                    new_hists[name] = hists[name]
+            hists = new_hists
+            print("Doing only the histograms: " + ", ".join(hists.keys()))
+        return hists
+
     @property
     def accumulator(self):
-        channels = ["ee", "emu", "mumu", "None"]
         self._accumulator = processor.dict_accumulator({
             "sel_hists": processor.dict_accumulator(),
             "reco_hists": processor.dict_accumulator(),
-            "cutflow": processor.defaultdict_accumulator(
-                partial(processor.defaultdict_accumulator, int)),
-            "ch_cutflows": processor.dict_accumulator(
-                {ch: processor.defaultdict_accumulator(int)
-                 for ch in channels})
+            "cutflows": processor.dict_accumulator(),
         })
         return self._accumulator
 
@@ -508,10 +508,10 @@ class Processor(processor.ProcessorABC):
             out_dict = selector.get_columns_from_config(
                 self.config["selector_cols_to_save"])
             out_dict["weight"] = selector.weight
-            out_dict.update(reco_selector.get_columns_from_config(
-                self.config["reco_cols_to_save"], "reco"))
+            if reco_selector is not None:
+                out_dict.update(reco_selector.get_columns_from_config(
+                    self.config["reco_cols_to_save"], "reco"))
             out_dict["cutflags"] = selector.get_cuts()
-            out_dict["cutflow"] = selector.cutflow
 
             for key in out_dict.keys():
                 outf[key] = out_dict[key]
@@ -520,11 +520,13 @@ class Processor(processor.ProcessorABC):
         output = self.accumulator.identity()
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
-        sel_cb = partial(self.fill_accumulator,
-                         hist_dict=self.sel_hists,
-                         accumulator=output["sel_hists"],
-                         is_mc=is_mc,
-                         dsname=dsname)
+        sel_cb = [partial(self.fill_hists,
+                          hist_dict=self.sel_hists,
+                          accumulator=output["sel_hists"],
+                          is_mc=is_mc,
+                          dsname=dsname),
+                  partial(self.fill_cutflows, accumulator=output["cutflows"],
+                          dsname=dsname)]
         if is_mc:
             genweight = df["genWeight"]
         else:
@@ -532,11 +534,12 @@ class Processor(processor.ProcessorABC):
         selector = Selector(LazyTable(df), genweight, sel_cb)
 
         if self.config["compute_systematics"] and is_mc:
-            self.add_generator_uncertainies(selector)
+            self.add_generator_uncertainies(dsname, selector)
         if is_mc:
             self.add_crosssection_scale(selector, dsname)
 
-        selector.add_cut(partial(self.blinding, is_mc), "Blinding")
+        if self.config["blinding_denom"] is not None:
+            selector.add_cut(partial(self.blinding, is_mc), "Blinding")
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
         pos_triggers, neg_triggers = utils.misc.get_trigger_paths_for(
@@ -547,11 +550,8 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(partial(self.met_filters, is_mc), "MET filters")
 
         selector.set_column(self.build_lepton_column, "Lepton")
-        selector.initalise_channel_cutflows(
-            {"ee": self.set_ee, "emu": self.set_emu,
-             "mumu": self.set_mumu, "None": self.set_no_lep_pair})
         selector.add_cut(partial(self.lepton_pair, is_mc), "At least 2 leps")
-        selector.set_column(self.same_flavor, "is_same_flavor")
+        selector.set_multiple_columns(self.channel_masks)
         selector.set_column(self.mll, "mll")
         selector.set_column(self.dilep_pt, "dilep_pt")
 
@@ -571,7 +571,9 @@ class Processor(processor.ProcessorABC):
         selector.set_column(self.build_met_column, "MET")
         selector.add_cut(self.has_jets, "#Jets >= %d"
                          % self.config["num_jets_atleast"])
-        selector.add_cut(self.hem_cut, "HEM cut")
+        if (self.config["hem_cut_if_ele"] or self.config["hem_cut_if_muon"]
+                or self.config["hem_cut_if_jet"]):
+            selector.add_cut(self.hem_cut, "HEM cut")
         selector.add_cut(self.jet_pt_requirement, "Jet pt req")
         selector.add_cut(partial(self.btag_cut, is_mc), "At least %d btag"
                          % self.config["num_atleast_btagged"])
@@ -586,14 +588,17 @@ class Processor(processor.ProcessorABC):
                                              selector.final["MET_pt"],
                                              selector.final["MET_phi"])
             if is_mc:
-                weight = selector.final_systematics["weight"]
+                weight = selector.final_systematics["weight"].flatten()
             else:
                 weight = np.full(selector.final.size, 1.)
-            reco_cb = partial(self.fill_accumulator,
-                              hist_dict=self.reco_hists,
-                              accumulator=output["reco_hists"],
-                              is_mc=is_mc,
-                              dsname=dsname)
+            reco_cb = [partial(self.fill_hists,
+                               hist_dict=self.reco_hists,
+                               accumulator=output["reco_hists"],
+                               is_mc=is_mc,
+                               dsname=dsname),
+                       partial(self.fill_cutflows,
+                               accumulator=output["cutflows"],
+                               dsname=dsname)]
             reco_objects = Selector(awkward.Table(lep=lep, antilep=antilep,
                                                   b=b, bbar=bbar,
                                                   neutrino=neutrino,
@@ -605,23 +610,42 @@ class Processor(processor.ProcessorABC):
             reco_objects.set_column(self.top, "top")
             reco_objects.set_column(self.antitop, "antitop")
             reco_objects.set_column(self.ttbar, "ttbar")
-
-        output["cutflow"][dsname] = selector.cutflow
-        output["ch_cutflows"][dsname] = selector.channel_cutflows
+        else:
+            reco_objects = None
 
         if self.destdir is not None:
             self._save_per_event_info(dsname, selector, reco_objects)
 
         return output
 
-    def fill_accumulator(self, hist_dict, accumulator, is_mc, dsname, data,
-                         systematics, cut):
+    def get_present_channels(self, data):
+        if all(x in data.columns for x in ("is_ee", "is_mm", "is_em")):
+            return ("is_ee", "is_mm", "is_em")
+        else:
+            return tuple()
+
+    def fill_cutflows(self, accumulator, dsname, data, systematics, cut):
+        if systematics is not None:
+            weight = systematics["weight"].flatten()
+        else:
+            weight = np.ones(data.size)
+        if "all" not in accumulator:
+            accumulator["all"] = processor.defaultdict_accumulator(int)
+        accumulator["all"][cut] = weight.sum()
+        for ch in self.get_present_channels(data):
+            if ch not in accumulator:
+                accumulator[ch] = processor.defaultdict_accumulator(int)
+            accumulator[ch][cut] = weight[data[ch]].sum()
+
+    def fill_hists(self, hist_dict, accumulator, is_mc, dsname, data,
+                   systematics, cut):
         do_systematics = (self.config["compute_systematics"]
                           and systematics is not None)
         if systematics is not None:
             weight = systematics["weight"].flatten()
         else:
             weight = None
+        channels = self.get_present_channels(data)
         for histname, fill_func in hist_dict.items():
             dsforsys = self.config["dataset_for_systematics"]
             if dsname in dsforsys:
@@ -629,12 +653,14 @@ class Processor(processor.ProcessorABC):
                 if do_systematics:
                     replacename, sysname = dsforsys[dsname]
                     sys_hist = fill_func(data=data,
+                                         channels=channels,
                                          dsname=replacename,
                                          is_mc=is_mc,
                                          weight=weight)
                     accumulator[(cut, histname, sysname)] = sys_hist
             else:
                 accumulator[(cut, histname)] = fill_func(data=data,
+                                                         channels=channels,
                                                          dsname=dsname,
                                                          is_mc=is_mc,
                                                          weight=weight)
@@ -644,7 +670,8 @@ class Processor(processor.ProcessorABC):
                         if syscol == "weight":
                             continue
                         sysweight = weight * systematics[syscol].flatten()
-                        hist = fill_func(data=data, dsname=dsname, is_mc=is_mc,
+                        hist = fill_func(data=data, channels=channels,
+                                         dsname=dsname, is_mc=is_mc,
                                          weight=sysweight)
                         accumulator[(cut, histname, syscol)] = hist
                     # In order to have the hists specific to dedicated
@@ -660,18 +687,19 @@ class Processor(processor.ProcessorABC):
                         accumulator[(cut, histname, sys)] =\
                             accumulator[(cut, histname)].copy()
 
-    def add_generator_uncertainies(self, selector):
+    def add_generator_uncertainies(self, dsname, selector):
         # Matrix-element renormalization and factorization scale
         # Get describtion of individual columns of this branch with
         # Events->GetBranch("LHEScaleWeight")->GetTitle() in ROOT
         data = selector.masked
         if "LHEScaleWeight" in data:
+            norm = self.config["mc_lumifactors"][dsname + "_LHEScaleSumw"]
             selector.set_systematic("MEren",
-                                    data["LHEScaleWeight"][:, 7],
-                                    data["LHEScaleWeight"][:, 1])
+                                    data["LHEScaleWeight"][:, 7] * norm[7],
+                                    data["LHEScaleWeight"][:, 1] * norm[1])
             selector.set_systematic("MEfac",
-                                    data["LHEScaleWeight"][:, 5],
-                                    data["LHEScaleWeight"][:, 3])
+                                    data["LHEScaleWeight"][:, 5] * norm[5],
+                                    data["LHEScaleWeight"][:, 3] * norm[3])
 
             # Fix for the PSWeight: NanoAOD divides by XWGTUP. This is wrong,
             # if the cross section isn't multiplied in HepMC
@@ -715,13 +743,10 @@ class Processor(processor.ProcessorABC):
                                         np.full(num_events, 1 - uncert))
 
     def blinding(self, is_mc, data):
-        if (not is_mc) and (self.config["blinding_denom"] is not None):
-            return np.where(np.mod(data["event"],
-                                   self.config["blinding_denom"]) == 0,
-                            True,
-                            False)
+        if not is_mc:
+            return np.mod(data["event"], self.config["blinding_denom"]) == 0
         else:
-            return np.full(len(data["event"]), True)
+            return np.full(data.size, True)
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
@@ -913,35 +938,15 @@ class Processor(processor.ProcessorABC):
         leptons = leptons[leptons.pt.argsort()]
         return leptons
 
-    def set_no_lep_pair(self, data):
-        return data["Lepton"].counts < 2
-
-    def set_ee(self, data):
+    def channel_masks(self, data):
         leps = data["Lepton"]
-        twoleps = leps[leps.counts > 1]
-        ee = ((np.abs(twoleps[:, 0].pdgId) == 11)
-              & (np.abs(twoleps[:, 1].pdgId) == 11))
-        arr = (leps.counts > 1)
-        arr[arr] = ee
-        return arr
-
-    def set_emu(self, data):
-        leps = data["Lepton"]
-        twoleps = leps[leps.counts > 1]
-        emu = (np.abs(twoleps[:, 0].pdgId)
-               != np.abs(twoleps[:, 1].pdgId))
-        arr = (leps.counts > 1)
-        arr[arr] = emu
-        return arr
-
-    def set_mumu(self, data):
-        leps = data["Lepton"]
-        twoleps = leps[leps.counts > 1]
-        mumu = ((np.abs(twoleps[:, 0].pdgId) == 13)
-                & (np.abs(twoleps[:, 1].pdgId) == 13))
-        arr = (leps.counts > 1)
-        arr[arr] = mumu
-        return arr
+        firstpdg = abs(leps[:, 0].pdgId)
+        secondpdg = abs(leps[:, 1].pdgId)
+        channels = {}
+        channels["is_ee"] = (firstpdg == 11) & (secondpdg == 11)
+        channels["is_mm"] = (firstpdg == 13) & (secondpdg == 13)
+        channels["is_em"] = (~channels["is_ee"]) & (~channels["is_mm"])
+        return channels
 
     def compute_lepton_sf(self, data):
         is_ele = abs(data["Lepton"].pdgId) == 11
@@ -1001,6 +1006,9 @@ class Processor(processor.ProcessorABC):
         # Coffea offers a class named JetTransformer for this. Unfortunately
         # it is more inconvinient and bugged than useful.
         counts = data["Jet_pt"].counts
+        if counts.size == 0 or counts.sum() == 0:
+            return awkward.JaggedArray.fromcounts(counts, [])
+        # Make sure pt and eta aren't offset arrays. Needed by JetResolution
         pt = awkward.JaggedArray.fromcounts(counts, data["Jet_pt"].flatten())
         eta = awkward.JaggedArray.fromcounts(counts, data["Jet_eta"].flatten())
         rho = np.repeat(data["fixedGridRhoFastjetAll"], counts)
@@ -1205,8 +1213,8 @@ class Processor(processor.ProcessorABC):
     def z_window(self, data):
         m_min = self.config["z_boson_window_start"]
         m_max = self.config["z_boson_window_end"]
-        is_sf = data["is_same_flavor"]
-        return ~is_sf | ((data["mll"] <= m_min) | (m_max <= data["mll"]))
+        is_out_window = (data["mll"] <= m_min) | (m_max <= data["mll"])
+        return data["is_em"] | is_out_window
 
     def has_jets(self, data):
         return self.config["num_jets_atleast"] <= data["Jet"].counts
@@ -1239,15 +1247,14 @@ class Processor(processor.ProcessorABC):
     def btag_cut(self, is_mc, data):
         num_btagged = data["Jet"]["btagged"].sum()
         is_tagged = num_btagged >= self.config["num_atleast_btagged"]
-        if is_mc:
+        if is_mc and self.btagweighters is not None:
             return (is_tagged, self.compute_weight_btag(data[is_tagged]))
         else:
             return is_tagged
 
     def met_requirement(self, data):
-        is_sf = data["is_same_flavor"]
         met = data["MET"].pt
-        return ~is_sf | (met > self.config["ee/mm_min_met"])
+        return data["is_em"] | (met > self.config["ee/mm_min_met"])
 
     def pick_leps(self, data):
         lep_pair = data["Lepton"][:, :2]

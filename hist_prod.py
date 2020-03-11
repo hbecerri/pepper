@@ -96,7 +96,7 @@ output = coffea.processor.run_uproot_job(
     executor_args={"tailtimeout": None},
     chunksize=500000)
 
-print(output["ch_cutflows"])
+print(output["cutflows"])
 
 print("saving")
 coffea.util.save(output, "out_hists/output.coffea")

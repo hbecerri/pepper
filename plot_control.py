@@ -20,26 +20,18 @@ LUMIS = {
 }
 
 
-def get_syshists(dirname, fname, ignore=None):
+def get_syshists(histmap, histkey, dirname, ignore=None):
     if ignore is None:
         ignore = []
-    keys, histnames = json.load(open(os.path.join(dirname, "hists.json")))
-    try:
-        histkey = keys[histnames.index(fname)]
-    except ValueError:
-        return []
     sysmap = defaultdict(lambda: [None, None])
     klen = len(histkey)
-    for i, key in enumerate(keys):
+    for key, histname in histmap.items():
         if len(key) == klen + 1 and key[:klen] == histkey:
             sysname = key[klen]
             if any(x in sysname for x in ignore):
                 continue
-            print("Processing " + histnames[i])
-            if os.path.isabs(histnames[i]):
-                histname = histnames[i]
-            else:
-                histname = os.path.join(dirname, histnames[i])
+            if not os.path.isabs(histname):
+                histname = os.path.join(dirname, histname)
             if sysname.endswith("_down"):
                 sysidx = 1
                 sysname = sysname[:-len("_down")]
@@ -57,13 +49,16 @@ def get_syshists(dirname, fname, ignore=None):
 
 
 def prepare(hist, dense_axis, chan):
-    chan_axis = hist.axis("chan")
+    project_axes = [dense_axis]
+    if "channel" in hist.fields:
+        project_axes.append(hist.axis("channel"))
     if "proc" in hist.fields:
-        proc_axis = hist.axis("proc")
-        hist = hist.project(dense_axis, chan_axis, proc_axis)
-    else:
-        hist = hist.project(dense_axis, chan_axis)
-    hist = hist.integrate(chan_axis, int_range=chan)
+        project_axes.append(hist.axis("proc"))
+    hist = hist.project(*project_axes)
+    if "channel" in hist.fields:
+        if chan == "all":
+            chan = slice(None)
+        hist = hist.integrate(hist.axis("channel"), int_range=chan)
     return hist
 
 
@@ -130,10 +125,6 @@ def plot(data_hist, pred_hist, sys, namebase, colors={}, cmsyear=None):
     ax1.autoscale(axis="y")
     plt.tight_layout()
     fig.savefig(namebase + ".svg")
-    ax1.autoscale(axis="y")
-    ax1.set_yscale("log")
-    plt.tight_layout()
-    fig.savefig(namebase + "_log.svg")
     plt.close()
 
 
@@ -166,17 +157,44 @@ if args.labels:
                                          - len(mc_colors) - 1)
 else:
     axis_labelmap = None
-for histfilename in args.histfile:
+histfiles = []
+for histfile in args.histfile:
+    if histfile.endswith(".json"):
+        dirname = os.path.dirname(histfile)
+        with open(histfile) as f:
+            for keys, histfile in zip(*json.load(f)):
+                if len(keys) != 2:
+                    continue
+                histfiles.append(os.path.join(dirname, histfile))
+    else:
+        histfiles.append(histfile)
+for histfilename in histfiles:
+    print("Processing {}".format(histfilename))
     srcdir = os.path.dirname(histfilename)
+    if os.path.exists(os.path.join(srcdir, "hists.json")):
+        with open(os.path.join(srcdir, "hists.json")) as f:
+            histmap = {tuple(k): v for k, v in zip(*json.load(f))}
+        histmap_inv = dict(zip(histmap.values(), histmap.keys()))
+        histkey = histmap_inv[os.path.relpath(histfilename, srcdir)]
+    else:
+        histmap = None
+        histkey = None
     if args.outdir is None:
         outdir = srcdir
     else:
         outdir = args.outdir
+    if histkey is not None:
+        # Create subdirectiories by hist identifier
+        obsname = histkey[1].replace("/", "")
+        outdir = os.path.join(outdir, obsname)
     os.makedirs(outdir, exist_ok=True)
     namebase, fileext = os.path.splitext(os.path.basename(histfilename))
     hist = coffea.util.load(histfilename)
-    syshists = get_syshists(srcdir, os.path.basename(histfilename),
-                            args.ignoresys)
+    dsaxis = hist.axis("dataset")
+    if histmap is not None:
+        syshists = get_syshists(histmap, histkey, srcdir, args.ignoresys)
+    else:
+        syshists = []
     scales = np.ones(len(syshists))
     if "tmass" in syshists:
         scales[list(syshists.keys()).index("tmass")] = 0.5
@@ -184,18 +202,24 @@ for histfilename in args.histfile:
     proc_axis = coffea.hist.Cat("proc", "Process", "placement")
 
     data_dsnames = list(config["exp_datasets"].keys())
-    data_hist = hist.group(
-        hist.axis("dsname"), proc_axis, {"Data": (data_dsnames,)})
+    data_hist = hist.group(dsaxis, proc_axis, {"Data": (data_dsnames,)})
 
     mc_dsnames = config["mc_datasets"].keys()
     if axis_labelmap is not None:
-        pred_hist = hist.group(hist.axis("dsname"), proc_axis, axis_labelmap)
+        pred_hist = hist.group(dsaxis, proc_axis, axis_labelmap)
     else:
         mapping = {key: (key,) for key in mc_dsnames}
-        pred_hist = hist.group(hist.axis("dsname"), proc_axis, mapping)
+        pred_hist = hist.group(dsaxis, proc_axis, mapping)
 
+    if "channel" in hist.fields:
+        channels = list(idn.name for idn in hist.axis("channel").identifiers())
+    else:
+        channels = []
+    channels.insert(0, "all")
     for dense in hist.dense_axes():
-        for chan in (idn.name for idn in pred_hist.axis("chan").identifiers()):
+        for chan in channels:
+            outdirchan = os.path.join(outdir, chan.replace("/", ""))
+            os.makedirs(outdirchan, exist_ok=True)
             data_prepared = prepare(data_hist, dense, chan)
             pred_prepared = prepare(pred_hist, dense, chan)
             syshists_prep = {k: [prepare(vi, dense, chan) for vi in v]
@@ -204,4 +228,4 @@ for histfilename in args.histfile:
                                      syshists_prep,
                                      scales[:, None, None])
             plot(data_prepared, pred_prepared, sys, os.path.join(
-                outdir, f"{namebase}_{chan}"), colors=mc_colors)
+                outdirchan, f"{namebase}_{chan}"), colors=mc_colors)

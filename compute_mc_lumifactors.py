@@ -41,19 +41,40 @@ for process_name, proc_datasets in datasets.items():
         continue
     for path in proc_datasets:
         f = uproot.open(path)
-        counts[process_name] += f["Runs"]["genEventSumw"].array()[0]
+        gen_event_sumw = f["Runs"]["genEventSumw"].array()[0]
+        has_lhe = f["Runs"]["LHEScaleSumw"].array()[0].size != 0
+        if has_lhe:
+            lhe_scale_sumw = f["Runs"]["LHEScaleSumw"].array()[0]
+            lhe_scale_sumw /= lhe_scale_sumw[4]
+            lhe_scale_sumw *= gen_event_sumw
+            lhe_pdf_sumw = f["Runs"]["LHEPdfSumw"].array()[0] * gen_event_sumw
+
+        counts[process_name] += gen_event_sumw
+        if has_lhe:
+            counts[process_name + "_LHEScaleSumw"] += lhe_scale_sumw
+            counts[process_name + "_LHEPdfSumw"] += lhe_pdf_sumw
         print("[{}/{}] Processed {}".format(i + 1, num_files, path))
         i += 1
 factors = {}
 for key in counts.keys():
-    if key in dsforsys:
-        xs = crosssections[dsforsys[key][0]]
+    if key.endswith("_LHEScaleSumw") or key.endswith("_LHEPdfSumw"):
+        dsname = key.rsplit("_", 1)[0]
     else:
-        xs = crosssections[key]
-    factors[key] = xs * args.lumi / counts[key]
-    print("{}: {} fb, {} events, factor of {:.3e}".format(key,
-                                                          xs,
-                                                          counts[key],
-                                                          factors[key]))
+        dsname = key
+    if dsname in dsforsys:
+        xs = crosssections[dsforsys[dsname][0]]
+    else:
+        xs = crosssections[dsname]
+    factor = xs * args.lumi / counts[key]
+    if key.endswith("_LHEScaleSumw") or key.endswith("_LHEPdfSumw"):
+        factor = counts[dsname] / counts[key]
+    if isinstance(factor, np.ndarray):
+        factor = list(factor)
+    factors[key] = factor
+    if key == dsname:
+        print("{}: {} fb, {} events, factor of {:.3e}".format(key,
+                                                              xs,
+                                                              counts[key],
+                                                              factors[key]))
 
 json.dump(factors, open(args.out, "w"), indent=4)
