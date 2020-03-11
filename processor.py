@@ -570,7 +570,9 @@ class Processor(processor.ProcessorABC):
         selector.set_column(self.build_met_column, "MET")
         selector.add_cut(self.has_jets, "#Jets >= %d"
                          % self.config["num_jets_atleast"])
-        selector.add_cut(self.hem_cut, "HEM cut")
+        if (self.config["hem_cut_if_ele"] or self.config["hem_cut_if_muon"]
+                or self.config["hem_cut_if_jet"]):
+            selector.add_cut(self.hem_cut, "HEM cut")
         selector.add_cut(self.jet_pt_requirement, "Jet pt req")
         selector.add_cut(partial(self.btag_cut, is_mc), "At least %d btag"
                          % self.config["num_atleast_btagged"])
