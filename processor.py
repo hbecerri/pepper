@@ -1044,6 +1044,9 @@ class Processor(processor.ProcessorABC):
         # Coffea offers a class named JetTransformer for this. Unfortunately
         # it is more inconvinient and bugged than useful.
         counts = data["Jet_pt"].counts
+        if counts.size == 0 or counts.sum() == 0:
+            return awkward.JaggedArray.fromcounts(counts, [])
+        # Make sure pt and eta aren't offset arrays. Needed by JetResolution
         pt = awkward.JaggedArray.fromcounts(counts, data["Jet_pt"].flatten())
         eta = awkward.JaggedArray.fromcounts(counts, data["Jet_eta"].flatten())
         rho = np.repeat(data["fixedGridRhoFastjetAll"], counts)
