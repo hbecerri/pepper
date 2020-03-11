@@ -467,6 +467,7 @@ class Processor(processor.ProcessorABC):
             self.hist_mlb_path = self.config["genhist_path"]
         else:
             print("No Mlb hist for picking b jets specified")
+        self.mc_lumifactors = config["mc_lumifactors"]
 
     @property
     def accumulator(self):
@@ -696,10 +697,10 @@ class Processor(processor.ProcessorABC):
 
     def add_crosssection_scale(self, selector, dsname):
         num_events = selector.num_selected
-        lumifactors = self.config["mc_lumifactors"]
+        lumifactors = self.mc_lumifactors
         factor = np.full(num_events, lumifactors[dsname])
-        if self.config["blinding_demon"] is not None:
-            factor /= self.config["blinding_demon"]
+        if self.config["blinding_denom"] is not None:
+            factor /= self.config["blinding_denom"]
         selector.modify_weight("lumi_factor", factor)
         if self.config["compute_systematics"]:
             xsuncerts = self.config["crosssection_uncertainty"]
@@ -896,14 +897,14 @@ class Processor(processor.ProcessorABC):
         ge = self.electron_cuts(data, good_lep=True)
         gm = self.muon_cuts(data, good_lep=True)
         for key in keys:
-            arr = self.safe_concat(data["Electron_" + key], ge,
-                                   data["Muon_" + key], gm)
+            arr = awkward.concatenate([data["Electron_" + key][ge],
+                                      data["Muon_" + key][gm]], axis=1)
             offsets = arr.offsets
             lep_dict[key] = arr.flatten()  # Could use concatenate here
         # Add supercluster eta, which only is given for electrons
-        arr = self.safe_concat(data["Electron_eta"]
-                               + data["Electron_deltaEtaSC"], ge,
-                               data["Muon_eta"], gm)
+        arr = awkward.concatenate([data["Electron_eta"][ge]
+                                  + data["Electron_deltaEtaSC"][ge],
+                                  data["Muon_eta"][gm]], axis=1)
         lep_dict["sceta"] = arr.flatten()
 
         leptons = Jca.candidatesfromoffsets(offsets, **lep_dict)
@@ -911,17 +912,6 @@ class Processor(processor.ProcessorABC):
         # Sort leptons by pt
         leptons = leptons[leptons.pt.argsort()]
         return leptons
-
-    def safe_concat(self, a, a_in, b, b_in):
-        if len(a.flatten()) > 0 and len(b.flatten()) > 0:
-            arr = awkward.concatenate([a[a_in], b[b_in]], axis=1)
-        elif len(a.flatten()) > 0:
-            arr = a[a_in]
-        elif len(b.flatten()) > 0:
-            arr = b[b_in]
-        else:
-            arr = awkward.JaggedArray.fromcounts([0], [])
-        return arr
 
     def set_no_lep_pair(self, data):
         return data["Lepton"].counts < 2
