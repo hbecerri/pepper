@@ -10,7 +10,7 @@ def roots_vectorized(poly):
     if poly.ndim == 1:
         return np.roots(poly)
     elif poly.ndim != 2:
-        raise ValueError("Dimension of poly needs to be ast most 2")
+        raise ValueError("Dimension of poly needs to be at most 2")
     ones = np.ones(poly.shape[1] - 2, poly.dtype)
     companion = np.tile(np.diag(ones, -1), (poly.shape[0], 1, 1))
     companion[:, 0] = -poly[:, 1:] / poly[:, 0, None]
