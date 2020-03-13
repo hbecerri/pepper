@@ -135,6 +135,7 @@ def kinreco(lep, antilep, b, antib, met_pt, met_phi, verbosity=0):
           + c00 * c22 * (d11 ** 2 - 2 * d00 * d22)
           + c22 * d00 * (c22 * d00 - c11 * d11))
     h = np.array([h0, h1, h2, h3, h4]).T
+    h = h[np.isfinite(h).all(axis=1)]
 
     roots = roots_vectorized(h).flatten()
     vpx = awkward.JaggedArray.fromcounts(np.full(h.shape[0], 4), roots.real)
