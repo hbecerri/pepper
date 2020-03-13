@@ -4,6 +4,20 @@ from coffea.analysis_objects import JaggedCandidateArray
 from coffea.util import awkward
 
 
+def roots_vectorized(poly):
+    """Like numpy.roots just that it can take another axis, allowing to
+    compute the roots of any number of polynomials at once"""
+    if poly.ndim == 1:
+        return np.roots(poly)
+    elif poly.ndim != 2:
+        raise ValueError("Dimension of poly needs to be ast most 2")
+    ones = np.ones(poly.shape[1] - 2, poly.dtype)
+    companion = np.tile(np.diag(ones, -1), (poly.shape[0], 1, 1))
+    companion[:, 0] = -poly[:, 1:] / poly[:, 0, None]
+    roots = np.linalg.eigvals(companion)
+    return roots
+
+
 def kinreco(lep, antilep, b, antib, met_pt, met_phi, verbosity=0):
     '''note:inputs should be Lorentz vectors rather than jagged arrays'''
     lE = lep.E.flatten()
@@ -120,8 +134,13 @@ def kinreco(lep, antilep, b, antib, met_pt, met_phi, verbosity=0):
     h4 = (c00 ** 2 * d22 ** 2 + c11 * d22 * (c11 * d00 - c00 * d11)
           + c00 * c22 * (d11 ** 2 - 2 * d00 * d22)
           + c22 * d00 * (c22 * d00 - c11 * d11))
-    h = np.array([h0, h1, h2, h3, h4])
-    H = np.swapaxes(h, 0, 1)
+    h = np.array([h0, h1, h2, h3, h4]).T
+
+    roots = roots_vectorized(h).flatten()
+    vpx = awkward.JaggedArray.fromcounts(np.full(h.shape[0], 4), roots.real)
+    is_real = abs(roots.imag) < 10 ** -6
+    is_real = awkward.JaggedArray.fromcounts(np.full(h.shape[0], 4), is_real)
+    vpx = vpx[is_real]
 
     if(verbosity == 1):
         print("a1=", a1[0], "a2=", a2[0], "a3=", a3[0], "a4=", a4[0])
@@ -138,28 +157,6 @@ def kinreco(lep, antilep, b, antib, met_pt, met_phi, verbosity=0):
               "h3=", a4[0] ** 4 * b4[0] ** 4 * h3[0],
               "h4=", a4[0] ** 4 * b4[0] ** 4 * h4[0])
 
-    neutrinopx = []
-    nsols = np.zeros(len(lep), dtype=int)
-    for eventi in range(len(lep)):
-        if(np.isfinite(H[eventi]).sum() == 5):
-            roots = np.roots(H[eventi])
-            for root in roots:
-                if np.abs(root.imag) < 10 ** -6:
-                    # (an arbritary accuracy for imaginary part to account
-                    # for possible numerical errors-consider revising)
-                    neutrinopx.append(root.real)
-                    nsols[eventi] += 1
-        else:
-            print(H[eventi])
-            print(lx[eventi], ly[eventi], lz[eventi])
-            print(alx[eventi], aly[eventi], alz[eventi])
-            print(bx[eventi], by[eventi], bz[eventi])
-            print(abx[eventi], aby[eventi], abz[eventi])
-            print(a4[eventi])
-        if (a4[eventi] == 0):
-            print("a4=0- likely problem with Reco")
-    neutrinopx = np.array(neutrinopx, dtype=float)
-    vpx = awkward.JaggedArray.fromcounts(nsols, neutrinopx)
     c0 = c00
     c1 = c10 * vpx + c11
     c2 = c20 * vpx ** 2 + c21 * vpx + c22
@@ -176,9 +173,10 @@ def kinreco(lep, antilep, b, antib, met_pt, met_phi, verbosity=0):
     vbarpz = (- b1 - b2 * vbarpx - b3 * vbarpy) / b4
 
     neutrino = JaggedCandidateArray.candidatesfromcounts(
-        nsols, px=vpx.content, py=vpy.content, pz=vpz.content, mass=0)
+        vpx.counts, px=vpx.content, py=vpy.content, pz=vpz.content, mass=0)
     antineutrino = JaggedCandidateArray.candidatesfromcounts(
-        nsols, px=vbarpx.content, py=vbarpy.content, pz=vbarpz.content, mass=0)
+        vpx.counts, px=vbarpx.content, py=vbarpy.content, pz=vbarpz.content,
+        mass=0)
     return neutrino, antineutrino
 
 
