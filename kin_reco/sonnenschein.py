@@ -173,10 +173,11 @@ def kinreco(lep, antilep, b, antib, met_pt, met_phi, verbosity=0):
     vbarpz = (- b1 - b2 * vbarpx - b3 * vbarpy) / b4
 
     neutrino = JaggedCandidateArray.candidatesfromcounts(
-        vpx.counts, px=vpx.content, py=vpy.content, pz=vpz.content, mass=0)
-    antineutrino = JaggedCandidateArray.candidatesfromcounts(
-        vpx.counts, px=vbarpx.content, py=vbarpy.content, pz=vbarpz.content,
+        vpx.counts, px=vpx.flatten(), py=vpy.flatten(), pz=vpz.flatten(),
         mass=0)
+    antineutrino = JaggedCandidateArray.candidatesfromcounts(
+        vpx.counts, px=vbarpx.flatten(), py=vbarpy.flatten(),
+        pz=vbarpz.flatten(), mass=0)
     return neutrino, antineutrino
 
 
