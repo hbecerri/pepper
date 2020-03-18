@@ -263,3 +263,42 @@ def export(hist):
     out._fSumw2 = sumw2_of.astype(">f8").transpose().flatten()
 
     return out
+
+
+def hist_divide(num, denom):
+    """Return a histogram with bin heights = num / denum and errors set
+    accordingly"""
+    if not num.compatible(denom):
+        raise ValueError("Cannot divide this histogram {} with histogram {} "
+                         "of dissimilar dimensions".format(num, denom))
+    hout = num.copy()
+    hout.label = "Ratio"
+
+    raxes = denom.sparse_axes()
+
+    def div(a, b):
+        out = np.zeros_like(a)
+        nz = b != 0
+        out[nz] = a[nz] / b[nz]
+        return out
+
+    def diverr2(a, b, da2, db2):
+        out = np.zeros_like(a)
+        nz = b != 0
+        out[nz] = (da2[nz] * b[nz]**2 + db2[nz] * a[nz]**2) / b[nz]**4
+        return out
+
+    denomsumw2 = denom._sumw2 if denom._sumw2 is not None else denom._sumw
+    for rkey in denom._sumw.keys():
+        lkey = tuple(num.axis(rax).index(rax[ridx])
+                     for rax, ridx in zip(raxes, rkey))
+        if lkey in hout._sumw:
+            hout._sumw2[lkey] = diverr2(hout._sumw[lkey],
+                                        denom._sumw[rkey],
+                                        hout._sumw2[lkey],
+                                        denomsumw2[rkey])
+            hout._sumw[lkey] = div(hout._sumw[lkey], denom._sumw[rkey])
+        else:
+            hout._sumw2[lkey] = np.zeros_like(denomsumw2[rkey])
+            hout._sumw[lkey] = np.zeros_like(denom._sumw[rkey])
+    return hout
