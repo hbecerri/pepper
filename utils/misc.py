@@ -179,3 +179,87 @@ def expdata_iterate(datasets, branches, treepath="Events"):
         for branch in branches:
             data[branch] = awkward.concatenate(chunks[branch])
         yield dsname, awkward.Table(data)
+
+
+def export(hist):
+    """Export a one, two or three dimensional `Hist` to a ROOT histogram"""
+    d = hist.dense_dim()
+    if d > 3:
+        raise ValueError("export() only supports up to three dense dimensions")
+    if hist.sparse_dim() != 0:
+        raise ValueError("export() expects zero sparse dimensions")
+
+    axes = hist.axes()
+
+    if d == 1:
+        from uproot_methods.classes.TH1 import Methods
+    elif d == 2:
+        from uproot_methods.classes.TH2 import Methods
+    else:
+        from uproot_methods.classes.TH3 import Methods
+
+    class TH(Methods, list):
+        pass
+
+    class TAxis(object):
+        def __init__(self, fNbins, fXmin, fXmax):
+            self._fNbins = fNbins
+            self._fXmin = fXmin
+            self._fXmax = fXmax
+
+    out = TH.__new__(TH)
+    axisattrs = ["_fXaxis", "_fYaxis", "_fZaxis"][:d]
+
+    values_of = hist.values(sumw2=True, overflow="all")  # with overflow
+    values_noof = hist.values()  # no overflow
+    if len(values_of) == 0:
+        sumw_of = sumw2_of = np.zeros(tuple(axis.size - 1 for axis in axes))
+        sumw_noof = np.zeros(tuple(axis.size - 3 for axis in axes))
+    else:
+        sumw_of, sumw2_of = values_of[()]
+        sumw_noof = values_noof[()]
+    centers = []
+    for axis, axisattr in zip(axes, axisattrs):
+        edges = axis.edges(overflow="none")
+
+        taxis = TAxis(len(edges) - 1, edges[0], edges[-1])
+        taxis._fName = axis.name
+        taxis._fTitle = axis.label
+        if not axis._uniform:
+            taxis._fXbins = edges.astype(">f8")
+        setattr(out, axisattr, taxis)
+        centers.append((edges[:-1] + edges[1:]) / 2.0)
+
+    out._fEntries = out._fTsumw = out._fTsumw2 = sumw_noof.sum()
+
+    projected_x = sumw_noof.sum((1, 2)[:d - 1])
+    out._fTsumwx = (projected_x * centers[0]).sum()
+    out._fTsumwx2 = (projected_x * centers[0]**2).sum()
+    if d >= 2:
+        projected_y = sumw_noof.sum((0, 2)[:d - 1])
+        projected_xy = sumw_noof.sum((2,)[:d - 2])
+        out._fTsumwy = (projected_y * centers[1]).sum()
+        out._fTsumwy2 = (projected_y * centers[1]**2).sum()
+        out._fTsumwxy = ((projected_xy * centers[1]).sum(1) * centers[0]).sum()
+    if d == 3:
+        projected_z = sumw_noof.sum((0, 1)[:d - 1])
+        projected_xz = sumw_noof.sum((1,)[:d - 2])
+        projected_yz = sumw_noof.sum((0,)[:d - 2])
+        out._fTsumwz = (projected_z * centers[2]).sum()
+        out._fTsumwz2 = (projected_z * centers[2]**2).sum()
+        out._fTsumwxz = ((projected_xz * centers[2]).sum(1) * centers[0]).sum()
+        out._fTsumwyz = ((projected_yz * centers[2]).sum(1) * centers[1]).sum()
+
+    out._fName = "histogram"
+    out._fTitle = hist.label
+
+    if d == 1:
+        out._classname = b"TH1D"
+    elif d == 2:
+        out._classname = b"TH2D"
+    else:
+        out._classname = b"TH3D"
+    out.extend(sumw_of.astype(">f8").transpose().flatten())
+    out._fSumw2 = sumw2_of.astype(">f8").transpose().flatten()
+
+    return out

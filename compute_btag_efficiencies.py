@@ -4,10 +4,9 @@ import os
 import numpy as np
 import coffea
 from argparse import ArgumentParser
-from uproot_methods.classes.TH3 import Methods as TH3Methods
 
 from utils.config import Config
-from utils.misc import get_event_files, montecarlo_iterate
+from utils.misc import get_event_files, montecarlo_iterate, export
 
 
 def hist_divide(num, denom):
@@ -53,63 +52,6 @@ def unpack_cuts(cutflags, num_cuts):
     byteview = cutflags[:, None].view(np.uint8)[:, ::-1]
     bits = np.unpackbits(byteview, axis=1)
     return bits[..., -num_cuts:].astype(bool)
-
-
-def export3d(hist):
-    """Export a 3-dimensional `Hist` object to uproot"""
-    if hist.dense_dim() != 3:
-        raise ValueError("export3d() can only support three dense dimensions")
-    if hist.sparse_dim() != 0:
-        raise ValueError("export3d() expects zero sparse dimensions")
-
-    class TH3(TH3Methods, list):
-        pass
-
-    class TAxis(object):
-        def __init__(self, fNbins, fXmin, fXmax):
-            self._fNbins = fNbins
-            self._fXmin = fXmin
-            self._fXmax = fXmax
-
-    out = TH3.__new__(TH3)
-
-    values = hist.values(sumw2=True, overflow="all")
-    if len(values) == 0:
-        sumw = sumw2 = np.zeros(tuple(hist.axes()[i].size - 1
-                                      for i in range(3)))
-    else:
-        sumw, sumw2 = values[()]
-    sumw_noof = sumw[1:-1, 1:-1, 1:-1]
-    centers = []
-    for axis, axisattr in zip(hist.axes(), ["_fXaxis", "_fYaxis", "_fZaxis"]):
-        axes = hist.axes()
-        edges = axis.edges(overflow="none")
-
-        taxis = TAxis(len(edges) - 1, edges[0], edges[-1])
-        taxis._fName = axis.name
-        taxis._fTitle = axis.label
-        if not axis._uniform:
-            taxis._fXbins = edges.astype(">f8")
-        setattr(out, axisattr, taxis)
-        centers.append((edges[:-1] + edges[1:]) / 2.0)
-
-    out._fEntries = out._fTsumw = out._fTsumw2 = sumw_noof.sum()
-    out._fTsumwy = (sumw_noof.sum((0, 2)) * centers[1]).sum()
-    out._fTsumwy2 = (sumw_noof.sum((0, 2)) * centers[1]**2).sum()
-    out._fTsumwxy = ((sumw_noof.sum(2) * centers[1]).sum(1) * centers[0]).sum()
-    out._fTsumwz = (sumw_noof.sum((0, 1)) * centers[2]).sum()
-    out._fTsumwz2 = (sumw_noof.sum((0, 1)) * centers[2]**2).sum()
-    out._fTsumwxz = ((sumw_noof.sum(1) * centers[2]).sum(1) * centers[0]).sum()
-    out._fTsumwyz = ((sumw_noof.sum(0) * centers[2]).sum(1) * centers[1]).sum()
-
-    out._fName = "histogram"
-    out._fTitle = hist.label
-
-    out._classname = b"TH3D"
-    out.extend(sumw.astype(">f8").transpose().flatten())
-    out._fSumw2 = sumw2.astype(">f8").transpose().flatten()
-
-    return out
 
 
 parser = ArgumentParser()
@@ -178,4 +120,4 @@ for name, weight, data in montecarlo_iterate(mc_datasets,
 
 efficiency = hist_divide(n_btag, n_total)
 with uproot.recreate(args.out, compression=uproot.ZLIB(4)) as f:
-    f["efficiency"] = export3d(efficiency)
+    f["efficiency"] = export(efficiency)
