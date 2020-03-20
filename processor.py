@@ -517,9 +517,28 @@ class Processor(processor.ProcessorABC):
                 outf[key] = out_dict[key]
 
     def process(self, df):
+        data = LazyTable(df)
         output = self.accumulator.identity()
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
+
+        selector = self.setup_selection(data, dsname, is_mc, output)
+        self.process_selection(selector, dsname, is_mc, output)
+
+        if self.config["do_ttbar_reconstruction"]:
+            reco_sel = self.setup_reco(
+                selector.final, selector.final_systematics, dsname, is_mc,
+                output)
+            self.process_reco(reco_sel, dsname, is_mc, output)
+        else:
+            reco_sel = None
+
+        if self.destdir is not None:
+            self._save_per_event_info(dsname, selector, reco_sel)
+
+        return output
+
+    def setup_selection(self, data, dsname, is_mc, output):
         sel_cb = [partial(self.fill_hists,
                           hist_dict=self.sel_hists,
                           accumulator=output["sel_hists"],
@@ -528,11 +547,13 @@ class Processor(processor.ProcessorABC):
                   partial(self.fill_cutflows, accumulator=output["cutflows"],
                           dsname=dsname)]
         if is_mc:
-            genweight = df["genWeight"]
+            genweight = data["genWeight"]
         else:
             genweight = None
-        selector = Selector(LazyTable(df), genweight, sel_cb)
+        selector = Selector(data, genweight, sel_cb)
+        return selector
 
+    def process_selection(self, selector, dsname, is_mc, output):
         if self.config["compute_systematics"] and is_mc:
             self.add_generator_uncertainies(dsname, selector)
         if is_mc:
@@ -580,43 +601,39 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.met_requirement, "MET > %d GeV"
                          % self.config["ee/mm_min_met"])
 
-        if self.config["do_ttbar_reconstruction"]:
-            lep, antilep = self.pick_leps(selector.final)
-            b, bbar = self.choose_bs(selector.final, lep, antilep)
-            neutrino, antineutrino = kinreco(lep["p4"], antilep["p4"],
-                                             b["p4"], bbar["p4"],
-                                             selector.final["MET_pt"],
-                                             selector.final["MET_phi"])
-            if is_mc:
-                weight = selector.final_systematics["weight"].flatten()
-            else:
-                weight = np.full(selector.final.size, 1.)
-            reco_cb = [partial(self.fill_hists,
-                               hist_dict=self.reco_hists,
-                               accumulator=output["reco_hists"],
-                               is_mc=is_mc,
-                               dsname=dsname),
-                       partial(self.fill_cutflows,
-                               accumulator=output["cutflows"],
-                               dsname=dsname)]
-            reco_objects = Selector(awkward.Table(lep=lep, antilep=antilep,
-                                                  b=b, bbar=bbar,
-                                                  neutrino=neutrino,
-                                                  antineutrino=antineutrino),
-                                    weight, reco_cb)
-            reco_objects.add_cut(self.passing_reco, "Reco")
-            reco_objects.set_column(self.wminus, "Wminus")
-            reco_objects.set_column(self.wplus, "Wplus")
-            reco_objects.set_column(self.top, "top")
-            reco_objects.set_column(self.antitop, "antitop")
-            reco_objects.set_column(self.ttbar, "ttbar")
+    def setup_reco(self, data, systematics, dsname, is_mc, output):
+        lep, antilep = self.pick_leps(data)
+        b, bbar = self.choose_bs(data, lep, antilep)
+        neutrino, antineutrino = kinreco(lep["p4"], antilep["p4"],
+                                         b["p4"], bbar["p4"],
+                                         data["MET_pt"],
+                                         data["MET_phi"])
+        if is_mc:
+            weight = systematics["weight"].flatten()
         else:
-            reco_objects = None
+            weight = np.full(data.size, 1.)
+        reco_cb = [partial(self.fill_hists,
+                           hist_dict=self.reco_hists,
+                           accumulator=output["reco_hists"],
+                           is_mc=is_mc,
+                           dsname=dsname),
+                   partial(self.fill_cutflows,
+                           accumulator=output["cutflows"],
+                           dsname=dsname)]
+        selector = Selector(awkward.Table(lep=lep, antilep=antilep,
+                                              b=b, bbar=bbar,
+                                              neutrino=neutrino,
+                                              antineutrino=antineutrino),
+                                weight, reco_cb)
+        return selector
 
-        if self.destdir is not None:
-            self._save_per_event_info(dsname, selector, reco_objects)
-
-        return output
+    def process_reco(self, selector, dsname, is_mc, output):
+        selector.add_cut(self.passing_reco, "Reco")
+        selector.set_column(self.wminus, "Wminus")
+        selector.set_column(self.wplus, "Wplus")
+        selector.set_column(self.top, "top")
+        selector.set_column(self.antitop, "antitop")
+        selector.set_column(self.ttbar, "ttbar")
 
     def get_present_channels(self, data):
         if all(x in data.columns for x in ("is_ee", "is_mm", "is_em")):
