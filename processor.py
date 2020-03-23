@@ -620,11 +620,10 @@ class Processor(processor.ProcessorABC):
                    partial(self.fill_cutflows,
                            accumulator=output["cutflows"],
                            dsname=dsname)]
-        selector = Selector(awkward.Table(lep=lep, antilep=antilep,
-                                              b=b, bbar=bbar,
-                                              neutrino=neutrino,
-                                              antineutrino=antineutrino),
-                                weight, reco_cb)
+        reco_table = awkward.Table(
+            lep=lep, antilep=antilep, b=b, bbar=bbar, neutrino=neutrino,
+            antineutrino=antineutrino)
+        selector = Selector(reco_table, weight, reco_cb)
         return selector
 
     def process_reco(self, selector, dsname, is_mc, output):
