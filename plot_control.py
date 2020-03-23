@@ -2,6 +2,8 @@
 
 import os
 import numpy as np
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 import mplhep as hep
 from argparse import ArgumentParser
@@ -14,9 +16,9 @@ from utils.config import Config
 
 # Luminosities needed for CMS label at the top of plots
 LUMIS = {
-    "2016": "35.92",
-    "2017": "41.53",
-    "2018": "59.96",
+    "2016": "35.9",
+    "2017": "41.5",
+    "2018": "59.7",
 }
 
 
@@ -81,7 +83,8 @@ def compute_systematic(nominal_hist, syshists, scales=None):
     return np.sqrt((uncerts ** 2).sum(axis=0))
 
 
-def plot(data_hist, pred_hist, sys, namebase, colors={}, cmsyear=None):
+def plot(data_hist, pred_hist, sys, namebase, colors={}, log=False,
+         cmsyear=None):
     fig, (ax1, ax2) = plt.subplots(
         nrows=2, sharex=True, gridspec_kw={"height_ratios": [3, 1]})
     coffea.hist.plot1d(pred_hist,
@@ -121,8 +124,11 @@ def plot(data_hist, pred_hist, sys, namebase, colors={}, cmsyear=None):
     fig.subplots_adjust(hspace=0)
     if cmsyear is not None:
         ax1 = hep.cms.cmslabel(
-            ax1, data=True, paper=False, year=cmsyear, lumi=LUMIS[cmsyear])
+            ax=ax1, data=True, paper=False, year=cmsyear, lumi=LUMIS[cmsyear])
     ax1.autoscale(axis="y")
+    if log:
+        ax1.autoscale(axis="y")
+        ax1.set_yscale("log")
     plt.tight_layout()
     fig.savefig(namebase + ".svg")
     plt.close()
@@ -142,6 +148,8 @@ parser.add_argument(
 parser.add_argument(
     "--ignoresys", action="append", help="Ignore a specific systematic. "
     "Can be specified multiple times.")
+parser.add_argument(
+    "--log", action="store_true", help="Make logarithmic plots")
 args = parser.parse_args()
 
 config = Config(args.config)
@@ -228,4 +236,5 @@ for histfilename in histfiles:
                                      syshists_prep,
                                      scales[:, None, None])
             plot(data_prepared, pred_prepared, sys, os.path.join(
-                outdirchan, f"{namebase}_{chan}"), colors=mc_colors)
+                 outdirchan, f"{namebase}_{chan}"), colors=mc_colors,
+                 log=args.log, cmsyear=config["year"])
