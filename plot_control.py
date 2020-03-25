@@ -125,7 +125,6 @@ def plot(data_hist, pred_hist, sys, namebase, colors={}, log=False,
     if cmsyear is not None:
         ax1 = hep.cms.cmslabel(
             ax=ax1, data=True, paper=False, year=cmsyear, lumi=LUMIS[cmsyear])
-    ax1.autoscale(axis="y")
     if log:
         ax1.autoscale(axis="y")
         ax1.set_yscale("log")
