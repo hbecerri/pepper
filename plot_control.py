@@ -3,7 +3,7 @@
 import os
 import numpy as np
 import matplotlib as mpl
-mpl.use('Agg')
+mpl.use("Agg")  # noqa: E402
 import matplotlib.pyplot as plt
 import mplhep as hep
 from argparse import ArgumentParser

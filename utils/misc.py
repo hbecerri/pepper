@@ -303,6 +303,7 @@ def hist_divide(num, denom):
             hout._sumw[lkey] = np.zeros_like(denom._sumw[rkey])
     return hout
 
+
 def jcafromjagged(**fields):
     """Create JaggedCandidateArray from JaggedArrays
     This eliminates the needs to flatten every JaggedArray.
