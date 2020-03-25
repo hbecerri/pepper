@@ -116,7 +116,7 @@ if args.condor is not None:
     executor = coffea.processor.parsl_executor
     conor_config = ("requirements = (OpSysAndVer == \"SL6\" || OpSysAndVer =="
                     " \"CentOS7\")")
-    # Need to unset PYTHONPATH because of cmssw setting it incorrectly
+    # Need to unset PYTHONPATH because of DESY NAF setting it incorrectly
     # Need to put own directory into PYTHONPATH for unpickling processor to
     # work. Should be unncessecary, once we have correct module structure.
     # Need to extend PATH to be able to execute the main parsl script
