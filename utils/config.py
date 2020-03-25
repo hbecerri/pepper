@@ -234,3 +234,6 @@ class Config(object):
 
     def __contains__(self, key):
         return key in self._config
+
+    def __setitem__(self, key, value):
+        self._cache[key] = value
