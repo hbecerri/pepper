@@ -646,12 +646,14 @@ class Processor(processor.ProcessorABC):
         else:
             weight = np.ones(data.size)
         if "all" not in accumulator:
-            accumulator["all"] = processor.defaultdict_accumulator(int)
-        accumulator["all"][cut] = weight.sum()
+            accumulator["all"] = processor.defaultdict_accumulator(
+                                    partial(processor.defaultdict_accumulator, int))
+        accumulator["all"][dsname][cut] = weight.sum()
         for ch in self.get_present_channels(data):
             if ch not in accumulator:
-                accumulator[ch] = processor.defaultdict_accumulator(int)
-            accumulator[ch][cut] = weight[data[ch]].sum()
+                accumulator[ch] = processor.defaultdict_accumulator(
+                                    partial(processor.defaultdict_accumulator, int))
+            accumulator[ch][dsname][cut] = weight[data[ch]].sum()
 
     def fill_hists(self, hist_dict, accumulator, is_mc, dsname, data,
                    systematics, cut):
@@ -1144,7 +1146,7 @@ class Processor(processor.ProcessorABC):
     def build_met_column(self, data):
         met = TLorentzVectorArray.from_ptetaphim(data["MET_pt"],
                                                  np.zeros(data.size),
-                                                 data["MET_pt"],
+                                                 data["MET_phi"],
                                                  np.zeros(data.size))
         if "jerfac" in data:
             jets = TLorentzVectorArray.from_ptetaphim(data["Jet_pt"],
