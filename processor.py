@@ -647,12 +647,12 @@ class Processor(processor.ProcessorABC):
             weight = np.ones(data.size)
         if "all" not in accumulator:
             accumulator["all"] = processor.defaultdict_accumulator(
-                                    partial(processor.defaultdict_accumulator, int))
+                partial(processor.defaultdict_accumulator, int))
         accumulator["all"][dsname][cut] = weight.sum()
         for ch in self.get_present_channels(data):
             if ch not in accumulator:
                 accumulator[ch] = processor.defaultdict_accumulator(
-                                    partial(processor.defaultdict_accumulator, int))
+                    partial(processor.defaultdict_accumulator, int))
             accumulator[ch][dsname][cut] = weight[data[ch]].sum()
 
     def fill_hists(self, hist_dict, accumulator, is_mc, dsname, data,
@@ -762,7 +762,8 @@ class Processor(processor.ProcessorABC):
         if not is_mc:
             return np.mod(data["event"], self.config["blinding_denom"]) == 0
         else:
-            factor = np.full(selector.num_selected, 1/self.config["blinding_denom"])
+            factor = np.full(selector.num_selected,
+                             1/self.config["blinding_denom"])
             selector.modify_weight("blinding_factor", factor)
             return np.full(data.size, True)
 

@@ -1,7 +1,7 @@
 from collections import defaultdict
 import os
 
-from coffea import hist
+import coffea
 from coffea.analysis_objects import JaggedCandidateArray as JCA
 from coffea.util import awkward, numpy
 from coffea.util import numpy as np
@@ -26,7 +26,7 @@ import utils.config as config_utils
 import utils.datasets as dataset_utils
 from processor import Processor
 
-matplotlib.interactive(True)
+matplotlib.interactive(False)
 
 
 def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
@@ -41,6 +41,7 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
             labelmap[val].append(key)
 
 #        print((hists.integrate(x_ax_name)).values())
+        print(x_ax_name)
         sortedlabels = sorted(labelsset, key=(
             lambda x: sum([(hists.integrate(x_ax_name)).values()[(y,)]
                            for y in labelmap[x]])))
@@ -49,7 +50,7 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
             if colours is not None:
                 colours[key] = colours.pop(key)
 
-        labels_axis = hist.Cat("labels", "", sorting="placement")
+        labels_axis = coffea.hist.Cat("labels", "", sorting="placement")
         hists = hists.group("dataset", labels_axis, labelmap)
 # Note hists are currently only ordered by integral if labels is specified
 # -might want to change this
@@ -79,18 +80,19 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
         'edgecolor': (0, 0, 0, 0.5),
         'linewidth':  0
     }
-    hist.plot1d(bkgd_hist, overlay=axis, stack=True,
-                ax=ax, clear=False, fill_opts=fill_opts, error_opts=err_opts)
+    coffea.hist.plot1d(bkgd_hist, overlay=axis, stack=True,
+                       ax=ax, clear=False, fill_opts=fill_opts,
+                       error_opts=err_opts)
     bkgdh = bkgd_hist.sum(axis)
     if len(list(sig_colours.values())) > 0:
         ax.set_prop_cycle(cycler(color=list(sig_colours.values())[::-1]))
     sig_hist = hists[sigs].copy()
     sig_hist.scale(sig_scaling)
-    hist.plot1d(sig_hist,
-                ax=ax,
-                clear=False,
-                overlay=axis,
-                stack=False)
+    coffea.hist.plot1d(sig_hist,
+                       ax=ax,
+                       clear=False,
+                       overlay=axis,
+                       stack=False)
     data_err_opts = {
         'linestyle': 'none',
         'marker': '.',
@@ -98,32 +100,31 @@ def plot_data_mc(hists, data, sigs=[], sig_scaling=1,
         'color': 'k',
         'elinewidth': 1,
     }
-    hist.plot1d(
+    coffea.hist.plot1d(
         hists[data],
         ax=ax,
         clear=False,
         error_opts=data_err_opts,
         overlay=axis)
-    hist.plotratio(hists.integrate(axis, [data]),
-                   bkgdh,
-                   ax=rax,
-                   error_opts=data_err_opts,
-                   denom_fill_opts={},
-                   guide_opts={},
-                   unc='num')
+    coffea.hist.plotratio(hists.integrate(axis, [data]),
+                          bkgdh,
+                          ax=rax,
+                          error_opts=data_err_opts,
+                          denom_fill_opts={},
+                          guide_opts={},
+                          unc='num')
     rax.set_ylabel('Ratio')
     rax.set_ylim(0, 2)
     ax.set_yscale(y_scale)
     if y_scale == "log":
-        ax.set_ylim(10**-2, 10**3)
+        ax.set_ylim(10, 10**11)
 
 
-def plot_cps(hist_set, plot_name, lumifactors,
+def plot_cps(hist_set, plot_name,
              plot_kwargs, show=False, save_dir=None,
              channels=["ee", "emu", "mumu"], cuts="All"):
-    def _plot(plot, lumifactors, plot_kwargs,
+    def _plot(plot, plot_kwargs,
               show=False, save_dir=None, save_name=None):
-        plot.scale(lumifactors, axis="dataset")
         plot_data_mc(plot, **plot_kwargs)
         fig = plt.gcf()
         fig.suptitle(save_name)
@@ -147,7 +148,7 @@ def plot_cps(hist_set, plot_name, lumifactors,
                 if "channel" in ax_names:
                     for ch in channels:
                         plot = hists.integrate("channel", [ch])
-                        _plot(plot, lumifactors, plot_kwargs,
+                        _plot(plot, plot_kwargs,
                               show, save_dir,
                               key[0] + "_" + plot_name + "_" + ch)
             elif channels == "Sum":
@@ -167,7 +168,7 @@ data_fileset, _ = dataset_utils.expand_datasetdict(config["exp_datasets"],
                                                    store)
 data_fileset.update(mc_fileset)
 fileset = data_fileset
-plot_config = config_utils.Config("ttDM_config/plot_config2.json")
+plot_config = config_utils.Config("example/plot_config.json")
 labels = plot_config["labels"]
 colours = plot_config["colours"]
 xsecs = plot_config["cross-sections"]
@@ -181,19 +182,15 @@ cuteffs = dict((k, np.zeros(len(
     for k in set(labels.values()))
 # currently assumes one always runs over a dilepton sample-
 # might be nice to relax this
-lumifactors = defaultdict(int)
-for dataset in fileset.keys():
-    cutvals = np.array(list(output["cutflows"]["all"][dataset].values()))
+for dataset in xsecs.keys():
+    cutf = output["cutflows"]["all"][dataset]
+    if "Gen cut" in cutf.keys():
+        cutf.pop("Gen cut")
+    cutvals = np.array(list(cutf.values()))
     if len(cutvals) == 0:
         eff = 0
-        lumifactors[dataset] = 0
     else:
         eff = cutvals[-1]/cutvals[0]
-        if dataset in mc_fileset.keys():
-            lumifactors[dataset] = 0.994800992266 * xsecs[dataset]/cutvals[0]
-            # 59.688059536
-        else:
-            lumifactors[dataset] = 1
     print(dataset, "efficiency:", eff*100)
     if len(cutvals > 0):
         cutvalues[labels[dataset]] += cutvals
@@ -209,7 +206,7 @@ for n, label in enumerate(labelsset):
 ax.set_xticks(np.arange(len(
     cuteffs[labels["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]])))
 ax.set_xticklabels(np.array(list(
-    (output["cutflow"]
+    (output["cutflows"]["all"]
         ["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]).keys()))[1:])
 ax.set_ylabel("Efficiency")
 
@@ -234,115 +231,53 @@ plot_kwargs = {"data": "Data",
                "colours": colours,
                "x_ax_name": "MET"}
 
-plot_cps(output["sel_hists"],
-         "MET",
-         lumifactors,
-         plot_kwargs,
-         False,
-         plot_config["hist_dir"],
-         "Sum",
-         ["MET > 40 GeV"])
+hist2plot = {"MET": "MET",
+             "Mll": "Mll",
+             "dilep_pt": "dilep_pt",
+             "jet_mult": "jet_mult",
+             "1st_lep_pt": "pt",
+             "2nd_lep_pt": "pt",
+             "1st_lep_eta": "eta",
+             "2nd_lep_eta": "eta"}
 
-plot_kwargs["x_ax_name"] = "Mll"
-plot_cps(output["sel_hists"],
-         "Mll",
-         lumifactors,
-         plot_kwargs,
-         False,
-         plot_config["hist_dir"],
-         "Sum",
-         ["MET > 40 GeV"])
+for hist, x_ax in hist2plot.items():
+    plot_kwargs["x_ax_name"] = x_ax
+    plot_cps(output["sel_hists"],
+             hist,
+             plot_kwargs,
+             False,
+             plot_config["hist_dir"],
+             ["is_ee", "is_em", "is_mm"],
+             ["MET > 40 GeV"])
 
-plot_kwargs["x_ax_name"] = "dilep_pt"
-plot_cps(output["sel_hists"],
-         "dilep_pt",
-         lumifactors,
-         plot_kwargs,
-         False,
-         plot_config["hist_dir"],
-         "Sum",
-         ["MET > 40 GeV"])
+hist2plot.pop("jet_mult")
 
-plot_kwargs["x_ax_name"] = "jet_mult"
-plot_cps(output["sel_hists"],
-         "jet_mult",
-         lumifactors,
-         plot_kwargs,
-         False,
-         plot_config["hist_dir"],
-         "Sum",
-         ["MET > 40 GeV"])
+for hist, x_ax in hist2plot.items():
+    plot_kwargs["x_ax_name"] = x_ax
+    plot_cps(output["sel_hists"],
+             hist,
+             plot_kwargs,
+             False,
+             plot_config["hist_dir"],
+             ["is_ee", "is_em", "is_mm"],
+             ["M_ll"])
 
-plot_kwargs["x_ax_name"] = "pt"
-plot_cps(output["sel_hists"],
-         "1st_lep_pt",
-         lumifactors,
-         plot_kwargs,
-         False,
-         plot_config["hist_dir"],
-         "Sum",
-         ["MET > 40 GeV"])
+hist = output["sel_hists"][("MET > 40 GeV", '1st_lep_eta_phi')]
+hist.scale(unblinded_LFs, "dataset")
+mc_hist = hist.remove(plot_config["process_names"]["Data"]
+                      + ["DM Chi1 S100", "DM Chi1 PS100"], "dataset")
+mc_hist = mc_hist.integrate("channel")
+mc_hist = mc_hist.integrate("dataset")
+coffea.hist.plot2d(mc_hist, "eta")
+plt.show(block=True)
 
-plot_cps(output["sel_hists"],
-         "2nd_lep_pt",
-         lumifactors,
-         plot_kwargs,
-         False,
-         plot_config["hist_dir"],
-         "Sum",
-         ["MET > 40 GeV"])
+data_hist = hist.integrate("channel")
+data_hist = data_hist.integrate("dataset",
+                                plot_config["process_names"]["Data"])
+coffea.hist.plot2d(data_hist, "eta")
+plt.show(block=True)
 
-plot_cps(output["sel_hists"],
-         "1st_jet_pt",
-         lumifactors,
-         plot_kwargs,
-         False,
-         plot_config["hist_dir"],
-         "Sum",
-         ["MET > 40 GeV"])
-
-plot_cps(output["sel_hists"],
-         "2nd_jet_pt",
-         lumifactors,
-         plot_kwargs,
-         False,
-         plot_config["hist_dir"],
-         "Sum",
-         ["MET > 40 GeV"])
-
-plot_kwargs["x_ax_name"] = "eta"
-plot_cps(output["sel_hists"],
-         "1st_lep_eta",
-         lumifactors,
-         plot_kwargs,
-         False,
-         plot_config["hist_dir"],
-         "Sum",
-         ["MET > 40 GeV"])
-
-plot_cps(output["sel_hists"],
-         "2nd_lep_eta",
-         lumifactors,
-         plot_kwargs,
-         False,
-         plot_config["hist_dir"],
-         "Sum",
-         ["MET > 40 GeV"])
-
-plot_cps(output["sel_hists"],
-         "1st_jet_eta",
-         lumifactors,
-         plot_kwargs,
-         False,
-         plot_config["hist_dir"],
-         "Sum",
-         ["MET > 40 GeV"])
-
-plot_cps(output["sel_hists"],
-         "2nd_jet_eta",
-         lumifactors,
-         plot_kwargs,
-         False,
-         plot_config["hist_dir"],
-         "Sum",
-         ["MET > 40 GeV"])
+data_hist.scale(-1)
+mc_hist.add(data_hist)
+coffea.hist.plot2d(mc_hist, "eta")
+plt.show(block=True)
