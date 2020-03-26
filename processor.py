@@ -745,8 +745,6 @@ class Processor(processor.ProcessorABC):
         num_events = selector.num_selected
         lumifactors = self.mc_lumifactors
         factor = np.full(num_events, lumifactors[dsname])
-        if self.config["blinding_denom"] is not None:
-            factor /= self.config["blinding_denom"]
         selector.modify_weight("lumi_factor", factor)
         if self.config["compute_systematics"]:
             xsuncerts = self.config["crosssection_uncertainty"]
@@ -764,6 +762,8 @@ class Processor(processor.ProcessorABC):
         if not is_mc:
             return np.mod(data["event"], self.config["blinding_denom"]) == 0
         else:
+            factor = np.full(selector.num_selected, 1/self.config["blinding_denom"])
+            selector.modify_weight("blinding_factor", factor)
             return np.full(data.size, True)
 
     def good_lumimask(self, is_mc, data):
