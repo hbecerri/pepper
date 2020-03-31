@@ -556,8 +556,8 @@ class Processor(processor.ProcessorABC):
     def process_selection(self, selector, dsname, is_mc, output):
         if self.config["compute_systematics"] and is_mc:
             self.add_generator_uncertainies(dsname, selector)
-        if is_mc:
-            self.add_crosssection_scale(selector, dsname)
+#        if is_mc:
+#            self.add_crosssection_scale(selector, dsname)
 
         if self.config["blinding_denom"] is not None:
             selector.add_cut(partial(self.blinding, is_mc), "Blinding")
@@ -762,10 +762,9 @@ class Processor(processor.ProcessorABC):
         if not is_mc:
             return np.mod(data["event"], self.config["blinding_denom"]) == 0
         else:
-            factor = np.full(selector.num_selected,
-                             1/self.config["blinding_denom"])
-            selector.modify_weight("blinding_factor", factor)
-            return np.full(data.size, True)
+            return (np.full(data.size, True),
+                    {"Blinding_sf":
+                     np.full(data.size, 1/self.config["blinding_denom"])})
 
     def good_lumimask(self, is_mc, data):
         if is_mc:
