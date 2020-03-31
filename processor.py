@@ -556,8 +556,8 @@ class Processor(processor.ProcessorABC):
     def process_selection(self, selector, dsname, is_mc, output):
         if self.config["compute_systematics"] and is_mc:
             self.add_generator_uncertainies(dsname, selector)
-#        if is_mc:
-#            self.add_crosssection_scale(selector, dsname)
+        if is_mc:
+            self.add_crosssection_scale(selector, dsname)
 
         if self.config["blinding_denom"] is not None:
             selector.add_cut(partial(self.blinding, is_mc), "Blinding")
