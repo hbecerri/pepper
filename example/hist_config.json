@@ -216,7 +216,7 @@
         ],
         "fill":{
             "jet_mult": [
-                {"function": "jet_mult"}
+                "Jet", "counts"
             ]
         }
     }

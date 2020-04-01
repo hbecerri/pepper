@@ -34,8 +34,6 @@ export PYTHONPATH=\
 /nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea:$PYTHONPATH
 """
 
-hist_dict = create_hist_dict("example/hist_config.json")
-
 nproc = 1
 condor_cfg = """
 Requirements = OpSysAndVer == "CentOS7"
@@ -89,9 +87,9 @@ destdir = \
     chunksize=100000)
 """
 output = coffea.processor.run_uproot_job(
-    fileset,
+    smallfileset,
     treename="Events",
-    processor_instance=Processor(config, None, hist_dict),
+    processor_instance=Processor(config, None),
     executor=parsl_executor,
     executor_args={"tailtimeout": None},
     chunksize=500000)
