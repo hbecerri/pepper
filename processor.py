@@ -624,7 +624,7 @@ class Processor(processor.ProcessorABC):
         return selector
 
     def process_reco(self, selector, dsname, is_mc, output):
-        selector.set_multiple_columns(self.ttbar_system)
+        selector.set_column(self.ttbar_system, "top")
         selector.add_cut(self.dummy_cut, "Dummy")
         selector.add_cut(self.passing_reco, "Reco")
 
@@ -1311,10 +1311,8 @@ class Processor(processor.ProcessorABC):
             lep, antilep, b, antib, met, mwp=mw, mwm=mw,
             energyfl=energyfl, energyfj=energyfj, alphal=alphal, alphaj=alphaj,
             hist_mlb=mlb)
-        top = Jca.candidatesfromcounts(top.counts, p4=top.flatten())
-        antitop = Jca.candidatesfromcounts(antitop.counts,
-                                           p4=antitop.flatten())
-        return {"top": top, "antitop": antitop}
+        top = awkward.concatenate([top, antitop], axis=1)
+        return Jca.candidatesfromcounts(top.counts, p4=top.flatten())
 
     def dummy_cut(self, data):
         return np.full(data.size, True)
