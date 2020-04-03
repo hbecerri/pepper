@@ -1300,17 +1300,32 @@ class Processor(processor.ProcessorABC):
         b = data["bquark"].p4
         antib = data["bantiquark"].p4
         met = data["met"].p4
+
         with uproot.open(self.hist_mlb_path) as f:
-            mw = f["mw"]
-            energyfl = f["energyfl"]
-            energyfj = f["energyfj"]
-            alphal = f["alphal"]
-            alphaj = f["alphaj"]
-            mlb = f["mlb"]
+            if self.config["reco_num_smear"] is None:
+                energyfl = energyfj = 1
+                alphal = alphaj = 0
+                num_smear = 1
+                mlb = None
+            else:
+                energyfl = f["energyfl"]
+                energyfj = f["energyfj"]
+                alphal = f["alphal"]
+                alphaj = f["alphaj"]
+                mlb = f["mlb"]
+                num_smear = self.config["reco_num_smear"]
+            if isinstance(self.config["reco_w+_mass"], (int, float)):
+                mwp = self.config["reco_w+_mass"]
+            else:
+                mwp = f[self.config["reco_w+_mass"]]
+            if isinstance(self.config["reco_w-_mass"], (int, float)):
+                mwm = self.config["reco_w-_mass"]
+            else:
+                mwm = f[self.config["reco_w-_mass"]]
         top, antitop = kinreco(
-            lep, antilep, b, antib, met, mwp=mw, mwm=mw,
+            lep, antilep, b, antib, met, mwp=mwp, mwm=mwm,
             energyfl=energyfl, energyfj=energyfj, alphal=alphal, alphaj=alphaj,
-            hist_mlb=mlb)
+            hist_mlb=mlb, num_smear=num_smear)
         top = awkward.concatenate([top, antitop], axis=1)
         return Jca.candidatesfromcounts(top.counts, p4=top.flatten())
 
