@@ -4,6 +4,7 @@ import uproot_methods
 import coffea
 from coffea.analysis_objects import JaggedCandidateArray
 import awkward
+from .utils import jaggeddepth, jaggedfromnumpy
 
 
 def _maybe_sample(s, size):
@@ -93,10 +94,12 @@ def roots_vectorized(poly, axis=-1):
     return roots
 
 
-def kinreco(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
-            mtb=172.5, num_smear=100, energyfl=1, energyfj=1, alphal=0,
-            alphaj=0, hist_mlb=None, verbosity=0):
-    """Inputs should be Lorentz vectors rather than candidate arrays"""
+def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
+                 mtb=172.5, num_smear=100, energyfl=1, energyfj=1, alphal=0,
+                 alphaj=0, hist_mlb=None, verbosity=0):
+    """Full kinematic reconstruction for dileptonic ttbar using Sonnenschein's
+    method https://arxiv.org/pdf/hep-ph/0603011.pdf
+    Inputs should be Lorentz vectors rather than candidate arrays"""
 
     if jaggeddepth(lep) > 1:
         # Get rid of jagged dimension, as we have one particle per row and
@@ -141,8 +144,6 @@ def kinreco(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     else:
         weights = np.ones_like(lE)
 
-    # Reduce all constraints to a single equation by Sonnenschein's method:
-    # https://arxiv.org/pdf/hep-ph/0603011.pdf
     a1 = ((bE + alE) * (mwp ** 2 - mal ** 2)
           - alE * (mt ** 2 - mb ** 2 - mal ** 2) + 2 * bE * alE ** 2
           - 2 * alE * (bx * alx + by * aly + bz * alz))

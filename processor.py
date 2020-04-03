@@ -19,7 +19,7 @@ import utils.config
 import utils.misc
 from utils.accumulator import PackedSelectionAccumulator
 import utils.btagging
-from kin_reco.sonnenschein import kinreco
+from utils.kinreco import sonnenschein
 
 
 class LazyTable(object):
@@ -1322,7 +1322,7 @@ class Processor(processor.ProcessorABC):
                 mwm = self.config["reco_w-_mass"]
             else:
                 mwm = f[self.config["reco_w-_mass"]]
-        top, antitop = kinreco(
+        top, antitop = sonnenschein(
             lep, antilep, b, antib, met, mwp=mwp, mwm=mwm,
             energyfl=energyfl, energyfj=energyfj, alphal=alphal, alphaj=alphaj,
             hist_mlb=mlb, num_smear=num_smear)
