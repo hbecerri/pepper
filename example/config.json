@@ -360,7 +360,7 @@
     },
 
     "do_ttbar_reconstruction": true,
-    "genhist_path": "$DATADIR/kinreco.root",
+    "kinreco_info_file": "$DATADIR/kinreco.root",
     "do_ttbar_reconstruction": true,
     "reco_w+_mass": "mw",
     "reco_w-_mass": "mw",

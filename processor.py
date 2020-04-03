@@ -453,8 +453,8 @@ class Processor(processor.ProcessorABC):
 
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
-        if "genhist_path" in self.config:
-            self.hist_mlb_path = self.config["genhist_path"]
+        if "kinreco_info_file" in self.config:
+            self.kinreco_info_filepath = self.config["kinreco_info_file"]
         else:
             print("No Mlb hist for picking b jets specified")
         self.mc_lumifactors = config["mc_lumifactors"]
@@ -1284,7 +1284,7 @@ class Processor(processor.ProcessorABC):
         bbars = utils.misc.concatenate(b1, b0)
         alb = bs.cross(antilep)
         lbbar = bbars.cross(lep)
-        hist_mlb = uproot.open(self.hist_mlb_path)["mlb"]
+        hist_mlb = uproot.open(self.kinreco_info_filepath)["mlb"]
         p_m_alb = awkward.JaggedArray.fromcounts(
             bs.counts, hist_mlb.allvalues[np.searchsorted(
                 hist_mlb.alledges, alb.mass.content)-1])
@@ -1301,7 +1301,7 @@ class Processor(processor.ProcessorABC):
         antib = data["bantiquark"].p4
         met = data["met"].p4
 
-        with uproot.open(self.hist_mlb_path) as f:
+        with uproot.open(self.kinreco_info_filepath) as f:
             if self.config["reco_num_smear"] is None:
                 energyfl = energyfj = 1
                 alphal = alphaj = 0
