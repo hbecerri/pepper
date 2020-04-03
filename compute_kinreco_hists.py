@@ -32,6 +32,9 @@ class Processor(Processor):
         mw_axis = coffea.hist.Bin(
             "mw", r"$m_{\mathrm{W}}$ (GeV)", 160, 40, 120)
         mw = coffea.hist.Hist("Counts", mw_axis)
+        mt_axis = coffea.hist.Bin(
+            "mt", r"$m_{\mathrm{t}}$ (GeV)", 180, 160, 190)
+        mt = coffea.hist.Hist("Counts", mt_axis)
         alphal_axis = coffea.hist.Bin("alpha", r"$\alpha$ (rad)", 20, 0, 0.02)
         alphal = coffea.hist.Hist("Counts", alphal_axis)
         alphaj_axis = coffea.hist.Bin("alpha", r"$\alpha$ (rad)", 100, 0, 0.2)
@@ -43,8 +46,8 @@ class Processor(Processor):
             "energyf", r"$E_{\mathrm{gen}} / E_{\mathrm{reco}}", 200, 0, 3)
         energyfj = coffea.hist.Hist("Counts", energyfj_axis)
         return coffea.processor.dict_accumulator(
-            {"mlb": mlb, "mw": mw, "alphal": alphal, "alphaj": alphaj,
-             "energyfl": energyfl, "energyfj": energyfj})
+            {"mlb": mlb, "mw": mw, "mt": mt, "alphal": alphal,
+             "alphaj": alphaj, "energyfl": energyfl, "energyfj": energyfj})
 
     def setup_selection(self, data, dsname, is_mc, output):
         return Selector(data, data["genWeight"])
@@ -106,12 +109,16 @@ class Processor(Processor):
         cols["genw"] = part[(abspdg == 24) & (part.motherid == sgn * 6)]
         cols["genw"] = self.sortby(cols["genw"], "pdgId")
 
+        cols["gent"] = part[(abspdg == 6)]
+        cols["gent"] = self.sortby(cols["gent"], "pdgId")
+
         return cols
 
     def has_gen_particles(self, data):
         return ((data["genlepton"].counts == 2)
                 & (data["genb"].counts == 2)
-                & (data["genw"].counts == 2))
+                & (data["genw"].counts == 2)
+                & (data["gent"].counts == 2))
 
     def fill_before_selection(self, data, sys, output):
         lep = data["genlepton"][:, 0]
@@ -119,6 +126,7 @@ class Processor(Processor):
         b = data["genb"][:, 0]
         antib = data["genb"][:, 1]
         w = data["genw"]
+        t = data["gent"]
         weight = sys["weight"].flatten()
 
         mlbarb = (antilep["p4"] + b["p4"]).mass.flatten()
@@ -126,6 +134,7 @@ class Processor(Processor):
         output["mlb"].fill(mlb=mlbarb, weight=weight)
         output["mlb"].fill(mlb=mlbbar, weight=weight)
         output["mw"].fill(mw=w.mass.flatten(), weight=np.repeat(weight, 2))
+        output["mt"].fill(mt=t.mass.flatten(), weight=np.repeat(weight, 2))
 
     def match_leptons(self, data):
         recolep = self.sortby(data["Lepton"][:, :2], "pdgId")
@@ -263,6 +272,6 @@ output = coffea.processor.run_uproot_job(
     chunksize=args.chunksize)
 
 with uproot.recreate(args.output) as f:
-    items = ("mlb", "mw", "alphal", "energyfl", "alphaj", "energyfj")
+    items = ("mlb", "mw", "mt", "alphal", "energyfl", "alphaj", "energyfj")
     for key in items:
         f[key] = export(output[key])
