@@ -188,7 +188,7 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     a4 = 2 * (bE * alz - alE * bz)
 
     b1 = ((abE + lE) * (mwm ** 2 - ml ** 2)
-          - lE * (mtb ** 2 - mb ** 2 - ml ** 2) + 2 * abE * lE ** 2
+          - lE * (mtb ** 2 - mbb ** 2 - ml ** 2) + 2 * abE * lE ** 2
           - 2 * lE * (abx * lx + aby * ly + abz * lz))
     b2 = 2 * (abE * lx - lE * abx)
     b3 = 2 * (abE * ly - lE * aby)
