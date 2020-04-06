@@ -455,8 +455,9 @@ class Processor(processor.ProcessorABC):
         self.trigger_order = config["dataset_trigger_order"]
         if "kinreco_info_file" in self.config:
             self.kinreco_info_filepath = self.config["kinreco_info_file"]
-        else:
-            print("No Mlb hist for picking b jets specified")
+        elif self.config["do_ttbar_reconstruction"]:
+            raise utils.config.ConfigError(
+                "Need kinreco_info_file for kinematic reconstruction")
         self.mc_lumifactors = config["mc_lumifactors"]
 
     @staticmethod
