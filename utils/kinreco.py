@@ -4,7 +4,7 @@ import uproot_methods
 import coffea
 from coffea.analysis_objects import JaggedCandidateArray
 import awkward
-from misc import jaggeddepth, jaggedfromnumpy
+from utils.misc import jaggeddepth, jaggedfromnumpy
 
 
 def _maybe_sample(s, size):
