@@ -19,7 +19,7 @@ import utils.config
 import utils.misc
 from utils.accumulator import PackedSelectionAccumulator
 import utils.btagging
-from kin_reco.sonnenschein import kinreco
+from utils.kinreco import sonnenschein
 
 
 class LazyTable(object):
@@ -453,10 +453,11 @@ class Processor(processor.ProcessorABC):
 
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
-        if "genhist_path" in self.config:
-            self.hist_mlb_path = self.config["genhist_path"]
-        else:
-            print("No Mlb hist for picking b jets specified")
+        if "kinreco_info_file" in self.config:
+            self.kinreco_info_filepath = self.config["kinreco_info_file"]
+        elif self.config["do_ttbar_reconstruction"]:
+            raise utils.config.ConfigError(
+                "Need kinreco_info_file for kinematic reconstruction")
         self.mc_lumifactors = config["mc_lumifactors"]
 
     @staticmethod
@@ -604,10 +605,7 @@ class Processor(processor.ProcessorABC):
     def setup_reco(self, data, systematics, dsname, is_mc, output):
         lep, antilep = self.pick_leps(data)
         b, bbar = self.choose_bs(data, lep, antilep)
-        neutrino, antineutrino = kinreco(lep["p4"], antilep["p4"],
-                                         b["p4"], bbar["p4"],
-                                         data["MET_pt"],
-                                         data["MET_phi"])
+        met = data["MET"]
         if is_mc:
             weight = systematics["weight"].flatten()
         else:
@@ -621,18 +619,15 @@ class Processor(processor.ProcessorABC):
                            accumulator=output["cutflows"],
                            dsname=dsname)]
         reco_table = awkward.Table(
-            lep=lep, antilep=antilep, b=b, bbar=bbar, neutrino=neutrino,
-            antineutrino=antineutrino)
+            {"lepton": lep, "antilepton": antilep, "bquark": b,
+             "bantiquark": bbar, "met": met})
         selector = Selector(reco_table, weight, reco_cb)
         return selector
 
     def process_reco(self, selector, dsname, is_mc, output):
+        selector.set_column(self.ttbar_system, "top")
+        selector.add_cut(self.dummy_cut, "Dummy")
         selector.add_cut(self.passing_reco, "Reco")
-        selector.set_column(self.wminus, "Wminus")
-        selector.set_column(self.wplus, "Wplus")
-        selector.set_column(self.top, "top")
-        selector.set_column(self.antitop, "antitop")
-        selector.set_column(self.ttbar, "ttbar")
 
     def get_present_channels(self, data):
         if all(x in data.columns for x in ("is_ee", "is_mm", "is_em")):
@@ -1290,7 +1285,7 @@ class Processor(processor.ProcessorABC):
         bbars = utils.misc.concatenate(b1, b0)
         alb = bs.cross(antilep)
         lbbar = bbars.cross(lep)
-        hist_mlb = uproot.open(self.hist_mlb_path)["Mlb"]
+        hist_mlb = uproot.open(self.kinreco_info_filepath)["mlb"]
         p_m_alb = awkward.JaggedArray.fromcounts(
             bs.counts, hist_mlb.allvalues[np.searchsorted(
                 hist_mlb.alledges, alb.mass.content)-1])
@@ -1300,20 +1295,43 @@ class Processor(processor.ProcessorABC):
         bestbpair_mlb = (p_m_alb*p_m_lbbar).argmax()
         return bs[bestbpair_mlb], bbars[bestbpair_mlb]
 
+    def ttbar_system(self, data):
+        lep = data["lepton"].p4
+        antilep = data["antilepton"].p4
+        b = data["bquark"].p4
+        antib = data["bantiquark"].p4
+        met = data["met"].p4
+
+        with uproot.open(self.kinreco_info_filepath) as f:
+            if self.config["reco_num_smear"] is None:
+                energyfl = energyfj = 1
+                alphal = alphaj = 0
+                num_smear = 1
+                mlb = None
+            else:
+                energyfl = f["energyfl"]
+                energyfj = f["energyfj"]
+                alphal = f["alphal"]
+                alphaj = f["alphaj"]
+                mlb = f["mlb"]
+                num_smear = self.config["reco_num_smear"]
+            if isinstance(self.config["reco_w_mass"], (int, float)):
+                mw = self.config["reco_w_mass"]
+            else:
+                mw = f[self.config["reco_w_mass"]]
+            if isinstance(self.config["reco_t_mass"], (int, float)):
+                mt = self.config["reco_t_mass"]
+            else:
+                mt = f[self.config["reco_t_mass"]]
+        top, antitop = sonnenschein(
+            lep, antilep, b, antib, met, mw=mw, mt=mt,
+            energyfl=energyfl, energyfj=energyfj, alphal=alphal, alphaj=alphaj,
+            hist_mlb=mlb, num_smear=num_smear)
+        top = awkward.concatenate([top, antitop], axis=1)
+        return Jca.candidatesfromcounts(top.counts, p4=top.flatten())
+
+    def dummy_cut(self, data):
+        return np.full(data.size, True)
+
     def passing_reco(self, data):
-        return data["neutrino"].counts > 0
-
-    def wminus(self, data):
-        return data["antineutrino"].cross(data["lep"])
-
-    def wplus(self, data):
-        return data["neutrino"].cross(data["antilep"])
-
-    def top(self, data):
-        return data["Wplus"].cross(data["b"])
-
-    def antitop(self, data):
-        return data["Wminus"].cross(data["bbar"])
-
-    def ttbar(slef, data):
-        return data["top"].p4 + data["antitop"].p4
+        return data["top"].counts > 0

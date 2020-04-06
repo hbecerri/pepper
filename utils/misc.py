@@ -306,7 +306,7 @@ def hist_divide(num, denom):
 
 def jcafromjagged(**fields):
     """Create JaggedCandidateArray from JaggedArrays
-    This eliminates the needs to flatten every JaggedArray.
+    This eliminates the need to flatten every JaggedArray.
     """
     counts = None
     flattened = {}
@@ -318,3 +318,22 @@ def jcafromjagged(**fields):
                              "({counts} and {val.counts})")
         flattened[key] = val.flatten()
     return Jca.candidatesfromcounts(counts, **flattened)
+
+
+def jaggedfromnumpy(arr):
+    """Does what awkward.fromiter on numpy arrays would do, just faster"""
+    shape = arr.shape
+    arr = arr.flatten()
+    for n in reversed(shape[1:]):
+        counts = np.full(arr.shape[0] // n, n)
+        arr = awkward.JaggedArray.fromcounts(counts, arr)
+    return arr
+
+
+def jaggeddepth(arr):
+    """Get the number of jagged dimensions of a JaggedArray"""
+    depth = 0
+    while not isinstance(arr, (awkward.Table, np.ndarray)):
+        depth += 1
+        arr = arr.content
+    return depth
