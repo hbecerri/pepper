@@ -72,7 +72,7 @@ def _smear(fourvec, energyf, alpha, num):
     return e, p3[..., 0], p3[..., 1], p3[..., 2]
 
 
-def roots_vectorized(poly, axis=-1):
+def _roots_vectorized(poly, axis=-1):
     """Like numpy.roots just that it can take any number of axes, allowing to
     compute the roots of any number of polynomials at once"""
     if poly.ndim == 1:
@@ -231,7 +231,7 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     h = np.stack([h0, h1, h2, h3, h4], axis=-1)
     h = h[np.isfinite(h).all(axis=-1)].reshape(h.shape)
 
-    roots = roots_vectorized(h)
+    roots = _roots_vectorized(h)
     vpx = roots.real
     is_real = abs(roots.imag) < 10 ** -6
     # Do not throw out complex roots to be able to keep numpy arrays
