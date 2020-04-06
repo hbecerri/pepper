@@ -58,16 +58,25 @@ def _rotate_axis(vec, axis, angle):
 
 def _smear(fourvec, energyf, alpha, num):
     num_events = fourvec.size
-    m = fourvec.mass[:, None]
-    e = fourvec.E[:, None] * _maybe_sample(energyf, (num_events, num))
-    # Cap energy to something bit above the mass
-    e[e < m] = 1.01 * np.broadcast_to(m, e.shape)[e < m]
-    # Rotate around a random orthogonal axis by alpha
+    e = fourvec.E[:, None]
     p3 = np.stack([fourvec.x, fourvec.y, fourvec.z], axis=-1)[:, None, :]
-    r = _random_orthogonal(p3)
-    p3 = _rotate_axis(p3, r, _maybe_sample(alpha, (num_events, num)))
+    m = fourvec.mass[:, None]
+    if num is None:
+        return e, p3[..., 0], p3[..., 1], p3[..., 2]
+
+    e = np.broadcast_to(e, (num_events, num))
+    p3 = np.broadcast_to(p3, (num_events, num, 3))
+    m = np.broadcast_to(m, (num_events, num))
+    if energyf is not None and num is not None:
+        e = e * _maybe_sample(energyf, (num_events, num))
+        # Cap energy to something bit above the mass
+        e[e < m] = 1.01 * m[e < m]
+    if alpha is not None and num is not None:
+        # Rotate around a random orthogonal axis by alpha
+        r = _random_orthogonal(p3)
+        p3 = _rotate_axis(p3, r, _maybe_sample(alpha, (num_events, num)))
     # Keep mass constant
-    p3 *= np.sqrt((e**2 - m**2) / (p3**2).sum(axis=-1))[..., None]
+    p3 = p3 * np.sqrt((e**2 - m**2) / (p3**2).sum(axis=-1))[..., None]
 
     return e, p3[..., 0], p3[..., 1], p3[..., 2]
 
@@ -95,8 +104,8 @@ def _roots_vectorized(poly, axis=-1):
 
 
 def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
-                 mtb=172.5, num_smear=100, energyfl=1, energyfj=1, alphal=0,
-                 alphaj=0, hist_mlb=None):
+                 mtb=172.5, num_smear=None, energyfl=None, energyfj=None,
+                 alphal=None, alphaj=None, hist_mlb=None):
     """Full kinematic reconstruction for dileptonic ttbar using Sonnenschein's
     method https://arxiv.org/pdf/hep-ph/0603011.pdf
     Inputs should be Lorentz vectors rather than candidate arrays"""
@@ -116,6 +125,8 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     alE, alx, aly, alz = _smear(antilep, energyfl, alphal, num_smear)
     bE, bx, by, bz = _smear(b, energyfj, alphaj, num_smear)
     abE, abx, aby, abz = _smear(antib, energyfj, alphaj, num_smear)
+    # Even if num_smear is None, we have a smear axis. Update num_smear
+    num_smear = max(lE.shape[1], bE.shape[1])
     # Unpack MET compontents and also propagate smearing to it
     METx = (met.x[:, None] + lx - lep.x[:, None] + alx - antilep.x[:, None]
                            + bx - b.x[:, None] + abx - antib.x[:, None])
@@ -229,7 +240,6 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
           + c00 * c22 * (d11 ** 2 - 2 * d00 * d22)
           + c22 * d00 * (c22 * d00 - c11 * d11))
     h = np.stack([h0, h1, h2, h3, h4], axis=-1)
-    h = h[np.isfinite(h).all(axis=-1)].reshape(h.shape)
 
     roots = _roots_vectorized(h)
     vpx = roots.real
