@@ -362,9 +362,7 @@
     "do_ttbar_reconstruction": true,
     "kinreco_info_file": "$DATADIR/kinreco.root",
     "do_ttbar_reconstruction": true,
-    "reco_w+_mass": "mw",
-    "reco_w-_mass": "mw",
+    "reco_w_mass": "mw",
     "reco_t_mass:": 172.5,
-    "reco_tbar_mass": 172.5,
     "reco_num_smear": 100
 }

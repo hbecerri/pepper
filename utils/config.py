@@ -220,7 +220,8 @@ class Config(object):
             hists = {k: HistDefinition(c) for k, c in hists.items()}
             self._cache[key] = hists
             return hists
-        elif key in ("genhist_path", "store", "lumimask", "mc_lumifactors"):
+        elif key in ("kinreco_info_file", "store", "lumimask",
+                     "mc_lumifactors"):
             self._cache[key] = self._get_path(key)
             return self._cache[key]
 

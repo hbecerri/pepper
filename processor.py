@@ -1314,16 +1314,12 @@ class Processor(processor.ProcessorABC):
                 alphaj = f["alphaj"]
                 mlb = f["mlb"]
                 num_smear = self.config["reco_num_smear"]
-            if isinstance(self.config["reco_w+_mass"], (int, float)):
-                mwp = self.config["reco_w+_mass"]
+            if isinstance(self.config["reco_w_mass"], (int, float)):
+                mw = self.config["reco_w_mass"]
             else:
-                mwp = f[self.config["reco_w+_mass"]]
-            if isinstance(self.config["reco_w-_mass"], (int, float)):
-                mwm = self.config["reco_w-_mass"]
-            else:
-                mwm = f[self.config["reco_w-_mass"]]
+                mw = f[self.config["reco_w_mass"]]
         top, antitop = sonnenschein(
-            lep, antilep, b, antib, met, mwp=mwp, mwm=mwm,
+            lep, antilep, b, antib, met, mw=mw,
             energyfl=energyfl, energyfj=energyfj, alphal=alphal, alphaj=alphaj,
             hist_mlb=mlb, num_smear=num_smear)
         top = awkward.concatenate([top, antitop], axis=1)

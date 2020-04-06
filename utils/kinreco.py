@@ -103,9 +103,9 @@ def _roots_vectorized(poly, axis=-1):
     return roots
 
 
-def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
-                 mtb=172.5, num_smear=None, energyfl=None, energyfj=None,
-                 alphal=None, alphaj=None, hist_mlb=None):
+def sonnenschein(lep, antilep, b, antib, met, mw=80.3, mt=172.5,
+                 num_smear=None, energyfl=None, energyfj=None, alphal=None,
+                 alphaj=None, hist_mlb=None):
     """Full kinematic reconstruction for dileptonic ttbar using Sonnenschein's
     method https://arxiv.org/pdf/hep-ph/0603011.pdf
     Arguments:
@@ -118,10 +118,8 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
              per event
     met -- TLorentzVectorArray holding with one entry per event, yielding
            the MET pt and phi
-    mwp -- Mass of the W+ boson. Either a number or a histogram, to sample from
-    mwm -- Same as mwp for the W- boson
-    mt  -- Same as mwp for the top quark
-    mtb -- Same as mwp for the top antiquark
+    mw -- Mass of the W bosons. Either a number or a histogram, to sample from
+    mt  -- Same as mwp for the top quarks
     num_smear -- Number of times an event is smeared. If None, smearing is off
     energyfl -- Histogram giving Ereco/Egen for the leptons. If None, lepton
                 energy won't be smeared
@@ -156,10 +154,10 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     METy = (met.y[:, None] + ly - lep.y[:, None] + aly - antilep.y[:, None]
                            + by - b.y[:, None] + aby - antib.y[:, None])
 
-    mwp = _maybe_sample(mwp, (num_events, 1))
-    mwm = _maybe_sample(mwm, (num_events, 1))
+    mwp = _maybe_sample(mw, (num_events, 1))
+    mwm = _maybe_sample(mw, (num_events, 1))
+    mtb = _maybe_sample(mt, (num_events, 1))
     mt = _maybe_sample(mt, (num_events, 1))
-    mtb = _maybe_sample(mtb, (num_events, 1))
     ml = np.sqrt(lE**2 - lx**2 - ly**2 - lz**2)
     mal = np.sqrt(alE**2 - alx**2 - aly**2 - alz**2)
     mb = np.sqrt(bE**2 - bx**2 - by**2 - bz**2)
