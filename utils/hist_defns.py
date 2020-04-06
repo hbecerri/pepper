@@ -66,10 +66,10 @@ class HistDefinition():
             if data is None:
                 continue
             elif isinstance(data, awkward.JaggedArray):
-                if counts is not None and counts != data.counts:
+                if counts is not None and (counts != data.counts).any():
                     raise HistDefinitionError(
                         f"Got JaggedArrays for histogram filling with "
-                        "inconsistent counts ({counts} and {data.counts}")
+                        f"inconsistent counts ({counts} and {data.counts}")
                 counts = data.counts
                 jagged.append(key)
             else:
@@ -118,7 +118,7 @@ class HistDefinition():
                 except AttributeError:
                     try:
                         data = data[sel]
-                    except KeyError:
+                    except (KeyError, ValueError):
                         break
                 if callable(data):
                     data = data()
