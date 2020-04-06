@@ -4,7 +4,7 @@ import uproot_methods
 import coffea
 from coffea.analysis_objects import JaggedCandidateArray
 import awkward
-from .utils import jaggeddepth, jaggedfromnumpy
+from misc import jaggeddepth, jaggedfromnumpy
 
 
 def _maybe_sample(s, size):
@@ -334,7 +334,7 @@ if __name__ == '__main__':
     met = JaggedCandidateArray.candidatesfromcounts(
         [1], pt=sump4.pt[0], eta=np.zeros(1), phi=sump4.phi[0],
         mass=np.zeros(1))
-    top, antitop = kinreco(
+    top, antitop = sonnenschein(
         lep["p4"], antilep["p4"], b["p4"], antib["p4"], met["p4"])
     print("MC Truth:", (antilep.p4 + nu.p4 + b.p4)[0],
                        (lep.p4 + antinu.p4 + antib.p4)[0])
@@ -361,5 +361,5 @@ if __name__ == '__main__':
         np.full(n, 71.5709656))
 
     t = time.time()
-    kinreco(lep, alep, b, ab, met)
+    sonnenschein(lep, alep, b, ab, met)
     print("Took {} s for {} events".format(time.time() - t, n))
