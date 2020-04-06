@@ -1318,8 +1318,12 @@ class Processor(processor.ProcessorABC):
                 mw = self.config["reco_w_mass"]
             else:
                 mw = f[self.config["reco_w_mass"]]
+            if isinstance(self.config["reco_t_mass"], (int, float)):
+                mt = self.config["reco_t_mass"]
+            else:
+                mt = f[self.config["reco_t_mass"]]
         top, antitop = sonnenschein(
-            lep, antilep, b, antib, met, mw=mw,
+            lep, antilep, b, antib, met, mw=mw, mt=mt,
             energyfl=energyfl, energyfj=energyfj, alphal=alphal, alphaj=alphaj,
             hist_mlb=mlb, num_smear=num_smear)
         top = awkward.concatenate([top, antitop], axis=1)
