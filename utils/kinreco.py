@@ -96,7 +96,7 @@ def _roots_vectorized(poly, axis=-1):
 
 def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
                  mtb=172.5, num_smear=100, energyfl=1, energyfj=1, alphal=0,
-                 alphaj=0, hist_mlb=None, verbosity=0):
+                 alphaj=0, hist_mlb=None):
     """Full kinematic reconstruction for dileptonic ttbar using Sonnenschein's
     method https://arxiv.org/pdf/hep-ph/0603011.pdf
     Inputs should be Lorentz vectors rather than candidate arrays"""
@@ -235,21 +235,6 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     vpx = roots.real
     is_real = abs(roots.imag) < 10 ** -6
     # Do not throw out complex roots to be able to keep numpy arrays
-
-    if(verbosity == 1):
-        print("a1=", a1[0], "a2=", a2[0], "a3=", a3[0], "a4=", a4[0])
-        print("b1=", b1[0], "b2=", b2[0], "b3=", b3[0], "b4=", b4[0])
-        print("c00=", a4[0] ** 2 * c00[0], "c10=", a4[0] ** 2 * c10[0],
-              "c11=", a4[0] ** 2 * c11[0], "c20=", a4[0] * c20[0],
-              "c21=", a4[0] ** 2 * c21[0], "c22=", a4[0] ** 2 * c22[0])
-        print("d00=", b4[0] ** 2 * d00[0], "d10=", b4[0] ** 2 * d10[0],
-              "d11=", b4[0] ** 2 * d11[0], "d20=", b4[0] * d20[0],
-              "d21=", b4[0] ** 2 * d21[0], "d22=", b4[0] ** 2 * d22[0])
-        print("h0=", a4[0] ** 4 * b4[0] ** 4 * h0[0],
-              "h1=", a4[0] ** 4 * b4[0] ** 4 * h1[0],
-              "h2=", a4[0] ** 4 * b4[0] ** 4 * h2[0],
-              "h3=", a4[0] ** 4 * b4[0] ** 4 * h3[0],
-              "h4=", a4[0] ** 4 * b4[0] ** 4 * h4[0])
 
     c0 = c00[..., None]
     c1 = c10[..., None] * vpx + c11[..., None]
