@@ -140,6 +140,10 @@ def sonnenschein(lep, antilep, b, antib, met, mw=80.3, mt=172.5,
         antib = antib.flatten()
         met = met.flatten()
 
+    # Allow num_smear to be 0
+    if num_smear == 0:
+        num_smear = None
+
     # Use 2d numpy arrays. Use first axis for events, second for smearing
     num_events = lep.size
     lE, lx, ly, lz = _smear(lep, energyfl, alphal, num_smear)
