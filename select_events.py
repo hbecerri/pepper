@@ -84,7 +84,7 @@ if args.dataset is None:
 
 if args.debug:
     print("Processing only one file because of --debug")
-    key = next(iter(datasets.keys()))
+    key = list(key for key, value in datasets.items() if len(value) > 0)[0]
     datasets = {key: datasets[key][:1]}
 
 if args.eventdir is not None:
@@ -162,12 +162,15 @@ output = coffea.processor.run_uproot_job(
     datasets, "Events", processor, executor, executor_args,
     chunksize=args.chunksize)
 
+hists = output["sel_hists"]
+hists.update(output["reco_hists"])
 jsonname = "hists.json"
 selhists_forjson = {}
-for key, hist in output["sel_hists"].items():
+for key, hist in hists.items():
     if hist.values() == {}:
         continue
-    cutnum = list(output["cutflows"]["all"].keys()).index(key[0]) + 1
+    cuts = next(iter(output["cutflows"]["all"].values())).keys()
+    cutnum = list(cuts).index(key[0]) + 1
     fname = "Cut {:03} {}.coffea".format(cutnum, "_".join(key))
     fname = fname.replace("/", "")
     coffea.util.save(hist, os.path.join(args.histdir, fname))
