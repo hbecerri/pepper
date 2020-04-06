@@ -108,6 +108,29 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
                  alphal=None, alphaj=None, hist_mlb=None):
     """Full kinematic reconstruction for dileptonic ttbar using Sonnenschein's
     method https://arxiv.org/pdf/hep-ph/0603011.pdf
+    Arguments:
+    lep -- TLorentzVectorArray holding one negativly charged lepton per event
+    antilep -- TLorentzVectorArray holding one positively charged lepton per
+               event
+    b -- TLorentzVectorArray holding one negativly charged bottom quark per
+         event
+    antib -- TLorentzVectorArray holding one positively changed bottom quark
+             per event
+    met -- TLorentzVectorArray holding with one entry per event, yielding
+           the MET pt and phi
+    mwp -- Mass of the W+ boson. Either a number or a histogram, to sample from
+    mwm -- Same as mwp for the W- boson
+    mt  -- Same as mwp for the top quark
+    mtb -- Same as mwp for the top antiquark
+    num_smear -- Number of times an event is smeared. If None, smearing is off
+    energyfl -- Histogram giving Ereco/Egen for the leptons. If None, lepton
+                energy won't be smeared
+    energyfj -- Same as energyfl for bottom quarks
+    alphal -- Histogram giving the angle between reco and gen leptons. If None,
+              lepton angles won't be smeared
+    alphaj -- Same as alphal for bottom quarks
+    hist_mlb -- Histogram of the lepton-bottom-quark-mass distribution. Is
+                needed, if num_smear is not None
     Inputs should be Lorentz vectors rather than candidate arrays"""
 
     if jaggeddepth(lep) > 1:
@@ -152,6 +175,8 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
         plab = allvalues[np.searchsorted(hist_mlb.alledges, mlab) - 1]
         palb = allvalues[np.searchsorted(hist_mlb.alledges, malb) - 1]
         weights = plab * palb
+    elif num_smear is not None and num_smear > 1:
+        raise ValueError("Smearing is enabled but got None for hist_mlb")
     else:
         weights = np.ones_like(lE)
 
