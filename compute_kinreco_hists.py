@@ -14,7 +14,8 @@ from argparse import ArgumentParser
 import utils.config
 from utils.datasets import expand_datasetdict
 from utils.misc import jcafromjagged, export
-from processor import Selector, Processor
+from utils.selector import Selector
+from utils.processor import Processor
 
 
 class Processor(Processor):

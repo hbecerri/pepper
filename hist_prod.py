@@ -22,7 +22,7 @@ import json
 
 import utils.config as config_utils
 import utils.datasets as dataset_utils
-from processor import Processor
+from utils.processor import Processor
 from utils.hist_defns import create_hist_dict
 
 

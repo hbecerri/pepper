@@ -13,7 +13,7 @@ from argparse import ArgumentParser
 
 import utils.config
 from utils.datasets import expand_datasetdict
-from processor import Processor
+from utils.processor import Processor
 
 
 parser = ArgumentParser(description="Select events from nanoAODs")
