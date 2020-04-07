@@ -11,7 +11,7 @@ import coffea
 from collections import defaultdict
 import json
 
-from utils.config import Config
+from pepper import Config
 
 
 # Luminosities needed for CMS label at the top of plots

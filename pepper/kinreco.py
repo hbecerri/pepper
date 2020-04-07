@@ -4,7 +4,8 @@ import uproot_methods
 import coffea
 from coffea.analysis_objects import JaggedCandidateArray
 import awkward
-from utils.misc import jaggeddepth, jaggedfromnumpy
+
+from pepper.misc import jaggeddepth, jaggedfromnumpy
 
 
 def _maybe_sample(s, size):
@@ -271,7 +272,6 @@ def sonnenschein(lep, antilep, b, antib, met, mw=80.3, mt=172.5,
     roots = _roots_vectorized(h)
     vpx = roots.real
     is_real = abs(roots.imag) < 10 ** -6
-    # Do not throw out complex roots to be able to keep numpy arrays
 
     c0 = c00[..., None]
     c1 = c10[..., None] * vpx + c11[..., None]

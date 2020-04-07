@@ -22,9 +22,9 @@ import mplhep
 from cycler import cycler
 import json
 
-import utils.config as config_utils
-import utils.datasets as dataset_utils
-from processor import Processor
+import pepper.config as config_utils
+import pepper.datasets as dataset_utils
+from pepper import Processor
 
 matplotlib.interactive(False)
 

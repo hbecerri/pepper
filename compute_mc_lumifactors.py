@@ -10,8 +10,7 @@ from collections import defaultdict
 import uproot
 from itertools import chain
 
-from utils.config import Config
-from utils.datasets import expand_datasetdict
+import pepper
 
 
 parser = ArgumentParser(description="Compute factors from luminosity and "
@@ -24,9 +23,9 @@ parser.add_argument("config", help="Path to the JSON config file containing "
 parser.add_argument("out", help="Path to the output file")
 args = parser.parse_args()
 
-config = Config(args.config)
+config = pepper.Config(args.config)
 store, datasets = config[["store", "mc_datasets"]]
-datasets = expand_datasetdict(datasets, store)[0]
+datasets = pepper.datasets.expand_datasetdict(datasets, store)[0]
 if "dataset_for_systematics" in config:
     dsforsys = config["dataset_for_systematics"]
 else:

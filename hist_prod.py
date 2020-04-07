@@ -20,10 +20,8 @@ from collections import defaultdict
 import os
 import json
 
-import utils.config as config_utils
-import utils.datasets as dataset_utils
-from utils.processor import Processor
-from utils.hist_defns import create_hist_dict
+import pepper
+from pepper.datasets import expand_datasetdict
 
 
 wrk_init = """
@@ -60,11 +58,10 @@ parsl_config = Config(
 )
 dfk = load(parsl_config)
 
-config = config_utils.Config("ttDM_config/config.json")
+config = pepper.Config("ttDM_config/config.json")
 store = config["store"]
-mc_fileset, _ = dataset_utils.expand_datasetdict(config["mc_datasets"], store)
-data_fileset, _ = dataset_utils.expand_datasetdict(config["exp_datasets"],
-                                                   store)
+mc_fileset, _ = expand_datasetdict(config["mc_datasets"], store)
+data_fileset, _ = expand_datasetdict(config["exp_datasets"], store)
 data_fileset.update(mc_fileset)
 fileset = data_fileset
 '''fileset = {"WW_TuneCP5_13TeV-pythia8": fileset["WW_TuneCP5_13TeV-pythia8"],
@@ -73,7 +70,7 @@ fileset = data_fileset
 {"TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8":
     fileset["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]}'''
 # smallfileset, _ = \
-#    dataset_utils.expand_datasetdict(config["testdataset"], store)
+#    expand_datasetdict(config["testdataset"], store)
 smallfileset = {key: [val[0]] for key, val in fileset.items()}
 destdir = \
     "/nfs/dust/cms/user/stafford/coffea/desy-ttbarbsm-coffea/selected_columns"
@@ -81,7 +78,7 @@ destdir = \
 """output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
-    processor_instance=Processor(config, None, hist_dict),
+    processor_instance=pepper.Processor(config, None, hist_dict),
     executor=coffea.processor.iterative_executor,
     executor_args={"workers": 4},
     chunksize=100000)
@@ -89,7 +86,7 @@ destdir = \
 output = coffea.processor.run_uproot_job(
     smallfileset,
     treename="Events",
-    processor_instance=Processor(config, None),
+    processor_instance=pepper.Processor(config, None),
     executor=parsl_executor,
     executor_args={"tailtimeout": None},
     chunksize=500000)

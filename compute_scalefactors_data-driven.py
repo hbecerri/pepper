@@ -4,8 +4,8 @@ from collections import defaultdict
 from pprint import pprint
 import numpy as np
 
-from utils.config import Config
-from utils.misc import get_event_files, montecarlo_iterate, expdata_iterate
+import pepper
+from pepper.misc import get_event_files, montecarlo_iterate, expdata_iterate
 
 
 def get_channel_masks(data):
@@ -32,7 +32,7 @@ parser.add_argument(
     "the Z window cut.")
 args = parser.parse_args()
 
-config = Config(args.config)
+config = pepper.Config(args.config)
 
 exp_datasets = get_event_files(
     args.eventdir, args.eventext, config["exp_datasets"])

@@ -5,8 +5,9 @@ import numpy as np
 import coffea
 from argparse import ArgumentParser
 
-from utils.config import Config
-from utils.misc import get_event_files, montecarlo_iterate, export, hist_divide
+from pepper import Config
+from pepper.misc import (get_event_files, montecarlo_iterate, export,
+                         hist_divide)
 
 
 def unpack_cuts(cutflags, num_cuts):

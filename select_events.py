@@ -11,9 +11,8 @@ import json
 from parsl.addresses import address_by_hostname
 from argparse import ArgumentParser
 
-import utils.config
-from utils.datasets import expand_datasetdict
-from utils.processor import Processor
+from pepper import Config, Processor
+from pepper.datasets import expand_datasetdict
 
 
 parser = ArgumentParser(description="Select events from nanoAODs")
@@ -47,7 +46,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 
-config = utils.config.Config(args.config)
+config = Config(args.config)
 store = config["store"]
 
 

@@ -12,12 +12,9 @@ import uproot
 from uproot_methods import TLorentzVectorArray
 import h5py
 
-import utils.config
-import utils.misc
-import utils.btagging
-from utils.kinreco import sonnenschein
-from utils.selector import Selector
-from utils.lazytable import LazyTable
+import pepper
+from pepper import sonnenschein, Selector, LazyTable
+import pepper.config
 
 
 class Processor(processor.ProcessorABC):
@@ -82,7 +79,7 @@ class Processor(processor.ProcessorABC):
         if "kinreco_info_file" in self.config:
             self.kinreco_info_filepath = self.config["kinreco_info_file"]
         elif self.config["do_ttbar_reconstruction"]:
-            raise utils.config.ConfigError(
+            raise pepper.config.ConfigError(
                 "Need kinreco_info_file for kinematic reconstruction")
         self.mc_lumifactors = config["mc_lumifactors"]
 
@@ -190,7 +187,7 @@ class Processor(processor.ProcessorABC):
             selector.add_cut(partial(self.blinding, is_mc), "Blinding")
         selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
 
-        pos_triggers, neg_triggers = utils.misc.get_trigger_paths_for(
+        pos_triggers, neg_triggers = pepper.misc.get_trigger_paths_for(
             dsname, is_mc, self.trigger_paths, self.trigger_order)
         selector.add_cut(partial(
             self.passing_trigger, pos_triggers, neg_triggers), "Trigger")
@@ -687,7 +684,7 @@ class Processor(processor.ProcessorABC):
         elif j_id == "cut:tightlepveto":
             has_id = (data["Jet_jetId"] & 0b100).astype(bool)
         else:
-            raise utils.config.ConfigError(
+            raise pepper.config.ConfigError(
                     "Invalid good_jet_id: {}".format(j_id))
         if j_puId == "skip":
             has_puId = True
@@ -698,7 +695,7 @@ class Processor(processor.ProcessorABC):
         elif j_puId == "cut:tight":
             has_puId = (data["Jet_puId"] & 0b1).astype(bool)
         else:
-            raise utils.config.ConfigError(
+            raise pepper.config.ConfigError(
                     "Invalid good_jet_id: {}".format(j_puId))
         # Only apply PUID if pT < 50 GeV
         has_puId = has_puId | (data["Jet_pt"] >= 50)
@@ -747,12 +744,12 @@ class Processor(processor.ProcessorABC):
         elif tagger == "deepjet":
             disc = data["Jet_btagDeepFlavB"][gj]
         else:
-            raise utils.config.ConfigError(
+            raise pepper.config.ConfigError(
                 "Invalid tagger name: {}".format(tagger))
         year = self.config["year"]
-        wptuple = utils.btagging.BTAG_WP_CUTS[tagger][year]
+        wptuple = pepper.btagging.BTAG_WP_CUTS[tagger][year]
         if not hasattr(wptuple, wp):
-            raise utils.config.ConfigError(
+            raise pepper.config.ConfigError(
                 "Invalid working point \"{}\" for {} in year {}".format(
                     wp, tagger, year))
         jet_dict["btag"] = disc.flatten()
@@ -904,11 +901,11 @@ class Processor(processor.ProcessorABC):
     def choose_bs(self, data, lep, antilep):
         btags = data["Jet"][data["Jet"].btagged]
         jetsnob = data["Jet"][~data["Jet"].btagged]
-        b0, b1 = utils.misc.pairswhere(btags.counts > 1,
-                                       btags.distincts(),
-                                       btags.cross(jetsnob))
-        bs = utils.misc.concatenate(b0, b1)
-        bbars = utils.misc.concatenate(b1, b0)
+        b0, b1 = pepper.misc.pairswhere(btags.counts > 1,
+                                        btags.distincts(),
+                                        btags.cross(jetsnob))
+        bs = pepper.misc.concatenate(b0, b1)
+        bbars = pepper.misc.concatenate(b1, b0)
         alb = bs.cross(antilep)
         lbbar = bbars.cross(lep)
         hist_mlb = uproot.open(self.kinreco_info_filepath)["mlb"]

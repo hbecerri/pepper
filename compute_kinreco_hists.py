@@ -11,14 +11,12 @@ import json
 from parsl.addresses import address_by_hostname
 from argparse import ArgumentParser
 
-import utils.config
-from utils.datasets import expand_datasetdict
-from utils.misc import jcafromjagged, export
-from utils.selector import Selector
-from utils.processor import Processor
+import pepper
+from pepper.misc import jcafromjagged, export
+from pepper.datasets import expand_datasetdict
 
 
-class Processor(Processor):
+class Processor(pepper.Processor):
     def __init__(self, config):
         config["do_ttbar_reconstruction"] = False
         config["blinding_denom"] = None
@@ -51,7 +49,7 @@ class Processor(Processor):
              "alphaj": alphaj, "energyfl": energyfl, "energyfj": energyfj})
 
     def setup_selection(self, data, dsname, is_mc, output):
-        return Selector(data, data["genWeight"])
+        return pepper.Selector(data, data["genWeight"])
 
     def process_selection(self, selector, dsname, is_mc, output):
         selector.set_multiple_columns(self.build_gen_columns)
@@ -205,7 +203,7 @@ if os.path.exists(args.output):
     if a != "y":
         sys.exit(1)
 
-config = utils.config.Config(args.config)
+config = pepper.Config(args.config)
 store = config["store"]
 
 

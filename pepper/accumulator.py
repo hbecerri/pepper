@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-from coffea.processor import PackedSelection
-from coffea.processor import AccumulatorABC
+from coffea.processor import PackedSelection, AccumulatorABC
 import numpy as np
 
 

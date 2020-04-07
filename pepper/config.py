@@ -8,8 +8,7 @@ import os
 import coffea
 from coffea.lookup_tools.extractor import file_converters
 
-from . import btagging
-from .hist_defns import HistDefinition
+from pepper import btagging, HistDefinition
 
 
 class ScaleFactors(object):

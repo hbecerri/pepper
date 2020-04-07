@@ -1,8 +1,8 @@
 import numpy as np
 import awkward
 
-import utils.misc
-from utils.accumulator import PackedSelectionAccumulator
+import pepper
+from pepper import PackedSelectionAccumulator
 
 
 class Selector():
@@ -282,12 +282,12 @@ class Selector():
             for prop in props:
                 if not hasattr(data[part], prop):
                     continue
-                arr = utils.misc.jagged_reduce(getattr(data[part], prop))
+                arr = pepper.misc.jagged_reduce(getattr(data[part], prop))
                 return_dict[part + "_" + prop] = arr
         for col in other_cols:
             if col not in data:
                 continue
-            return_dict[prefix + col] = utils.misc.jagged_reduce(data[col])
+            return_dict[prefix + col] = pepper.misc.jagged_reduce(data[col])
         return return_dict
 
     def get_columns_from_config(self, to_save, prefix=""):
