@@ -10,3 +10,4 @@ out_hists
 .coffea
 ttDM_config
 nohup.out
+*.pyc
