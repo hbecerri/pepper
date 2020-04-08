@@ -5,7 +5,7 @@ import coffea
 from coffea.analysis_objects import JaggedCandidateArray
 import awkward
 
-from pepper.misc import jaggeddepth, jaggedfromnumpy
+from pepper.misc import jaggeddepth
 
 
 def _maybe_sample(s, size):
@@ -102,6 +102,14 @@ def _roots_vectorized(poly, axis=-1):
     roots = roots.reshape(shape[:-1] + (num_roots,)).swapaxes(-1, axis)
 
     return roots
+
+
+def _lorvecfromnumpy(x, y, z, t):
+    x = awkward.JaggedArray.fromregular(x)
+    y = awkward.JaggedArray.fromregular(y)
+    z = awkward.JaggedArray.fromregular(z)
+    t = awkward.JaggedArray.fromregular(t)
+    return uproot_methods.TLorentzVectorArray.from_cartesian(x, y, z, t)
 
 
 def sonnenschein(lep, antilep, b, antib, met, mw=80.3, mt=172.5,
@@ -288,31 +296,23 @@ def sonnenschein(lep, antilep, b, antib, met, mw=80.3, mt=172.5,
     vbarpz = ((-b1[..., None] - b2[..., None] * vbarpx - b3[..., None]
                * vbarpy) / b4[..., None])
 
-    is_real = jaggedfromnumpy(is_real)
-    vpx = jaggedfromnumpy(vpx)[is_real]
-    vpy = jaggedfromnumpy(vpy)[is_real]
-    vpz = jaggedfromnumpy(vpz)[is_real]
-    vbarpx = jaggedfromnumpy(vbarpx)[is_real]
-    vbarpy = jaggedfromnumpy(vbarpy)[is_real]
-    vbarpz = jaggedfromnumpy(vbarpz)[is_real]
-    weights = jaggedfromnumpy(weights)
+    is_real = awkward.JaggedArray.fromregular(is_real)
+    vpx = awkward.JaggedArray.fromregular(vpx)[is_real]
+    vpy = awkward.JaggedArray.fromregular(vpy)[is_real]
+    vpz = awkward.JaggedArray.fromregular(vpz)[is_real]
+    vbarpx = awkward.JaggedArray.fromregular(vbarpx)[is_real]
+    vbarpy = awkward.JaggedArray.fromregular(vbarpy)[is_real]
+    vbarpz = awkward.JaggedArray.fromregular(vbarpz)[is_real]
+    weights = awkward.JaggedArray.fromregular(weights)
 
     v = uproot_methods.TLorentzVectorArray.from_xyzm(
         vpx, vpy, vpz, vpz.zeros_like())
     av = uproot_methods.TLorentzVectorArray.from_xyzm(
         vbarpx, vbarpy, vbarpz, vbarpz.zeros_like())
-    b = uproot_methods.TLorentzVectorArray.from_cartesian(
-        jaggedfromnumpy(bx), jaggedfromnumpy(by), jaggedfromnumpy(bz),
-        jaggedfromnumpy(bE))
-    ab = uproot_methods.TLorentzVectorArray.from_cartesian(
-        jaggedfromnumpy(abx), jaggedfromnumpy(aby), jaggedfromnumpy(abz),
-        jaggedfromnumpy(abE))
-    lep = uproot_methods.TLorentzVectorArray.from_cartesian(
-        jaggedfromnumpy(lx), jaggedfromnumpy(ly), jaggedfromnumpy(lz),
-        jaggedfromnumpy(lE))
-    alep = uproot_methods.TLorentzVectorArray.from_cartesian(
-        jaggedfromnumpy(alx), jaggedfromnumpy(aly), jaggedfromnumpy(alz),
-        jaggedfromnumpy(alE))
+    b = _lorvecfromnumpy(bx, by, bz, bE)
+    ab = _lorvecfromnumpy(abx, aby, abz, abE)
+    lep = _lorvecfromnumpy(lx, ly, lz, lE)
+    alep = _lorvecfromnumpy(alx, aly, alz, alE)
     wp = v + alep
     # Doing alep + v (terms switched) causes bugs in uproot/awkward
     wm = av + lep

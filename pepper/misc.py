@@ -320,16 +320,6 @@ def jcafromjagged(**fields):
     return Jca.candidatesfromcounts(counts, **flattened)
 
 
-def jaggedfromnumpy(arr):
-    """Does what awkward.fromiter on numpy arrays would do, just faster"""
-    shape = arr.shape
-    arr = arr.flatten()
-    for n in reversed(shape[1:]):
-        counts = np.full(arr.shape[0] // n, n)
-        arr = awkward.JaggedArray.fromcounts(counts, arr)
-    return arr
-
-
 def jaggeddepth(arr):
     """Get the number of jagged dimensions of a JaggedArray"""
     depth = 0
