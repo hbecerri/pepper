@@ -82,7 +82,7 @@ class Selector():
         """Get events which have passed all cuts
         (both those before and after freeze_selection)
         """
-        return self.table[self._cuts.all(*self._cuts.names)]
+        return self.table[self._final_sel]
 
     @property
     def final_systematics(self):
@@ -90,7 +90,7 @@ class Selector():
         """
         if self.systematics is None:
             return None
-        return self.systematics[self._cuts.all(*self._cuts.names)]
+        return self.systematics[self._final_sel]
 
     def freeze_selection(self):
         """Freezes the selection
@@ -105,6 +105,11 @@ class Selector():
     def _cur_sel(self):
         """Get a bool mask describing the current selection"""
         return self._cuts.all(*self._current_cuts)
+
+    @property
+    def _final_sel(self):
+        """Get a bool mask describing the final selection"""
+        return self._cuts.all(*self._cuts.names)
 
     @property
     def num_selected(self):
@@ -198,7 +203,7 @@ class Selector():
         if updown is not None:
             self.set_systematic(name, updown[0], updown[1], mask)
 
-    def set_column(self, column, column_name):
+    def set_column(self, column, column_name, all_cuts=False):
         """Sets a column of the table
 
         Arguments:
@@ -209,12 +214,17 @@ class Selector():
                   The column data must be a numpy array or an
                   awkward.JaggedArray with a size of `num_selected`.
         column_name -- The name of the column to set
-
+        all_cuts -- The column function will be called only on events passing
+                    all cuts (including after freezing). The function must
+                    return a JaggedArray in this case.
         """
         if not isinstance(column_name, str):
             raise ValueError("column_name needs to be string")
         if callable(column):
-            data = column(self.masked)
+            if all_cuts:
+                data = column(self.final)
+            else:
+                data = column(self.masked)
         else:
             data = column
 
@@ -224,10 +234,15 @@ class Selector():
 
         # Move data into the table with appropriate padding (important!)
         if isinstance(data, np.ndarray):
+            if all_cuts:
+                raise ValueError("Got numpy array but all_cuts was specified")
             unmasked_data = self._pad_npcolumndata(data)
         elif isinstance(data, awkward.JaggedArray):
             counts = np.zeros(self.table.size, dtype=int)
-            counts[self._cur_sel] = data.counts
+            if all_cuts:
+                counts[self._final_sel] = data.counts
+            else:
+                counts[self._cur_sel] = data.counts
             cls = awkward.Methods.maybemixin(type(data), awkward.JaggedArray)
             unmasked_data = cls.fromcounts(counts, data.flatten())
         else:

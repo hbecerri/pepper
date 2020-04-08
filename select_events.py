@@ -161,10 +161,9 @@ output = coffea.processor.run_uproot_job(
     datasets, "Events", processor, executor, executor_args,
     chunksize=args.chunksize)
 
-hists = output["sel_hists"]
-hists.update(output["reco_hists"])
+hists = output["hists"]
 jsonname = "hists.json"
-selhists_forjson = {}
+hists_forjson = {}
 for key, hist in hists.items():
     if hist.values() == {}:
         continue
@@ -173,13 +172,13 @@ for key, hist in hists.items():
     fname = "Cut {:03} {}.coffea".format(cutnum, "_".join(key))
     fname = fname.replace("/", "")
     coffea.util.save(hist, os.path.join(args.histdir, fname))
-    selhists_forjson[key] = fname
+    hists_forjson[key] = fname
 with open(os.path.join(args.histdir, jsonname), "a+") as f:
     try:
-        selhists_injson = {tuple(k): v for k, v in zip(*json.load(f))}
+        hists_injson = {tuple(k): v for k, v in zip(*json.load(f))}
     except json.decoder.JSONDecodeError:
-        selhists_injson = {}
-selhists_injson.update(selhists_forjson)
+        hists_injson = {}
+hists_injson.update(hists_forjson)
 with open(os.path.join(args.histdir, jsonname), "w") as f:
-    json.dump([[tuple(k) for k in selhists_injson.keys()],
-               list(selhists_injson.values())], f, indent=4)
+    json.dump([[tuple(k) for k in hists_injson.keys()],
+               list(hists_injson.values())], f, indent=4)

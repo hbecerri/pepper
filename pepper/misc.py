@@ -337,3 +337,11 @@ def jaggeddepth(arr):
         depth += 1
         arr = arr.content
     return depth
+
+
+def sortby(table, field):
+    """Sort a table by a field or attribute"""
+    try:
+        return table[table[field].argsort()]
+    except KeyError:
+        return table[getattr(table, field).argsort()]

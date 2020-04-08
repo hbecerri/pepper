@@ -210,7 +210,7 @@ class Config(object):
                                   "dict")
             self._cache[key] = uncerts
             return uncerts
-        elif key in ("sel_hists", "reco_hists"):
+        elif key == "hists":
             hists = self._get_maybe_external(key)
             if not isinstance(hists, dict):
                 raise ConfigError(f"{key} must eiter be "

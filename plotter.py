@@ -242,7 +242,7 @@ hist2plot = {"MET": "MET",
 
 for hist, x_ax in hist2plot.items():
     plot_kwargs["x_ax_name"] = x_ax
-    plot_cps(output["sel_hists"],
+    plot_cps(output["hists"],
              hist,
              plot_kwargs,
              False,
@@ -254,7 +254,7 @@ hist2plot.pop("jet_mult")
 
 for hist, x_ax in hist2plot.items():
     plot_kwargs["x_ax_name"] = x_ax
-    plot_cps(output["sel_hists"],
+    plot_cps(output["hists"],
              hist,
              plot_kwargs,
              False,
@@ -262,7 +262,7 @@ for hist, x_ax in hist2plot.items():
              ["is_ee", "is_em", "is_mm"],
              ["M_ll"])
 
-hist = output["sel_hists"][("MET > 40 GeV", '1st_lep_eta_phi')]
+hist = output["hists"][("MET > 40 GeV", '1st_lep_eta_phi')]
 hist.scale(unblinded_LFs, "dataset")
 mc_hist = hist.remove(plot_config["process_names"]["Data"]
                       + ["DM Chi1 S100", "DM Chi1 PS100"], "dataset")

@@ -255,28 +255,10 @@
             "HLT_IsoMu24"
         ]
     },
-    "selector_cols_to_save": {
+    "columns_to_save": {
         "part_props": {},
         "other_cols": {},
         "cuts": "Current"
-    },
-    "reco_cols_to_save": {
-        "part_props": {
-            "lep": [
-                "p4"
-            ],
-            "antilep": [
-                "p4"
-            ],
-            "b": [
-                "p4"
-            ],
-            "bbar": [
-                "p4"
-            ]
-        },
-        "other_cols": {},
-        "cuts": "All"
     },
 
     "apply_met_filters": true,
@@ -362,6 +344,8 @@
     "do_ttbar_reconstruction": true,
     "kinreco_info_file": "$DATADIR/kinreco.root",
     "reco_w_mass": "mw",
-    "reco_t_mass:": 172.5,
-    "reco_num_smear": 100
+    "reco_t_mass": 172.5,
+    "reco_num_smear": 100,
+
+    "hists": "$CONFDIR/hist_config.json"
 }

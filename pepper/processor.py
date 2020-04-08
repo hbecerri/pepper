@@ -26,22 +26,14 @@ class Processor(processor.ProcessorABC):
         destdir -- Destination directory, where the event HDF5s are saved.
                    Every chunk will be saved in its own file. If `None`,
                    nothing will be saved.
-        sel_hists -- A dictionary of histogram names (strings) to callables.
-                     The callable should be in form of
-                     `f(data, dsname, is_mc)`, should create a new Hist, fill
-                     it if possible and return it.
-        reco_hists -- Same as `sel_hists`, with the difference that the
-                      callables get caleld after the reconstruction.
         """
         self.config = config
         if destdir is not None:
             self.destdir = os.path.realpath(destdir)
         else:
             self.destdir = None
-        self.sel_hists = self._get_hists_from_config(
-            self.config, "sel_hists", "sel_hists_to_do")
-        self.reco_hists = self._get_hists_from_config(
-            self.config, "reco_hists", "reco_hists_to_do")
+        self.hists = self._get_hists_from_config(
+            self.config, "hists", "hists_to_do")
 
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]
@@ -101,8 +93,7 @@ class Processor(processor.ProcessorABC):
     @property
     def accumulator(self):
         self._accumulator = processor.dict_accumulator({
-            "sel_hists": processor.dict_accumulator(),
-            "reco_hists": processor.dict_accumulator(),
+            "hists": processor.dict_accumulator(),
             "cutflows": processor.dict_accumulator(),
         })
         return self._accumulator
@@ -126,15 +117,12 @@ class Processor(processor.ProcessorABC):
                 break
         return f
 
-    def _save_per_event_info(self, dsname, selector, reco_selector):
+    def _save_per_event_info(self, dsname, selector):
         with self._open_output(dsname) as f:
             outf = awkward.hdf5(f)
             out_dict = selector.get_columns_from_config(
-                self.config["selector_cols_to_save"])
+                self.config["columns_to_save"])
             out_dict["weight"] = selector.weight
-            if reco_selector is not None:
-                out_dict.update(reco_selector.get_columns_from_config(
-                    self.config["reco_cols_to_save"], "reco"))
             out_dict["cutflags"] = selector.get_cuts()
 
             for key in out_dict.keys():
@@ -149,23 +137,15 @@ class Processor(processor.ProcessorABC):
         selector = self.setup_selection(data, dsname, is_mc, output)
         self.process_selection(selector, dsname, is_mc, output)
 
-        if self.config["do_ttbar_reconstruction"]:
-            reco_sel = self.setup_reco(
-                selector.final, selector.final_systematics, dsname, is_mc,
-                output)
-            self.process_reco(reco_sel, dsname, is_mc, output)
-        else:
-            reco_sel = None
-
         if self.destdir is not None:
-            self._save_per_event_info(dsname, selector, reco_sel)
+            self._save_per_event_info(dsname, selector)
 
         return output
 
     def setup_selection(self, data, dsname, is_mc, output):
         sel_cb = [partial(self.fill_hists,
-                          hist_dict=self.sel_hists,
-                          accumulator=output["sel_hists"],
+                          hist_dict=self.hists,
+                          accumulator=output["hists"],
                           is_mc=is_mc,
                           dsname=dsname),
                   partial(self.fill_cutflows, accumulator=output["cutflows"],
@@ -225,32 +205,11 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.met_requirement, "MET > %d GeV"
                          % self.config["ee/mm_min_met"])
 
-    def setup_reco(self, data, systematics, dsname, is_mc, output):
-        lep, antilep = self.pick_leps(data)
-        b, bbar = self.choose_bs(data, lep, antilep)
-        met = data["MET"]
-        if is_mc:
-            weight = systematics["weight"].flatten()
-        else:
-            weight = np.full(data.size, 1.)
-        reco_cb = [partial(self.fill_hists,
-                           hist_dict=self.reco_hists,
-                           accumulator=output["reco_hists"],
-                           is_mc=is_mc,
-                           dsname=dsname),
-                   partial(self.fill_cutflows,
-                           accumulator=output["cutflows"],
-                           dsname=dsname)]
-        reco_table = awkward.Table(
-            {"lepton": lep, "antilepton": antilep, "bquark": b,
-             "bantiquark": bbar, "met": met})
-        selector = Selector(reco_table, weight, reco_cb)
-        return selector
-
-    def process_reco(self, selector, dsname, is_mc, output):
-        selector.set_column(self.ttbar_system, "top")
-        selector.add_cut(self.dummy_cut, "Dummy")
-        selector.add_cut(self.passing_reco, "Reco")
+        if self.config["do_ttbar_reconstruction"]:
+            selector.set_column(self.pick_leps, "recolepton", all_cuts=True)
+            selector.set_column(self.pick_bs, "recob", all_cuts=True)
+            selector.set_column(self.ttbar_system, "top", all_cuts=True)
+            selector.add_cut(self.passing_reco, "Reco")
 
     def get_present_channels(self, data):
         if all(x in data.columns for x in ("is_ee", "is_mm", "is_em")):
@@ -893,12 +852,14 @@ class Processor(processor.ProcessorABC):
         return data["is_em"] | (met > self.config["ee/mm_min_met"])
 
     def pick_leps(self, data):
-        lep_pair = data["Lepton"][:, :2]
-        lep = lep_pair[lep_pair.pdgId > 0]
-        antilep = lep_pair[lep_pair.pdgId < 0]
-        return lep, antilep
+        return pepper.misc.sortby(data["Lepton"], "pdgId")
 
-    def choose_bs(self, data, lep, antilep):
+    def pick_bs(self, data):
+        recolepton = data["recolepton"]
+        lep = recolepton.fromjagged(awkward.JaggedArray.fromcounts(
+            np.full(data.size, 1), recolepton[:, 0]))
+        antilep = recolepton.fromjagged(awkward.JaggedArray.fromcounts(
+            np.full(data.size, 1), recolepton[:, 1]))
         btags = data["Jet"][data["Jet"].btagged]
         jetsnob = data["Jet"][~data["Jet"].btagged]
         b0, b1 = pepper.misc.pairswhere(btags.counts > 1,
@@ -916,14 +877,15 @@ class Processor(processor.ProcessorABC):
             bs.counts, hist_mlb.allvalues[np.searchsorted(
                 hist_mlb.alledges, lbbar.mass.content)-1])
         bestbpair_mlb = (p_m_alb*p_m_lbbar).argmax()
-        return bs[bestbpair_mlb], bbars[bestbpair_mlb]
+        return awkward.concatenate([bs[bestbpair_mlb], bbars[bestbpair_mlb]],
+                                   axis=1)
 
     def ttbar_system(self, data):
-        lep = data["lepton"].p4
-        antilep = data["antilepton"].p4
-        b = data["bquark"].p4
-        antib = data["bantiquark"].p4
-        met = data["met"].p4
+        lep = data["recolepton"].p4[:, 0]
+        antilep = data["recolepton"].p4[:, 1]
+        b = data["recob"].p4[:, 0]
+        antib = data["recob"].p4[:, 1]
+        met = data["MET"].p4.flatten()
 
         with uproot.open(self.kinreco_info_filepath) as f:
             if self.config["reco_num_smear"] is None:
@@ -952,9 +914,6 @@ class Processor(processor.ProcessorABC):
             hist_mlb=mlb, num_smear=num_smear)
         top = awkward.concatenate([top, antitop], axis=1)
         return Jca.candidatesfromcounts(top.counts, p4=top.flatten())
-
-    def dummy_cut(self, data):
-        return np.full(data.size, True)
 
     def passing_reco(self, data):
         return data["top"].counts > 0
