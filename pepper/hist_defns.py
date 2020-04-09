@@ -59,31 +59,36 @@ class HistDefinition():
         if mask is None:
             mask = slice(None)
         counts = None
+        counts_mask = None
         size = None
         jagged = []
         flat = []
         for key, data in fill_vals.items():
             if data is None:
                 continue
-            elif isinstance(data, awkward.JaggedArray):
-                if counts is not None and (counts != data.counts).any():
-                    raise HistDefinitionError(
-                        f"Got JaggedArrays for histogram filling with "
-                        f"inconsistent counts ({counts} and {data.counts}")
-                counts = data.counts
-                jagged.append(key)
-            else:
-                flat.append(key)
             if hasattr(data, "size"):
                 if size is not None and data.size != size:
                     raise HistDefinitionError(f"Got inconsistent filling size "
                                               f"({size} and {data.size})")
                 size = data.size
+            if isinstance(data, awkward.JaggedArray):
+                if counts is not None and (counts != data.counts).any():
+                    if counts_mask is None:
+                        counts_mask = np.full(size, True)
+                    counts_mask = counts == data.counts
+                    counts[~counts_mask] = 0
+                else:
+                    counts = data.counts
+                jagged.append(key)
+            else:
+                flat.append(key)
         prepared = {}
         for key, data in fill_vals.items():
             if data is not None:
                 data = data[mask]
                 if key in jagged:
+                    if counts_mask is not None:
+                        data = data[counts_mask]
                     data = data.flatten()
                 elif key in flat and counts is not None:
                     data = np.repeat(data, counts[mask])
