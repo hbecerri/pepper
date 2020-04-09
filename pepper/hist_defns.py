@@ -12,7 +12,14 @@ def create_hist_dict(config_json):
 
 def leaddiff(quantity):
     """Returns the difference in quantity of the two leading particles."""
-    return quantity[:, 0] - quantity[:, 1]
+    if isinstance(quantity, np.ndarray):
+        if quantity.ndim == 1:
+            quantity = quantity.reshape((-1, 1))
+        quantity = awkward.JaggedArray.fromregular(quantity)
+    enough = quantity.counts >= 2
+    q_enough = quantity[enough]
+    diff = q_enough[:, 0] - q_enough[:, 1]
+    return awkward.JaggedArray.fromcounts(enough.astype(int), diff)
 
 
 func_dict = {
