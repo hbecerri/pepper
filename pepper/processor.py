@@ -247,6 +247,10 @@ class Processor(processor.ProcessorABC):
                 # But only if we want to compute systematics
                 if do_systematics:
                     replacename, sysname = dsforsys[dsname]
+                    if (cut, histname, sysname) in accumulator:
+                        hist = accumulator[(cut, histname, sysname)]
+                        if pepper.misc.hist_counts(hist) > 0:
+                            continue
                     sys_hist = fill_func(data=data,
                                          channels=channels,
                                          dsname=replacename,
@@ -254,6 +258,10 @@ class Processor(processor.ProcessorABC):
                                          weight=weight)
                     accumulator[(cut, histname, sysname)] = sys_hist
             else:
+                if (cut, histname) in accumulator:
+                    hist = accumulator[(cut, histname)]
+                    if pepper.misc.hist_counts(hist) > 0:
+                        continue
                 accumulator[(cut, histname)] = fill_func(data=data,
                                                          channels=channels,
                                                          dsname=dsname,

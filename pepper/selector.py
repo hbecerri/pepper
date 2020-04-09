@@ -8,7 +8,7 @@ from pepper import PackedSelectionAccumulator
 class Selector():
     """Keeps track of the current event selection and data"""
 
-    def __init__(self, table, weight=None, on_cutdone=None):
+    def __init__(self, table, weight=None, on_update=None):
         """Create a new Selector
 
         Arguments:
@@ -16,18 +16,19 @@ class Selector():
         weight -- A 1d numpy array of size equal to `table` size, describing
                   the events' weight or None
         on_cutdown -- callable or list of callables that get called after a
-                      cut is done (`add_cut`)
+                      call to `add_cut` or `set_column`. The callable should
+                      accept the keyword argument data, systematics and cut.
         """
         self.table = table
         self._cuts = PackedSelectionAccumulator()
         self._current_cuts = []
         self._frozen = False
-        if on_cutdone is None:
-            self.on_cutdone = []
-        elif isinstance(on_cutdone, list):
-            self.on_cutdone = on_cutdone.copy()
+        if on_update is None:
+            self.on_update = []
+        elif isinstance(on_update, list):
+            self.on_update = on_update.copy()
         else:
-            self.on_cutdone = [on_cutdone]
+            self.on_update = [on_update]
 
         if weight is not None:
             tabled = awkward.Table({"weight": weight})
@@ -38,7 +39,7 @@ class Selector():
 
         # Add a dummy cut to inform about event number and circumvent error
         # when calling all or require before adding actual cuts
-        self._cuts.add_cut("Preselection", np.full(self.table.size, True))
+        self.add_cut(np.full(self.table.size, True), "Before cuts")
 
     @property
     def masked(self):
@@ -122,9 +123,10 @@ class Selector():
         given by `masked`.
 
         Arguments:
-        accept -- A function that will be called with a table of the currently
-                  selected events. The function should return an array of bools
-                  or a tuple of this array and a dict.
+        accept -- An array of bools or a tuple or a function, that returns the
+                  former. The tuple contains first mentioned array and a dict.
+                  The function that will be called with a table of the
+                  currently selected events.
                   The array has the same length as the table and indicates if
                   an event is not cut (True).
                   The dict maps names of scale factors to either the SFs or
@@ -138,7 +140,10 @@ class Selector():
         """
         if name in self._cuts.names:
             raise ValueError("A cut with name {} already exists".format(name))
-        accepted = accept(self.masked)
+        if callable(accept):
+            accepted = accept(self.masked)
+        else:
+            accepted = accept
         if isinstance(accepted, tuple):
             accepted, weight = accepted
         else:
@@ -162,7 +167,7 @@ class Selector():
                 factor = factors
                 updown = None
             self.modify_weight(weightname, factor, updown, mask)
-        for cb in self.on_cutdone:
+        for cb in self.on_update:
             cb(data=self.final, systematics=self.final_systematics, cut=name)
 
     def _pad_npcolumndata(self, data, defaultval=None, mask=None):
@@ -248,6 +253,11 @@ class Selector():
         else:
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
+
+        cut_name = self._cuts.names[-1]
+        for cb in self.on_update:
+            cb(data=self.final, systematics=self.final_systematics,
+               cut=cut_name)
 
     def set_multiple_columns(self, columns):
         """Sets multiple columns of the table

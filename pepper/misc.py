@@ -335,3 +335,13 @@ def sortby(table, field, ascending=False):
         return table[table[field].argsort(ascending=ascending)]
     except KeyError:
         return table[getattr(table, field).argsort(ascending=ascending)]
+
+
+def hist_counts(hist):
+    """Get the number of entries in a histogram, including all overflow and
+    nan
+    """
+    values = hist.sum(*hist.axes(), overlow="allnan").values()
+    if len(values) == 0:
+        return 0
+    return next(iter(values.values()))
