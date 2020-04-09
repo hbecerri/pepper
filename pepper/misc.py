@@ -329,9 +329,9 @@ def jaggeddepth(arr):
     return depth
 
 
-def sortby(table, field):
+def sortby(table, field, ascending=False):
     """Sort a table by a field or attribute"""
     try:
-        return table[table[field].argsort()]
+        return table[table[field].argsort(ascending=ascending)]
     except KeyError:
-        return table[getattr(table, field).argsort()]
+        return table[getattr(table, field).argsort(ascending=ascending)]
