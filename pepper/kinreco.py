@@ -337,12 +337,14 @@ def sonnenschein(lep, antilep, b, antib, met, mw=80.3, mt=172.5,
     t = (t * weights / sum_weights).sum()
     at = (at * weights / sum_weights).sum()
 
-    # Put it into a JaggedArrays
-    has_solution = has_solution.any()
-    cls = uproot_methods.classes.TLorentzVector.JaggedArrayMethods
-    counts = has_solution.astype(int)
-    t = cls.fromcounts(counts, t[has_solution])
-    at = cls.fromcounts(counts, at[has_solution])
+    if not isinstance(t, awkward.JaggedArray):
+        # Put back into a JaggedArrays
+        # .sum() removes the JaggedArray layer but only if not empty
+        has_solution = has_solution.any()
+        cls = uproot_methods.classes.TLorentzVector.JaggedArrayMethods
+        counts = has_solution.astype(int)
+        t = cls.fromcounts(counts, t[has_solution])
+        at = cls.fromcounts(counts, at[has_solution])
 
     return t, at
 
