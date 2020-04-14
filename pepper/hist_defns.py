@@ -22,6 +22,19 @@ def leaddiff(quantity):
     return awkward.JaggedArray.fromcounts(enough.astype(int), diff)
 
 
+def concatenate(*arr, axis=0):
+    arr_processed = []
+    for a in arr:
+        if isinstance(a, list):
+            a = np.array(a)
+        if isinstance(a, np.ndarray):
+            if a.ndim == 1:
+                a = a.reshape((-1, 1))
+            a = awkward.JaggedArray.fromregular(a)
+        arr_processed.append(a)
+    return awkward.concatenate(arr_processed, axis=axis)
+
+
 func_dict = {
     "sin": np.sin,
     "cos": np.cos,
@@ -42,6 +55,7 @@ func_dict = {
     "sign": np.sign,
 
     "leaddiff": leaddiff,
+    "concatenate": concatenate,
 }
 
 
@@ -123,7 +137,10 @@ class HistDefinition():
         return hist
 
     def pick_data(self, method, data):
-        for sel in method:
+        orig_data = data
+        if not isinstance(method, list):
+            raise HistDefinitionError("Fill method must be list")
+        for i, sel in enumerate(method):
             if isinstance(sel, str):
                 try:
                     data = getattr(data, sel)
@@ -138,9 +155,8 @@ class HistDefinition():
                     break
             elif isinstance(sel, dict):
                 if "function" in sel:
-                    if sel["function"] not in func_dict.keys():
-                        raise HistDefinitionError(f"Unknown function {sel}")
-                    data = func_dict[sel["function"]](data)
+                    data = self._pick_data_from_function(
+                        i, sel, data, orig_data)
                     if data is None:
                         break
                 elif "key" in sel:
@@ -182,3 +198,35 @@ class HistDefinition():
         else:
             return data
         return None
+
+    def _pick_data_from_function(self, i, sel, data, orig_data):
+        funcname = sel["function"]
+        if funcname not in func_dict.keys():
+            raise HistDefinitionError(f"Unknown function {funcname}")
+        func = func_dict[funcname]
+        args = []
+        kwargs = {}
+        if "args" in sel:
+            if not isinstance(sel["args"], list):
+                raise HistDefinitionError(f"args for function must be list")
+            for value in sel["args"]:
+                if isinstance(value, list):
+                    args.append(self.pick_data(value, orig_data))
+                    if args[-1] is None:
+                        return None
+                else:
+                    args.append(value)
+        if "kwargs" in sel:
+            if not isinstance(sel["kwargs"], dict):
+                raise HistDefinitionError(f"kwargs for function must be dict")
+            for key, value in sel["kwargs"].items():
+                if isinstance(value, list):
+                    kwargs[key] = self.pick_data(value, orig_data)
+                    if kwargs[key] is None:
+                        return None
+                else:
+                    kwargs[key] = value
+        if i == 0:
+            return func(*args, **kwargs)
+        else:
+            return func(data, *args, **kwargs)
