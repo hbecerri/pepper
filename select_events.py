@@ -86,6 +86,10 @@ if args.debug:
     key = list(key for key, value in datasets.items() if len(value) > 0)[0]
     datasets = {key: datasets[key][:1]}
 
+if len(datasets) == 0:
+    print("No datasets found")
+    exit(1)
+
 if args.eventdir is not None:
     # Check for non-empty subdirectories and remove them if wanted
     nonempty = []
