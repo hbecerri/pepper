@@ -168,7 +168,7 @@ for key, hist in hists.items():
     if hist.values() == {}:
         continue
     cuts = next(iter(output["cutflows"]["all"].values())).keys()
-    cutnum = list(cuts).index(key[0]) + 1
+    cutnum = list(cuts).index(key[0])
     fname = "Cut {:03} {}.coffea".format(cutnum, "_".join(key))
     fname = fname.replace("/", "")
     coffea.util.save(hist, os.path.join(args.histdir, fname))
