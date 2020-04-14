@@ -15,9 +15,9 @@ class Selector():
         table -- An `awkward.Table` or `LazyTable` holding the events' data
         weight -- A 1d numpy array of size equal to `table` size, describing
                   the events' weight or None
-        on_cutdown -- callable or list of callables that get called after a
-                      call to `add_cut` or `set_column`. The callable should
-                      accept the keyword argument data, systematics and cut.
+        on_update -- callable or list of callables that get called after a
+                     call to `add_cut` or `set_column`. The callable should
+                     accept the keyword argument data, systematics and cut.
         """
         self.table = table
         self._cuts = PackedSelectionAccumulator()
@@ -116,7 +116,7 @@ class Selector():
     def num_selected(self):
         return self._cur_sel.sum()
 
-    def add_cut(self, accept, name):
+    def add_cut(self, accept, name, no_callback=False):
         """Adds a cut
 
         Cuts control what events get fed into later cuts, get saved and are
@@ -137,6 +137,7 @@ class Selector():
                   value. `up` and `down` must be given relative to sf.
                   accept does not get called if num_selected is already 0.
         name -- A label to assoiate wit the cut
+        no_callback -- Do not call on_update after the cut is added
         """
         if name in self._cuts.names:
             raise ValueError("A cut with name {} already exists".format(name))
@@ -167,8 +168,10 @@ class Selector():
                 factor = factors
                 updown = None
             self.modify_weight(weightname, factor, updown, mask)
-        for cb in self.on_update:
-            cb(data=self.final, systematics=self.final_systematics, cut=name)
+        if not no_callback:
+            for cb in self.on_update:
+                cb(data=self.final, systematics=self.final_systematics,
+                   cut=name)
 
     def _pad_npcolumndata(self, data, defaultval=None, mask=None):
         padded = np.empty(self.table.size, dtype=data.dtype)
@@ -208,7 +211,8 @@ class Selector():
         if updown is not None:
             self.set_systematic(name, updown[0], updown[1], mask)
 
-    def set_column(self, column, column_name, all_cuts=False):
+    def set_column(self, column, column_name, all_cuts=False,
+                   no_callback=False):
         """Sets a column of the table
 
         Arguments:
@@ -222,6 +226,7 @@ class Selector():
         all_cuts -- The column function will be called only on events passing
                     all cuts (including after freezing). The function must
                     return a JaggedArray in this case.
+        no_callback -- Do not call on_update after the cut is added
         """
         if not isinstance(column_name, str):
             raise ValueError("column_name needs to be string")
@@ -254,23 +259,30 @@ class Selector():
             raise TypeError("Unsupported column type {}".format(type(data)))
         self.table[column_name] = unmasked_data
 
-        cut_name = self._cuts.names[-1]
-        for cb in self.on_update:
-            cb(data=self.final, systematics=self.final_systematics,
-               cut=cut_name)
+        if not no_callback:
+            cut_name = self._cuts.names[-1]
+            for cb in self.on_update:
+                cb(data=self.final, systematics=self.final_systematics,
+                   cut=cut_name)
 
-    def set_multiple_columns(self, columns):
+    def set_multiple_columns(self, columns, no_callback=False):
         """Sets multiple columns of the table
 
         Arguments:
         columns -- A dict of columns, with keys determining the column names.
                    For requirements to the values, see `column` parameter of
                    `set_column`.
+        no_callback -- Do not call on_update after the cut is added
         """
         if callable(columns):
             columns = columns(self.masked)
         for name, column in columns.items():
-            self.set_column(column, name)
+            self.set_column(column, name, no_callback=True)
+        if not no_callback:
+            cut_name = self._cuts.names[-1]
+            for cb in self.on_update:
+                cb(data=self.final, systematics=self.final_systematics,
+                   cut=cut_name)
 
     def get_columns(self, part_props={}, other_cols=set(), cuts="Current",
                     prefix=""):

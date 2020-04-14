@@ -175,7 +175,9 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(partial(self.met_filters, is_mc), "MET filters")
 
         selector.set_column(self.build_lepton_column, "Lepton")
-        selector.add_cut(partial(self.lepton_pair, is_mc), "At least 2 leps")
+        # Wait with hists filling after channel masks are available
+        selector.add_cut(partial(self.lepton_pair, is_mc), "At least 2 leps",
+                         no_callback=True)
         selector.set_multiple_columns(self.channel_masks)
         selector.set_column(self.mll, "mll")
         selector.set_column(self.dilep_pt, "dilep_pt")
