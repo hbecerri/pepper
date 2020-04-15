@@ -210,7 +210,7 @@ class Processor(processor.ProcessorABC):
         if self.config["do_ttbar_reconstruction"]:
             selector.set_column(self.pick_leps, "recolepton", all_cuts=True)
             selector.set_column(self.pick_bs, "recob", all_cuts=True)
-            selector.set_column(self.ttbar_system, "top", all_cuts=True)
+            selector.set_column(self.ttbar_system, "recot", all_cuts=True)
             selector.add_cut(self.passing_reco, "Reco")
 
     def get_present_channels(self, data):
@@ -926,4 +926,4 @@ class Processor(processor.ProcessorABC):
         return Jca.candidatesfromcounts(top.counts, p4=top.flatten())
 
     def passing_reco(self, data):
-        return data["top"].counts > 0
+        return data["recot"].counts > 0
