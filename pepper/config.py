@@ -135,6 +135,7 @@ class Config(object):
         SPECIAL_VARS = {
             "$DATADIR": "datadir",
             "$CONFDIR": "configdir",
+            "$STOREDIR": "store",
         }
 
         for name, configvar in SPECIAL_VARS.items():
