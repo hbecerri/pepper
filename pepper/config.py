@@ -86,6 +86,20 @@ def get_evaluator(filename, fileform, filetype=None):
     return extractor.make_evaluator()
 
 
+class TopPtWeigter():
+    # Top pt reweighting according to
+    # https://twiki.cern.ch/twiki/bin/viewauth/CMS/TopPtReweighting
+    def __init__(self, scale, a, b):
+        self.scale = scale
+        self.a = a
+        self.b = b
+
+    def __call__(self, toppt, antitoppt):
+        sf = np.exp(self.a + self.b * toppt)
+        antisf = np.exp(self.a + self.b * antitoppt)
+        return np.sqrt(sf ** 2 * antisf ** 2) * self.scale
+
+
 class ConfigError(RuntimeError):
     pass
 
@@ -155,7 +169,14 @@ class Config(object):
                 raise ConfigError(
                     "Invalid year {}".format(self._cache["year"]))
             return self._cache["year"]
-        if key == "electron_sf":
+        elif key == "top_pt_reweighting":
+            opts = self._config["top_pt_reweighting"]
+            if not isinstance(opts, list) or len(opts) != 3:
+                raise ConfigError(
+                    "top_pt_reweighting must be of shape [scale, a, b]")
+            self._cache[key] = TopPtWeigter(*opts)
+            return self._cache[key]
+        elif key == "electron_sf":
             self._cache["electron_sf"] = self._get_scalefactors("electron_sf",
                                                                 ["eta", "pt"])
             return self._cache["electron_sf"]

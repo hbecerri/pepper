@@ -35,6 +35,11 @@ class Processor(processor.ProcessorABC):
         self.hists = self._get_hists_from_config(
             self.config, "hists", "hists_to_do")
 
+        if "top_pt_reweighting" in self.config:
+            self.topptweighter = self.config["top_pt_reweighting"]
+        else:
+            self.topptweighter = None
+
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]
         else:
@@ -158,6 +163,10 @@ class Processor(processor.ProcessorABC):
         return selector
 
     def process_selection(self, selector, dsname, is_mc, output):
+        if dsname.startswith("TTTo"):
+            selector.set_column(self.gentop, "gent_lc")
+            if self.topptweighter is not None:
+                self.do_top_pt_reweighting(selector)
         if self.config["compute_systematics"] and is_mc:
             self.add_generator_uncertainies(dsname, selector)
         if is_mc:
@@ -291,6 +300,28 @@ class Processor(processor.ProcessorABC):
                             continue
                         accumulator[(cut, histname, sys)] =\
                             accumulator[(cut, histname)].copy()
+
+    def gentop(self, data):
+        part = pepper.misc.jcafromjagged(
+            pt=data["GenPart_pt"],
+            eta=data["GenPart_eta"],
+            phi=data["GenPart_phi"],
+            mass=data["GenPart_mass"],
+            pdgId=data["GenPart_pdgId"],
+            statusflags=data["GenPart_statusFlags"]
+        )
+        motheridx = data["GenPart_genPartIdxMother"]
+        hasmother = ((0 <= motheridx) & (motheridx < part.counts))
+        part = part[hasmother]
+        is_last_copy = part.statusflags >> 13 & 1 == 1
+        part = part[is_last_copy]
+        abspdg = abs(part.pdgId)
+        return pepper.misc.sortby(part[abspdg == 6], "pdgId")
+
+    def do_top_pt_reweighting(self, selector):
+        pt = selector.masked["gent_lc"].pt
+        sf = self.topptweighter(pt[:, 0], pt[:, 1])
+        selector.modify_weight("Top pt reweighting", sf)
 
     def add_generator_uncertainies(self, dsname, selector):
         # Matrix-element renormalization and factorization scale
