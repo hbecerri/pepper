@@ -84,7 +84,7 @@ def compute_systematic(nominal_hist, syshists, scales=None):
 
 
 def plot(data_hist, pred_hist, sys, namebase, colors={}, log=False,
-         cmsyear=None):
+         cmsyear=None, ext=".svg"):
     fig, (ax1, ax2) = plt.subplots(
         nrows=2, sharex=True, gridspec_kw={"height_ratios": [3, 1]})
     coffea.hist.plot1d(pred_hist,
@@ -129,7 +129,7 @@ def plot(data_hist, pred_hist, sys, namebase, colors={}, log=False,
         ax1.autoscale(axis="y")
         ax1.set_yscale("log")
     plt.tight_layout()
-    fig.savefig(namebase + ".svg")
+    fig.savefig(namebase + ext)
     plt.close()
 
 
@@ -137,7 +137,8 @@ parser = ArgumentParser(
     description="Plot histograms from previously created histograms")
 parser.add_argument("config", help="Path to a configuration file")
 parser.add_argument(
-    "histfile", nargs="+", help="Coffea file with a single histogram")
+    "histfile", nargs="+", help="Coffea file with a single histogram or a "
+    "JSON file containing histogram info. See output of select_events.py")
 parser.add_argument(
     "--labels", help="Path to a JSON file mapping the MC dataset names to "
     "proper names for plotting")
@@ -149,6 +150,9 @@ parser.add_argument(
     "Can be specified multiple times.")
 parser.add_argument(
     "--log", action="store_true", help="Make logarithmic plots")
+parser.add_argument(
+    "--ext", choices=["pdf", "svg", "png"], help="Output file format",
+    default="svg")
 args = parser.parse_args()
 
 config = Config(args.config)
@@ -236,4 +240,4 @@ for histfilename in histfiles:
                                      scales[:, None, None])
             plot(data_prepared, pred_prepared, sys, os.path.join(
                  outdirchan, f"{namebase}_{chan}"), colors=mc_colors,
-                 log=args.log, cmsyear=config["year"])
+                 log=args.log, cmsyear=config["year"], ext="." + args.ext)
