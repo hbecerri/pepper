@@ -155,6 +155,7 @@ parser.add_argument(
     default="svg")
 args = parser.parse_args()
 
+plt.set_loglevel("error")
 config = Config(args.config)
 mc_colors = {}
 if args.labels:
