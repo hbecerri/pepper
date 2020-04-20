@@ -174,10 +174,19 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     mwm = _maybe_sample(mwm, (num_events, 1))
     mat = _maybe_sample(mat, (num_events, 1))
     mt = _maybe_sample(mt, (num_events, 1))
-    ml = np.sqrt(lE**2 - lx**2 - ly**2 - lz**2)
-    mal = np.sqrt(alE**2 - alx**2 - aly**2 - alz**2)
-    mb = np.sqrt(bE**2 - bx**2 - by**2 - bz**2)
-    mab = np.sqrt(abE**2 - abx**2 - aby**2 - abz**2)
+    # Compute masses, make sure they are real
+    lp = np.sqrt(lx**2 + ly**2 + lz**2)
+    lE = np.where(lE < lp, lp, lE)
+    ml = np.sqrt(lE**2 - lp**2)
+    alp = np.sqrt(alx**2 + aly**2 + alz**2)
+    alE = np.where(alE < alp, alp, alE)
+    mal = np.sqrt(alE**2 - alp**2)
+    bp = np.sqrt(bx**2 + by**2 + bz**2)
+    bE = np.where(bE < bp, bp, bE)
+    mb = np.sqrt(bE**2 - bp**2)
+    abp = np.sqrt(abx**2 + aby**2 + abz**2)
+    abE = np.where(abE < abp, abp, abE)
+    mab = np.sqrt(abE**2 - abp**2)
 
     if hist_mlb is not None:
         mlab = np.sqrt((lE + abE)**2 - (lx + abx)**2
