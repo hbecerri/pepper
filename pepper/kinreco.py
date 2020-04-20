@@ -23,6 +23,8 @@ def _maybe_sample(s, size):
         s = np.random.choice(centers, size, p=p)
     elif isinstance(s, (int, float)):
         s = np.full(size, s)
+    elif isinstance(s, np.ndarray):
+        s = s.reshape(size)
     return s
 
 
@@ -112,9 +114,9 @@ def _lorvecfromnumpy(x, y, z, t):
     return uproot_methods.TLorentzVectorArray.from_cartesian(x, y, z, t)
 
 
-def sonnenschein(lep, antilep, b, antib, met, mw=80.3, mt=172.5,
-                 num_smear=None, energyfl=None, energyfj=None, alphal=None,
-                 alphaj=None, hist_mlb=None):
+def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
+                 mat=172.5, num_smear=None, energyfl=None, energyfj=None,
+                 alphal=None, alphaj=None, hist_mlb=None):
     """Full kinematic reconstruction for dileptonic ttbar using Sonnenschein's
     method https://arxiv.org/pdf/hep-ph/0603011.pdf
     Arguments:
@@ -127,8 +129,9 @@ def sonnenschein(lep, antilep, b, antib, met, mw=80.3, mt=172.5,
              per event
     met -- TLorentzVectorArray holding with one entry per event, yielding
            the MET pt and phi
-    mw -- Mass of the W bosons. Either a number or a histogram, to sample from
-    mt  -- Same as mwp for the top quarks
+    mwp, mwm -- Mass of the W+ and W- bosons. Either a number, an array with a
+                number for each event or a histogram, to sample from
+    mt, mat  -- Same as mwp/mwm for the top quark and antiquark
     num_smear -- Number of times an event is smeared. If None, smearing is off
     energyfl -- Histogram giving Ereco/Egen for the leptons. If None, lepton
                 energy won't be smeared
@@ -162,14 +165,14 @@ def sonnenschein(lep, antilep, b, antib, met, mw=80.3, mt=172.5,
     # Even if num_smear is None, we have a smear axis. Update num_smear
     num_smear = max(lE.shape[1], bE.shape[1])
     # Unpack MET compontents and also propagate smearing to it
-    METx = (met.x[:, None] + lx - lep.x[:, None] + alx - antilep.x[:, None]
-                           + bx - b.x[:, None] + abx - antib.x[:, None])
-    METy = (met.y[:, None] + ly - lep.y[:, None] + aly - antilep.y[:, None]
-                           + by - b.y[:, None] + aby - antib.y[:, None])
+    METx = (met.x[:, None] - lx + lep.x[:, None] - alx + antilep.x[:, None]
+                           - bx + b.x[:, None] - abx + antib.x[:, None])
+    METy = (met.y[:, None] - ly + lep.y[:, None] - aly + antilep.y[:, None]
+                           - by + b.y[:, None] - aby + antib.y[:, None])
 
-    mwp = _maybe_sample(mw, (num_events, 1))
-    mwm = _maybe_sample(mw, (num_events, 1))
-    mat = _maybe_sample(mt, (num_events, 1))
+    mwp = _maybe_sample(mwp, (num_events, 1))
+    mwm = _maybe_sample(mwm, (num_events, 1))
+    mat = _maybe_sample(mat, (num_events, 1))
     mt = _maybe_sample(mt, (num_events, 1))
     ml = np.sqrt(lE**2 - lx**2 - ly**2 - lz**2)
     mal = np.sqrt(alE**2 - alx**2 - aly**2 - alz**2)

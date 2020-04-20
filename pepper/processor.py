@@ -950,7 +950,7 @@ class Processor(processor.ProcessorABC):
             else:
                 mt = f[self.config["reco_t_mass"]]
         top, antitop = sonnenschein(
-            lep, antilep, b, antib, met, mw=mw, mt=mt,
+            lep, antilep, b, antib, met, mwp=mw, mwm=mw, mt=mt, mat=mt,
             energyfl=energyfl, energyfj=energyfj, alphal=alphal, alphaj=alphaj,
             hist_mlb=mlb, num_smear=num_smear)
         top = awkward.concatenate([top, antitop], axis=1)
