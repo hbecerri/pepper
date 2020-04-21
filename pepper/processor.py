@@ -62,12 +62,20 @@ class Processor(processor.ProcessorABC):
             print("No btag scale factor specified")
             self.btagweighters = None
 
+        if "jet_uncertainty" in self.config:
+            self._junc = self.config["jet_uncertainty"]
+        else:
+            if config["compute_systematics"]:
+                print("No jet uncertainty specified")
+            self._junc = None
+
         if "jet_resolution" in self.config and "jet_ressf" in self.config:
             self._jer = self.config["jet_resolution"]
             self._jersf = self.config["jet_ressf"]
         else:
-            print("No jet resolution or no jet resolution scale factor "
-                  "specified")
+            if config["compute_systematics"]:
+                print("No jet resolution or no jet resolution scale factor "
+                      "specified")
             self._jer = None
             self._jersf = None
 
@@ -203,6 +211,8 @@ class Processor(processor.ProcessorABC):
 
         if is_mc and self._jer is not None and self._jersf is not None:
             selector.set_column(self.compute_jer_factor, "jerfac")
+        if "jerfac" in selector.table or "juncfac" in selector.table:
+            selector.set_column(self.compute_jet_scale, "jetfac")
         selector.set_column(self.build_jet_column, "Jet")
         selector.set_column(self.build_met_column, "MET")
         selector.add_cut(self.has_jets, "#Jets >= %d"
@@ -638,6 +648,24 @@ class Processor(processor.ProcessorABC):
     def dilep_pt(self, data):
         return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).pt
 
+    def compute_junc_factor(self, data, variation, source="jes"):
+        if variation not in ("up", "down"):
+            raise ValueError("variation must be either 'up' or 'down'")
+        if source not in self._junc.levels:
+            raise ValueError(f"Jet uncertainty not found: {source}")
+        counts = data["Jet_pt"].counts
+        if counts.size == 0 or counts.sum() == 0:
+            return awkward.JaggedArray.fromcounts(counts, [])
+        # Make sure pt and eta aren't offset arrays.
+        # Needed by JetCorrectionUncertainty
+        pt = awkward.JaggedArray.fromcounts(counts, data["Jet_pt"].flatten())
+        eta = awkward.JaggedArray.fromcounts(counts, data["Jet_eta"].flatten())
+        junc = dict(self._junc.getUncertainty(JetPt=pt, JetEta=eta))[source]
+        if variation == "up":
+            return junc[:, :, 0]
+        else:
+            return junc[:, :, 1]
+
     def compute_jer_factor(self, data, variation="central"):
         # Coffea offers a class named JetTransformer for this. Unfortunately
         # it is more inconvinient and bugged than useful.
@@ -670,6 +698,15 @@ class Processor(processor.ProcessorABC):
         factor[hasgen] = (1 + (jersf - 1) * (pt - genpt) / pt)[hasgen]
         return factor
 
+    def compute_jet_scale(self, data):
+        """Compute product of all jet factors in data"""
+        factor = data["Jet_pt"].ones_like()
+        if "juncfac" in data:
+            factor = factor * data["juncfac"]
+        if "jerfac" in data:
+            factor = factor * data["jerfac"]
+        return factor
+
     def good_jet(self, data):
         j_id, j_puId, lep_dist, eta_min, eta_max, pt_min = self.config[[
             "good_jet_id", "good_jet_puId", "good_jet_lepton_distance",
@@ -700,10 +737,9 @@ class Processor(processor.ProcessorABC):
         # Only apply PUID if pT < 50 GeV
         has_puId = has_puId | (data["Jet_pt"] >= 50)
 
-        if "jerfac" in data:
-            j_pt = data["Jet_pt"] * data["jerfac"]
-        else:
-            j_pt = data["Jet_pt"]
+        j_pt = data["Jet_pt"]
+        if "jetfac" in data:
+            j_pt = j_pt * data["jetfac"]
 
         j_eta = data["Jet_eta"]
         j_phi = data["Jet_phi"]
@@ -729,11 +765,10 @@ class Processor(processor.ProcessorABC):
         for key in keys:
             if "Jet_" + key not in data:
                 continue
-            if key in ("pt", "mass") and "jerfac" in data:
-                # Scale pt and mass according to smearing
-                arr = (data["Jet_" + key] * data["jerfac"])[gj]
-            else:
-                arr = data["Jet_" + key][gj]
+            arr = data["Jet_" + key]
+            if key in ("pt", "mass") and "jetfac" in data:
+                arr = arr * data["jetfac"]
+            arr = arr[gj]
             offsets = arr.offsets
             jet_dict[key] = arr.flatten()
 
@@ -761,18 +796,32 @@ class Processor(processor.ProcessorABC):
         jets = jets[jets.pt.argsort()]
         return jets
 
-    def build_met_column(self, data):
+    def build_met_column(self, data, variation="central"):
         met = TLorentzVectorArray.from_ptetaphim(data["MET_pt"],
                                                  np.zeros(data.size),
                                                  data["MET_phi"],
                                                  np.zeros(data.size))
-        if "jerfac" in data:
+        if variation == "up":
+            dx = data["MET_MetUnclustEnUpDeltaX"]
+            dy = data["MET_MetUnclustEnUpDeltaY"]
+            met = TLorentzVectorArray.from_cartesian(
+                met.x + dx, met.y + dy, met.z, met.t)
+        elif variation == "down":
+            dx = data["MET_MetUnclustEnUpDeltaX"]
+            dy = data["MET_MetUnclustEnUpDeltaY"]
+            met = TLorentzVectorArray.from_cartesian(
+                met.x - dx, met.y - dy, met.z, met.t)
+        elif variation != "central":
+            raise ValueError(
+                "variation must be one of 'central', 'up' or 'down'")
+        if "jetfac" in data:
             jets = TLorentzVectorArray.from_ptetaphim(data["Jet_pt"],
                                                       data["Jet_eta"],
                                                       data["Jet_phi"],
                                                       data["Jet_mass"])
-            newx = met.x - (jets.x * (data["jerfac"] - 1)).sum()
-            newy = met.y - (jets.y * (data["jerfac"] - 1)).sum()
+            factor = data["jetfac"] - 1
+            newx = met.x - (jets.x * factor).sum()
+            newy = met.y - (jets.y * factor).sum()
             met = TLorentzVectorArray.from_ptetaphim(np.hypot(newx, newy),
                                                      np.zeros(data.size),
                                                      np.arctan2(newy, newx),
