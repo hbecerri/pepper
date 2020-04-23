@@ -65,6 +65,7 @@ class HistDefinitionError(Exception):
 
 class HistDefinition():
     def __init__(self, config):
+        self.verbose = False
         self.ylabel = "Counts"
         self.dataset_axis = coffea.hist.Cat("dataset", "Dataset name")
         self.channel_axis = coffea.hist.Cat("channel", "Channel")
@@ -117,6 +118,8 @@ class HistDefinition():
         return prepared
 
     def __call__(self, data, channels, dsname, is_mc, weight):
+        if self.verbose:
+            print("Fill_methods: ", self.fill_methods)
         fill_vals = {name: self.pick_data(method, data)
                      for name, method in self.fill_methods.items()}
         if weight is not None:
@@ -133,6 +136,8 @@ class HistDefinition():
             hist = coffea.hist.Hist(self.ylabel, self.dataset_axis, *self.axes)
             prepared = self._prepare_fills(fill_vals)
             if all(val is not None for val in prepared.values()):
+                if self.verbose:
+                    print("Prepared: ", prepared)
                 hist.fill(dataset=dsname, **prepared)
         return hist
 
@@ -141,6 +146,8 @@ class HistDefinition():
         if not isinstance(method, list):
             raise HistDefinitionError("Fill method must be list")
         for i, sel in enumerate(method):
+            if self.verbose:
+                print(sel)
             if isinstance(sel, str):
                 try:
                     data = getattr(data, sel)
@@ -148,6 +155,8 @@ class HistDefinition():
                     try:
                         data = data[sel]
                     except (KeyError, ValueError):
+                        if self.verbose:
+                            print("Sel is neither a key nor an attribute: ", sel)
                         break
                 if callable(data):
                     data = data()
@@ -158,16 +167,22 @@ class HistDefinition():
                     data = self._pick_data_from_function(
                         i, sel, data, orig_data)
                     if data is None:
+                        if self.verbose:
+                            print("Data is none")
                         break
                 elif "key" in sel:
                     try:
                         data = data[sel["key"]]
                     except KeyError:
+                        if self.verbose:
+                            print("Key error: ", sel["key"])
                         break
                 elif "attribute" in sel:
                     try:
                         data = getattr(data, sel["attribute"])
                     except AttributeError:
+                        if self.verbose:
+                            print("Attribute error: ", sel["attribute"])
                         break
 
                 if "leading" in sel:
