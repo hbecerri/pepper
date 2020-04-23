@@ -139,16 +139,17 @@ class Config(object):
         }
 
         if type(s) is dict:
-            return {self._replace_special_vars(key): self._replace_special_vars(val)
-                    for key, val in s.items()}
+            return {self._replace_special_vars(key):
+                    self._replace_special_vars(val) for key, val in s.items()}
         elif type(s) is list:
             return [self._replace_special_vars(item) for item in s]
         elif type(s) is str:
             for name, configvar in SPECIAL_VARS.items():
                 if name in s:
                     if configvar not in self._config:
-                        raise ConfigError("{} contained in config but {} was "
-                                          "not specified".format(name, configvar))
+                        raise ConfigError(
+                            "{} contained in config but {} was "
+                            "not specified".format(name, configvar))
                     s = s.replace(name, self._config[configvar])
         return s
 

@@ -156,7 +156,8 @@ class HistDefinition():
                         data = data[sel]
                     except (KeyError, ValueError):
                         if self.verbose:
-                            print("Sel is neither a key nor an attribute: ", sel)
+                            print("Sel is neither a key nor an attribute: ",
+                                  sel)
                         break
                 if callable(data):
                     data = data()
