@@ -35,28 +35,28 @@
     "jet_ressf": "$DATADIR/scale_factors/Autumn18_V7b_MC_SF_AK4PFchs.txt",
     "exp_datasets": {
         "MuonEG": [
-            "/MuonEG/Run2018A-Nano1June2019-v1/NANOAOD",
-            "/MuonEG/Run2018B-Nano1June2019-v1/NANOAOD",
-            "/MuonEG/Run2018C-Nano1June2019-v1/NANOAOD",
-            "/MuonEG/Run2018D-Nano1June2019_ver2-v1/NANOAOD"
+            "/MuonEG/Run2018A-Nano25Oct2019-v1/NANOAOD",
+            "/MuonEG/Run2018B-Nano25Oct2019-v1/NANOAOD",
+            "/MuonEG/Run2018C-Nano25Oct2019-v1/NANOAOD",
+            "/MuonEG/Run2018D-Nano25Oct2019_ver2-v1/NANOAOD"
         ],
         "SingleMuon": [
-            "/SingleMuon/Run2018A-Nano1June2019-v1/NANOAOD",
-            "/SingleMuon/Run2018C-Nano1June2019-v1/NANOAOD",
-            "/SingleMuon/Run2018B-Nano1June2019-v1/NANOAOD",
-            "/SingleMuon/Run2018D-Nano1June2019-v1/NANOAOD"
+            "/SingleMuon/Run2018A-Nano25Oct2019-v1/NANOAOD",
+            "/SingleMuon/Run2018C-Nano25Oct2019-v1/NANOAOD",
+            "/SingleMuon/Run2018B-Nano25Oct2019-v1/NANOAOD",
+            "/SingleMuon/Run2018D-Nano25Oct2019-v1/NANOAOD"
         ],
         "DoubleMuon": [
-            "/DoubleMuon/Run2018A-Nano1June2019-v1/NANOAOD",
-            "/DoubleMuon/Run2018B-Nano1June2019-v1/NANOAOD",
-            "/DoubleMuon/Run2018C-Nano1June2019-v1/NANOAOD",
-            "/DoubleMuon/Run2018D-Nano1June2019_ver2-v1/NANOAOD"
+            "/DoubleMuon/Run2018A-Nano25Oct2019-v1/NANOAOD",
+            "/DoubleMuon/Run2018B-Nano25Oct2019-v1/NANOAOD",
+            "/DoubleMuon/Run2018C-Nano25Oct2019-v1/NANOAOD",
+            "/DoubleMuon/Run2018D-Nano25Oct2019_ver2-v1/NANOAOD"
         ],
         "EGamma": [
-            "/EGamma/Run2018A-Nano1June2019-v1/NANOAOD",
-            "/EGamma/Run2018C-Nano1June2019-v1/NANOAOD",
-            "/EGamma/Run2018B-Nano1June2019-v1/NANOAOD",
-            "/EGamma/Run2018D-Nano1June2019-v1/NANOAOD"
+            "/EGamma/Run2018A-Nano25Oct2019-v1/NANOAOD",
+            "/EGamma/Run2018C-Nano25Oct2019-v1/NANOAOD",
+            "/EGamma/Run2018B-Nano25Oct2019-v1/NANOAOD",
+            "/EGamma/Run2018D-Nano25Oct2019-v1/NANOAOD"
         ]
     },
     "mc_datasets": {
@@ -204,7 +204,7 @@
     },
     "testdataset": {
         "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8":
-                ["$STOREDIR/mc/RunIIAutumn18NanoAODv5/TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/Nano1June2019_102X_upgrade2018_realistic_v19-v1/250000/14933F79-95FB-354D-A917-E19B5C005037.root"]
+                ["$STOREDIR/mc/RunIIAutumn18NanoAODv5/TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/Nano25Oct2019_102X_upgrade2018_realistic_v19-v1/250000/14933F79-95FB-354D-A917-E19B5C005037.root"]
     },
     "dataset_trigger_map": {
         "MuonEG": [
