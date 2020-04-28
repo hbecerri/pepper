@@ -60,30 +60,30 @@ class Processor(processor.ProcessorABC):
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]
         else:
-            print("No lumimask specified")
+            logger.warning("No lumimask specified")
             self.lumimask = None
         if ("electron_sf" in self.config
                 and len(self.config["electron_sf"]) > 0):
             self.electron_sf = self.config["electron_sf"]
         else:
-            print("No electron scale factors specified")
+            logger.warning("No electron scale factors specified")
             self.electron_sf = []
         if "muon_sf" in self.config and len(self.config["muon_sf"]) > 0:
             self.muon_sf = self.config["muon_sf"]
         else:
-            print("No muon scale factors specified")
+            logger.warning("No muon scale factors specified")
             self.muon_sf = []
         if "btag_sf" in self.config and len(self.config["btag_sf"]) > 0:
             self.btagweighters = config["btag_sf"]
         else:
-            print("No btag scale factor specified")
+            logger.warning("No btag scale factor specified")
             self.btagweighters = None
 
         if "jet_uncertainty" in self.config:
             self._junc = self.config["jet_uncertainty"]
         else:
             if config["compute_systematics"]:
-                print("No jet uncertainty specified")
+                logger.warning("No jet uncertainty specified")
             self._junc = None
 
         if "jet_resolution" in self.config and "jet_ressf" in self.config:
@@ -91,8 +91,8 @@ class Processor(processor.ProcessorABC):
             self._jersf = self.config["jet_ressf"]
         else:
             if config["compute_systematics"]:
-                print("No jet resolution or no jet resolution scale factor "
-                      "specified")
+                logger.warning("No jet resolution or no jet resolution scale "
+                               "factor specified")
             self._jer = None
             self._jersf = None
 
@@ -117,7 +117,8 @@ class Processor(processor.ProcessorABC):
                 if name in hists:
                     new_hists[name] = hists[name]
             hists = new_hists
-            print("Doing only the histograms: " + ", ".join(hists.keys()))
+            logger.info("Doing only the histograms: " +
+                        ", ".join(hists.keys()))
         return hists
 
     @property

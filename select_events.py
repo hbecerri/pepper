@@ -46,9 +46,9 @@ parser.add_argument(
     "only process a small amount of files to make debugging feasible")
 args = parser.parse_args()
 
+logger = logging.getLogger("pepper")
+logger.addHandler(logging.StreamHandler())
 if args.debug:
-    logger = logging.getLogger("pepper")
-    logger.addHandler(logging.StreamHandler())
     logger.setLevel(logging.DEBUG)
 
 config = Config(args.config)

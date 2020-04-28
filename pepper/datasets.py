@@ -2,6 +2,10 @@
 
 import os
 from glob import glob
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def dataset_to_paths(dataset, store, ext=".root"):
@@ -55,9 +59,9 @@ def read_paths(source, store, ext=".root"):
                     paths_from_line = dataset_to_paths(line, store, ext)
                 num_files = len(paths_from_line)
                 if num_files == 0:
-                    print("No files found for \"{}\"".format(line))
+                    logger.warning("No files found for \"{}\"".format(line))
                 else:
-                    print("Found {} file{} for \"{}\"".format(
+                    logger.info("Found {} file{} for \"{}\"".format(
                         num_files, "s" if num_files > 1 else "", line))
                     paths.extend(paths_from_line)
     return paths
