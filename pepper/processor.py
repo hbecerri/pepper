@@ -1,6 +1,7 @@
 import os
+import sys
 from functools import partial
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 import numpy as np
 import awkward
 import coffea
@@ -13,8 +14,21 @@ from uproot_methods import TLorentzVectorArray
 import h5py
 
 import pepper
-from pepper import sonnenschein, Selector, LazyTable
+from pepper import sonnenschein, Selector, LazyTable, OutputFiller
 import pepper.config
+
+
+if sys.version_info >= (3, 7):
+    VariationArg = namedtuple(
+        "VariationArgs", ["name", "junc", "jer", "met"],
+        defaults=(None, "central", "central"))
+else:
+    # defaults in nampedtuple were introduced in python 3.7
+    # As soon as CMSSW offers 3.7 or newer, remove this
+    class VariationArg(
+            namedtuple("VariationArg", ["name", "junc", "jer", "met"])):
+        def __new__(cls, name, junc=None, jer="central", met="central"):
+            return cls.__bases__[0].__new__(cls, name, junc, jer, met)
 
 
 class Processor(processor.ProcessorABC):
@@ -143,34 +157,62 @@ class Processor(processor.ProcessorABC):
 
     def process(self, df):
         data = LazyTable(df)
-        output = self.accumulator.identity()
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
 
-        selector = self.setup_selection(data, dsname, is_mc, output)
-        self.process_selection(selector, dsname, is_mc, output)
+        filler = self.setup_outputfiller(data, dsname, is_mc)
+        selector = self.setup_selection(data, dsname, is_mc, filler)
+        self.process_selection(selector, dsname, is_mc, filler)
 
         if self.destdir is not None:
             self._save_per_event_info(dsname, selector)
 
-        return output
+        return filler.output
 
-    def setup_selection(self, data, dsname, is_mc, output):
-        sel_cb = [partial(self.fill_hists,
-                          hist_dict=self.hists,
-                          accumulator=output["hists"],
-                          is_mc=is_mc,
-                          dsname=dsname),
-                  partial(self.fill_cutflows, accumulator=output["cutflows"],
-                          dsname=dsname)]
+    def setup_outputfiller(self, data, dsname, is_mc):
+        output = self.accumulator.identity()
+        sys_enabled = self.config["compute_systematics"]
+
+        if dsname in self.config["dataset_for_systematics"]:
+            dsname_in_hist = self.config["dataset_for_systematics"][dsname][0]
+            sys_overwrite = self.config["dataset_for_systematics"][dsname][1]
+        else:
+            dsname_in_hist = dsname
+            sys_overwrite = None
+
+        copy_nominal = {}
+        # Copy nominal histogram for the errors that have a dedicated dataset,
+        # when we are not processing such a dataset
+        for sysdataset, sys in self.config["dataset_for_systematics"].items():
+            replaced, sysname = sys
+            if sysname not in copy_nominal:
+                copy_nominal[sysname] = []
+                # Copy all normal mc datasets
+                for dataset in self.config["mc_datasets"].keys():
+                    if dataset in self.config["dataset_for_systematics"]:
+                        continue
+                    copy_nominal[sysname].append(dataset)
+            try:
+                # Remove the ones that get replaced by a dedicated dataset
+                copy_nominal[sysname].remove(replaced)
+            except ValueError:
+                pass
+
+        filler = OutputFiller(
+            output, self.hists, is_mc, dsname, dsname_in_hist, sys_enabled,
+            sys_overwrite=sys_overwrite, copy_nominal=copy_nominal)
+
+        return filler
+
+    def setup_selection(self, data, dsname, is_mc, filler):
         if is_mc:
             genweight = data["genWeight"]
         else:
             genweight = None
-        selector = Selector(data, genweight, sel_cb)
+        selector = Selector(data, genweight, filler.get_callbacks())
         return selector
 
-    def process_selection(self, selector, dsname, is_mc, output):
+    def process_selection(self, selector, dsname, is_mc, filler):
         if dsname.startswith("TTTo"):
             selector.set_column(self.gentop, "gent_lc")
             if self.topptweighter is not None:
@@ -195,6 +237,7 @@ class Processor(processor.ProcessorABC):
         # Wait with hists filling after channel masks are available
         selector.add_cut(partial(self.lepton_pair, is_mc), "At least 2 leps",
                          no_callback=True)
+        filler.channels = ("is_ee", "is_em", "is_mm")
         selector.set_multiple_columns(self.channel_masks)
         selector.set_column(self.mll, "mll")
         selector.set_column(self.dilep_pt, "dilep_pt")
@@ -209,12 +252,44 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.good_mll, "M_ll")
         selector.add_cut(self.z_window, "Z window")
 
-        if is_mc and self._jer is not None and self._jersf is not None:
-            selector.set_column(self.compute_jer_factor, "jerfac")
-        if "jerfac" in selector.table or "juncfac" in selector.table:
-            selector.set_column(self.compute_jet_scale, "jetfac")
+        variargs = self.get_jetmet_variation_args()
+        if (is_mc and self.config["compute_systematics"]
+                and dsname not in self.config["dataset_for_systematics"]):
+            assert filler.sys_overwrite is None
+            for variarg in self.get_jetmet_variation_args():
+                selector_copy = selector.copy()
+                filler.sys_overwrite = variarg.name
+                self.process_selection_jet_part(selector_copy, is_mc, variarg)
+            filler.sys_overwrite = None
+
+        # Do normal, no-variation run
+        self.process_selection_jet_part(selector, is_mc, VariationArg(None))
+
+    def get_jetmet_variation_args(self):
+        ret = []
+        ret.append(VariationArg("UncMET_up", met="up"))
+        ret.append(VariationArg("UncMET_down", met="down"))
+        if self._junc is not None:
+            for source in self._junc.levels:
+                if source == "jes":
+                    name = "Junc_"
+                else:
+                    name = f"Junc{source}_"
+                ret.append(VariationArg(name + "up", junc=("up", source)))
+                ret.append(VariationArg(name + "down", junc=("down", source)))
+        if self._jer is not None and self._jersf is not None:
+            ret.append(VariationArg("Jer_up", jer="up"))
+            ret.append(VariationArg("Jer_down", jer="down"))
+        return ret
+
+    def process_selection_jet_part(self, selector, is_mc, variation):
+        if is_mc:
+            selector.set_column(partial(
+                self.compute_jet_factor, variation.junc, variation.jer),
+                "jetfac")
         selector.set_column(self.build_jet_column, "Jet")
-        selector.set_column(self.build_met_column, "MET")
+        selector.set_column(partial(self.build_met_column,
+                                    variation=variation.met), "MET")
         selector.add_cut(self.has_jets, "#Jets >= %d"
                          % self.config["num_jets_atleast"])
         if (self.config["hem_cut_if_ele"] or self.config["hem_cut_if_muon"]
@@ -231,85 +306,6 @@ class Processor(processor.ProcessorABC):
             selector.set_column(self.pick_bs, "recob", all_cuts=True)
             selector.set_column(self.ttbar_system, "recot", all_cuts=True)
             selector.add_cut(self.passing_reco, "Reco")
-
-    def get_present_channels(self, data):
-        if all(x in data.columns for x in ("is_ee", "is_mm", "is_em")):
-            return ("is_ee", "is_mm", "is_em")
-        else:
-            return tuple()
-
-    def fill_cutflows(self, accumulator, dsname, data, systematics, cut):
-        if systematics is not None:
-            weight = systematics["weight"].flatten()
-        else:
-            weight = np.ones(data.size)
-        if "all" not in accumulator:
-            accumulator["all"] = processor.defaultdict_accumulator(
-                partial(processor.defaultdict_accumulator, int))
-        accumulator["all"][dsname][cut] = weight.sum()
-        for ch in self.get_present_channels(data):
-            if ch not in accumulator:
-                accumulator[ch] = processor.defaultdict_accumulator(
-                    partial(processor.defaultdict_accumulator, int))
-            accumulator[ch][dsname][cut] = weight[data[ch]].sum()
-
-    def fill_hists(self, hist_dict, accumulator, is_mc, dsname, data,
-                   systematics, cut):
-        do_systematics = (self.config["compute_systematics"]
-                          and systematics is not None)
-        if systematics is not None:
-            weight = systematics["weight"].flatten()
-        else:
-            weight = None
-        channels = self.get_present_channels(data)
-        for histname, fill_func in hist_dict.items():
-            dsforsys = self.config["dataset_for_systematics"]
-            if dsname in dsforsys:
-                # But only if we want to compute systematics
-                if do_systematics:
-                    replacename, sysname = dsforsys[dsname]
-                    if (cut, histname, sysname) in accumulator:
-                        hist = accumulator[(cut, histname, sysname)]
-                        if pepper.misc.hist_counts(hist) > 0:
-                            continue
-                    sys_hist = fill_func(data=data,
-                                         channels=channels,
-                                         dsname=replacename,
-                                         is_mc=is_mc,
-                                         weight=weight)
-                    accumulator[(cut, histname, sysname)] = sys_hist
-            else:
-                if (cut, histname) in accumulator:
-                    hist = accumulator[(cut, histname)]
-                    if pepper.misc.hist_counts(hist) > 0:
-                        continue
-                accumulator[(cut, histname)] = fill_func(data=data,
-                                                         channels=channels,
-                                                         dsname=dsname,
-                                                         is_mc=is_mc,
-                                                         weight=weight)
-
-                if do_systematics:
-                    for syscol in systematics.columns:
-                        if syscol == "weight":
-                            continue
-                        sysweight = weight * systematics[syscol].flatten()
-                        hist = fill_func(data=data, channels=channels,
-                                         dsname=dsname, is_mc=is_mc,
-                                         weight=sysweight)
-                        accumulator[(cut, histname, syscol)] = hist
-                    # In order to have the hists specific to dedicated
-                    # systematic datasets contain also all the events from
-                    # unaffected datasets, copy the nominal hists
-                    systoreplace = defaultdict(list)
-                    for sysds, (replace, sys) in dsforsys.items():
-                        systoreplace[sys].append(replace)
-                    for sys, replacements in systoreplace.items():
-                        # If the dataset is replaced in this sys, don't copy
-                        if dsname in replacements:
-                            continue
-                        accumulator[(cut, histname, sys)] =\
-                            accumulator[(cut, histname)].copy()
 
     def gentop(self, data):
         part = pepper.misc.jcafromjagged(
@@ -698,13 +694,12 @@ class Processor(processor.ProcessorABC):
         factor[hasgen] = (1 + (jersf - 1) * (pt - genpt) / pt)[hasgen]
         return factor
 
-    def compute_jet_scale(self, data):
-        """Compute product of all jet factors in data"""
+    def compute_jet_factor(self, junc, jer, data):
         factor = data["Jet_pt"].ones_like()
-        if "juncfac" in data:
-            factor = factor * data["juncfac"]
-        if "jerfac" in data:
-            factor = factor * data["jerfac"]
+        if junc is not None:
+            factor = factor * self.compute_junc_factor(data, *junc)
+        if jer is not None:
+            factor = factor * self.compute_jer_factor(data, jer)
         return factor
 
     def good_jet(self, data):

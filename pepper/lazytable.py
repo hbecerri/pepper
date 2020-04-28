@@ -1,4 +1,5 @@
 import numpy as np
+from copy import copy
 
 
 class LazyTable(object):
@@ -50,6 +51,14 @@ class LazyTable(object):
 
     def __contains__(self, key):
         return key in self._df
+
+    def __copy__(self):
+        # Tweat copy a bit to make it behave as if the LazyDataFrame and its
+        # dict were copied directly
+
+        c = self.__class__(copy(self._df), self._slice)
+        c._df._dict = copy(self._df._dict)
+        return c
 
     @property
     def size(self):
