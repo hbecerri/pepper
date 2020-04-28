@@ -49,14 +49,16 @@ class OutputFiller():
         if "all" not in accumulator:
             accumulator["all"] = coffea.processor.defaultdict_accumulator(
                 partial(coffea.processor.defaultdict_accumulator, int))
-        accumulator["all"][self.dsname][cut] = weight.sum()
-        logger.info("Filling cutflow. Current event count: " +
-                    str(accumulator["all"][self.dsname][cut]))
+        if cut not in accumulator["all"][self.dsname]:
+            accumulator["all"][self.dsname][cut] = weight.sum()
+            logger.info("Filling cutflow. Current event count: " +
+                        str(accumulator["all"][self.dsname][cut]))
         for ch in self.channels:
             if ch not in accumulator:
                 accumulator[ch] = coffea.processor.defaultdict_accumulator(
                     partial(coffea.processor.defaultdict_accumulator, int))
-            accumulator[ch][self.dsname][cut] = weight[data[ch]].sum()
+            if cut not in accumulator[ch][self.dsname]:
+                accumulator[ch][self.dsname][cut] = weight[data[ch]].sum()
 
     def fill_hists(self, data, systematics, cut):
         accumulator = self.output["hists"]
