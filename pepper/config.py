@@ -138,12 +138,12 @@ class Config(object):
             "$STOREDIR": "store",
         }
 
-        if type(s) is dict:
+        if isinstance(s, dict):
             return {self._replace_special_vars(key):
                     self._replace_special_vars(val) for key, val in s.items()}
-        elif type(s) is list:
+        elif isinstance(s, list):
             return [self._replace_special_vars(item) for item in s]
-        elif type(s) is str:
+        elif isinstance(s, str):
             for name, configvar in SPECIAL_VARS.items():
                 if name in s:
                     if configvar not in self._config:
