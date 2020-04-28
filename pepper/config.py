@@ -138,12 +138,19 @@ class Config(object):
             "$STOREDIR": "store",
         }
 
-        for name, configvar in SPECIAL_VARS.items():
-            if name in s:
-                if configvar not in self._config:
-                    raise ConfigError("{} contained in config but {} was "
-                                      "not specified".format(name, configvar))
-                s = s.replace(name, self._config[configvar])
+        if isinstance(s, dict):
+            return {self._replace_special_vars(key):
+                    self._replace_special_vars(val) for key, val in s.items()}
+        elif isinstance(s, list):
+            return [self._replace_special_vars(item) for item in s]
+        elif isinstance(s, str):
+            for name, configvar in SPECIAL_VARS.items():
+                if name in s:
+                    if configvar not in self._config:
+                        raise ConfigError(
+                            "{} contained in config but {} was "
+                            "not specified".format(name, configvar))
+                    s = s.replace(name, self._config[configvar])
         return s
 
     def _get_path(self, key):
@@ -246,7 +253,7 @@ class Config(object):
             self._cache[key] = self._get_path(key)
             return self._cache[key]
 
-        return self._config[key]
+        return self._replace_special_vars(self._config[key])
 
     def __getitem__(self, key):
         if isinstance(key, list):
