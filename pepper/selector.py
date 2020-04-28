@@ -1,9 +1,13 @@
 import numpy as np
 import awkward
 import copy
+import logging
 
 import pepper
 from pepper import PackedSelectionAccumulator
+
+
+logger = logging.getLogger(__name__)
 
 
 class Selector():
@@ -140,6 +144,7 @@ class Selector():
         """
         if name in self._cuts.names:
             raise ValueError("A cut with name {} already exists".format(name))
+        logger.info(f"Adding cut '{name}'")
         if callable(accept):
             accepted = accept(self.masked)
         else:
@@ -229,6 +234,7 @@ class Selector():
         """
         if not isinstance(column_name, str):
             raise ValueError("column_name needs to be string")
+        logger.info(f"Adding column '{column_name}'")
         if callable(column):
             if all_cuts:
                 data = column(self.final)
@@ -265,6 +271,7 @@ class Selector():
                    cut=cut_name)
 
     def unset_column(self, column):
+        logger.info("Removing column '{column}'")
         del self.table[column]
 
     def set_multiple_columns(self, columns, no_callback=False):

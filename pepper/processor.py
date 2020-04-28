@@ -12,6 +12,7 @@ import coffea.processor as processor
 import uproot
 from uproot_methods import TLorentzVectorArray
 import h5py
+import logging
 
 import pepper
 from pepper import sonnenschein, Selector, LazyTable, OutputFiller
@@ -29,6 +30,8 @@ else:
             namedtuple("VariationArg", ["name", "junc", "jer", "met"])):
         def __new__(cls, name, junc=None, jer="central", met="central"):
             return cls.__bases__[0].__new__(cls, name, junc, jer, met)
+
+logger = logging.getLogger(__name__)
 
 
 class Processor(processor.ProcessorABC):
@@ -156,6 +159,9 @@ class Processor(processor.ProcessorABC):
                 outf[key] = out_dict[key]
 
     def process(self, df):
+        logger.debug(f"Started processing {df._tree._context.sourcepath} "
+                     f"from event {df._branchargs['entrystart']} to "
+                     f"{df._branchargs['entrystop'] - 1}")
         data = LazyTable(df)
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
@@ -165,8 +171,10 @@ class Processor(processor.ProcessorABC):
         self.process_selection(selector, dsname, is_mc, filler)
 
         if self.destdir is not None:
+            logger.debug("Saving per event info")
             self._save_per_event_info(dsname, selector)
 
+        logger.debug("Processing finished")
         return filler.output
 
     def setup_outputfiller(self, data, dsname, is_mc):
@@ -264,6 +272,7 @@ class Processor(processor.ProcessorABC):
 
         # Do normal, no-variation run
         self.process_selection_jet_part(selector, is_mc, VariationArg(None))
+        logger.debug("Selection done")
 
     def get_jetmet_variation_args(self):
         ret = []
@@ -283,6 +292,7 @@ class Processor(processor.ProcessorABC):
         return ret
 
     def process_selection_jet_part(self, selector, is_mc, variation):
+        logger.debug(f"Running jet_part with variation {variation.name}")
         if is_mc:
             selector.set_column(partial(
                 self.compute_jet_factor, variation.junc, variation.jer),

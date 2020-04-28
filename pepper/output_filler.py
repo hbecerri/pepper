@@ -1,8 +1,12 @@
 from functools import partial
 import numpy as np
 import coffea
+import logging
 
 import pepper
+
+
+logger = logging.getLogger(__name__)
 
 
 class DummyOutputFiller():
@@ -46,6 +50,8 @@ class OutputFiller():
             accumulator["all"] = coffea.processor.defaultdict_accumulator(
                 partial(coffea.processor.defaultdict_accumulator, int))
         accumulator["all"][self.dsname][cut] = weight.sum()
+        logger.info("Filling cutflow. Current event count: " +
+                    str(accumulator["all"][self.dsname][cut]))
         for ch in self.channels:
             if ch not in accumulator:
                 accumulator[ch] = coffea.processor.defaultdict_accumulator(

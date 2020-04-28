@@ -10,6 +10,7 @@ import parsl
 import json
 from parsl.addresses import address_by_hostname
 from argparse import ArgumentParser
+import logging
 
 from pepper import Config, Processor
 from pepper.datasets import expand_datasetdict
@@ -41,10 +42,14 @@ parser.add_argument(
 parser.add_argument(
     "--mc", action="store_true", help="Only process MC files")
 parser.add_argument(
-    "-d", "--debug", action="store_true", help="Only process a small amount "
-    "of files to make debugging feasible")
+    "-d", "--debug", action="store_true", help="Enable debug messages and "
+    "only process a small amount of files to make debugging feasible")
 args = parser.parse_args()
 
+if args.debug:
+    logger = logging.getLogger("pepper")
+    logger.addHandler(logging.StreamHandler())
+    logger.setLevel(logging.DEBUG)
 
 config = Config(args.config)
 store = config["store"]
