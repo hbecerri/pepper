@@ -7,8 +7,12 @@ import json
 import os
 import coffea
 from coffea.lookup_tools.extractor import file_converters
+import logging
 
 from pepper import btagging, HistDefinition
+
+
+logger = logging.getLogger(__name__)
 
 
 class ScaleFactors(object):
@@ -110,6 +114,14 @@ class Config(object):
             self._config = json.load(f)
         self._cache = {}
         self._config["configdir"] = os.path.dirname(os.path.realpath(path))
+
+        logger.debug("Configuration read")
+        if "datadir" in self._config:
+            logger.debug(f"datadir: {self._config['datadir']}")
+        if "configdir" in self._config:
+            logger.debug(f"configdir: {self._config['configdir']}")
+        if "store" in self._config:
+            logger.debug(f"store: {self._config['store']}")
 
     def _get_scalefactors(self, key, dimlabels):
         sfs = []

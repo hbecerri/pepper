@@ -1,8 +1,13 @@
 import numpy as np
 import awkward
+import copy
+import logging
 
 import pepper
 from pepper import PackedSelectionAccumulator
+
+
+logger = logging.getLogger(__name__)
 
 
 class Selector():
@@ -31,9 +36,7 @@ class Selector():
             self.on_update = [on_update]
 
         if weight is not None:
-            tabled = awkward.Table({"weight": weight})
-            counts = np.full(self.table.size, 1)
-            self.systematics = awkward.JaggedArray.fromcounts(counts, tabled)
+            self.systematics = awkward.Table({"weight": weight})
         else:
             self.systematics = None
 
@@ -141,6 +144,7 @@ class Selector():
         """
         if name in self._cuts.names:
             raise ValueError("A cut with name {} already exists".format(name))
+        logger.info(f"Adding cut '{name}'")
         if callable(accept):
             accepted = accept(self.masked)
         else:
@@ -230,6 +234,7 @@ class Selector():
         """
         if not isinstance(column_name, str):
             raise ValueError("column_name needs to be string")
+        logger.info(f"Adding column '{column_name}'")
         if callable(column):
             if all_cuts:
                 data = column(self.final)
@@ -264,6 +269,10 @@ class Selector():
             for cb in self.on_update:
                 cb(data=self.final, systematics=self.final_systematics,
                    cut=cut_name)
+
+    def unset_column(self, column):
+        logger.info("Removing column '{column}'")
+        del self.table[column]
 
     def set_multiple_columns(self, columns, no_callback=False):
         """Sets multiple columns of the table
@@ -349,3 +358,25 @@ class Selector():
             raise ValueError("cuts needs to be one of 'Current', 'All' or a "
                              "list")
         return self._cuts.mask[self._cuts.all(*cuts)]
+
+    def copy(self):
+        """Create a copy of the Selector instance, containing shallow copies
+        of most of its constituents.
+        This is indended to be used if one wants to fork the selection to, for
+        example, repeat particular steps with different settings.
+        Already read or set columns are being handled memory-efficiently,
+        meaning a call to copy won't double the memory usage for present
+        columns."""
+        s = self.__class__(copy.copy(self.table))
+        s._cuts = copy.deepcopy(self._cuts)
+        s._current_cuts = copy.copy(self._current_cuts)
+        s._frozen = self._frozen
+        if self.on_update is None:
+            s.on_update = []
+        else:
+            s.on_update = copy.copy(self.on_update)
+        if self.systematics is None:
+            s.systematics = None
+        else:
+            s.systematics = copy.copy(self.systematics)
+        return s

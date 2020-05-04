@@ -1,6 +1,7 @@
 import os
+import sys
 from functools import partial
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 import numpy as np
 import awkward
 import coffea
@@ -11,10 +12,26 @@ import coffea.processor as processor
 import uproot
 from uproot_methods import TLorentzVectorArray
 import h5py
+import logging
 
 import pepper
-from pepper import sonnenschein, Selector, LazyTable
+from pepper import sonnenschein, Selector, LazyTable, OutputFiller
 import pepper.config
+
+
+if sys.version_info >= (3, 7):
+    VariationArg = namedtuple(
+        "VariationArgs", ["name", "junc", "jer", "met"],
+        defaults=(None, "central", "central"))
+else:
+    # defaults in nampedtuple were introduced in python 3.7
+    # As soon as CMSSW offers 3.7 or newer, remove this
+    class VariationArg(
+            namedtuple("VariationArg", ["name", "junc", "jer", "met"])):
+        def __new__(cls, name, junc=None, jer="central", met="central"):
+            return cls.__bases__[0].__new__(cls, name, junc, jer, met)
+
+logger = logging.getLogger(__name__)
 
 
 class Processor(processor.ProcessorABC):
@@ -43,31 +60,39 @@ class Processor(processor.ProcessorABC):
         if "lumimask" in config:
             self.lumimask = self.config["lumimask"]
         else:
-            print("No lumimask specified")
+            logger.warning("No lumimask specified")
             self.lumimask = None
         if ("electron_sf" in self.config
                 and len(self.config["electron_sf"]) > 0):
             self.electron_sf = self.config["electron_sf"]
         else:
-            print("No electron scale factors specified")
+            logger.warning("No electron scale factors specified")
             self.electron_sf = []
         if "muon_sf" in self.config and len(self.config["muon_sf"]) > 0:
             self.muon_sf = self.config["muon_sf"]
         else:
-            print("No muon scale factors specified")
+            logger.warning("No muon scale factors specified")
             self.muon_sf = []
         if "btag_sf" in self.config and len(self.config["btag_sf"]) > 0:
             self.btagweighters = config["btag_sf"]
         else:
-            print("No btag scale factor specified")
+            logger.warning("No btag scale factor specified")
             self.btagweighters = None
+
+        if "jet_uncertainty" in self.config:
+            self._junc = self.config["jet_uncertainty"]
+        else:
+            if config["compute_systematics"]:
+                logger.warning("No jet uncertainty specified")
+            self._junc = None
 
         if "jet_resolution" in self.config and "jet_ressf" in self.config:
             self._jer = self.config["jet_resolution"]
             self._jersf = self.config["jet_ressf"]
         else:
-            print("No jet resolution or no jet resolution scale factor "
-                  "specified")
+            if config["compute_systematics"]:
+                logger.warning("No jet resolution or no jet resolution scale "
+                               "factor specified")
             self._jer = None
             self._jersf = None
 
@@ -92,7 +117,8 @@ class Processor(processor.ProcessorABC):
                 if name in hists:
                     new_hists[name] = hists[name]
             hists = new_hists
-            print("Doing only the histograms: " + ", ".join(hists.keys()))
+            logger.info("Doing only the histograms: " +
+                        ", ".join(hists.keys()))
         return hists
 
     @property
@@ -134,35 +160,68 @@ class Processor(processor.ProcessorABC):
                 outf[key] = out_dict[key]
 
     def process(self, df):
+        logger.debug(f"Started processing {df._tree._context.sourcepath} "
+                     f"from event {df._branchargs['entrystart']} to "
+                     f"{df._branchargs['entrystop'] - 1}")
         data = LazyTable(df)
-        output = self.accumulator.identity()
         dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
 
-        selector = self.setup_selection(data, dsname, is_mc, output)
-        self.process_selection(selector, dsname, is_mc, output)
+        filler = self.setup_outputfiller(data, dsname, is_mc)
+        selector = self.setup_selection(data, dsname, is_mc, filler)
+        self.process_selection(selector, dsname, is_mc, filler)
 
         if self.destdir is not None:
+            logger.debug("Saving per event info")
             self._save_per_event_info(dsname, selector)
 
-        return output
+        logger.debug("Processing finished")
+        return filler.output
 
-    def setup_selection(self, data, dsname, is_mc, output):
-        sel_cb = [partial(self.fill_hists,
-                          hist_dict=self.hists,
-                          accumulator=output["hists"],
-                          is_mc=is_mc,
-                          dsname=dsname),
-                  partial(self.fill_cutflows, accumulator=output["cutflows"],
-                          dsname=dsname)]
+    def setup_outputfiller(self, data, dsname, is_mc):
+        output = self.accumulator.identity()
+        sys_enabled = self.config["compute_systematics"]
+
+        if dsname in self.config["dataset_for_systematics"]:
+            dsname_in_hist = self.config["dataset_for_systematics"][dsname][0]
+            sys_overwrite = self.config["dataset_for_systematics"][dsname][1]
+        else:
+            dsname_in_hist = dsname
+            sys_overwrite = None
+
+        copy_nominal = {}
+        # Copy nominal histogram for the errors that have a dedicated dataset,
+        # when we are not processing such a dataset
+        for sysdataset, sys in self.config["dataset_for_systematics"].items():
+            replaced, sysname = sys
+            if sysname not in copy_nominal:
+                copy_nominal[sysname] = []
+                # Copy all normal mc datasets
+                for dataset in self.config["mc_datasets"].keys():
+                    if dataset in self.config["dataset_for_systematics"]:
+                        continue
+                    copy_nominal[sysname].append(dataset)
+            try:
+                # Remove the ones that get replaced by a dedicated dataset
+                copy_nominal[sysname].remove(replaced)
+            except ValueError:
+                pass
+
+        filler = OutputFiller(
+            output, self.hists, is_mc, dsname, dsname_in_hist, sys_enabled,
+            sys_overwrite=sys_overwrite, copy_nominal=copy_nominal)
+
+        return filler
+
+    def setup_selection(self, data, dsname, is_mc, filler):
         if is_mc:
             genweight = data["genWeight"]
         else:
             genweight = None
-        selector = Selector(data, genweight, sel_cb)
+        selector = Selector(data, genweight, filler.get_callbacks())
         return selector
 
-    def process_selection(self, selector, dsname, is_mc, output):
+    def process_selection(self, selector, dsname, is_mc, filler):
         if dsname.startswith("TTTo"):
             selector.set_column(self.gentop, "gent_lc")
             if self.topptweighter is not None:
@@ -187,6 +246,7 @@ class Processor(processor.ProcessorABC):
         # Wait with hists filling after channel masks are available
         selector.add_cut(partial(self.lepton_pair, is_mc), "At least 2 leps",
                          no_callback=True)
+        filler.channels = ("is_ee", "is_em", "is_mm")
         selector.set_multiple_columns(self.channel_masks)
         selector.set_column(self.mll, "mll")
         selector.set_column(self.dilep_pt, "dilep_pt")
@@ -201,10 +261,46 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.good_mll, "M_ll")
         selector.add_cut(self.z_window, "Z window")
 
-        if is_mc and self._jer is not None and self._jersf is not None:
-            selector.set_column(self.compute_jer_factor, "jerfac")
+        variargs = self.get_jetmet_variation_args()
+        if (is_mc and self.config["compute_systematics"]
+                and dsname not in self.config["dataset_for_systematics"]):
+            assert filler.sys_overwrite is None
+            for variarg in self.get_jetmet_variation_args():
+                selector_copy = selector.copy()
+                filler.sys_overwrite = variarg.name
+                self.process_selection_jet_part(selector_copy, is_mc, variarg)
+            filler.sys_overwrite = None
+
+        # Do normal, no-variation run
+        self.process_selection_jet_part(selector, is_mc, VariationArg(None))
+        logger.debug("Selection done")
+
+    def get_jetmet_variation_args(self):
+        ret = []
+        ret.append(VariationArg("UncMET_up", met="up"))
+        ret.append(VariationArg("UncMET_down", met="down"))
+        if self._junc is not None:
+            for source in self._junc.levels:
+                if source == "jes":
+                    name = "Junc_"
+                else:
+                    name = f"Junc{source}_"
+                ret.append(VariationArg(name + "up", junc=("up", source)))
+                ret.append(VariationArg(name + "down", junc=("down", source)))
+        if self._jer is not None and self._jersf is not None:
+            ret.append(VariationArg("Jer_up", jer="up"))
+            ret.append(VariationArg("Jer_down", jer="down"))
+        return ret
+
+    def process_selection_jet_part(self, selector, is_mc, variation):
+        logger.debug(f"Running jet_part with variation {variation.name}")
+        if is_mc:
+            selector.set_column(partial(
+                self.compute_jet_factor, variation.junc, variation.jer),
+                "jetfac")
         selector.set_column(self.build_jet_column, "Jet")
-        selector.set_column(self.build_met_column, "MET")
+        selector.set_column(partial(self.build_met_column,
+                                    variation=variation.met), "MET")
         selector.add_cut(self.has_jets, "#Jets >= %d"
                          % self.config["num_jets_atleast"])
         if (self.config["hem_cut_if_ele"] or self.config["hem_cut_if_muon"]
@@ -221,85 +317,6 @@ class Processor(processor.ProcessorABC):
             selector.set_column(self.pick_bs, "recob", all_cuts=True)
             selector.set_column(self.ttbar_system, "recot", all_cuts=True)
             selector.add_cut(self.passing_reco, "Reco")
-
-    def get_present_channels(self, data):
-        if all(x in data.columns for x in ("is_ee", "is_mm", "is_em")):
-            return ("is_ee", "is_mm", "is_em")
-        else:
-            return tuple()
-
-    def fill_cutflows(self, accumulator, dsname, data, systematics, cut):
-        if systematics is not None:
-            weight = systematics["weight"].flatten()
-        else:
-            weight = np.ones(data.size)
-        if "all" not in accumulator:
-            accumulator["all"] = processor.defaultdict_accumulator(
-                partial(processor.defaultdict_accumulator, int))
-        accumulator["all"][dsname][cut] = weight.sum()
-        for ch in self.get_present_channels(data):
-            if ch not in accumulator:
-                accumulator[ch] = processor.defaultdict_accumulator(
-                    partial(processor.defaultdict_accumulator, int))
-            accumulator[ch][dsname][cut] = weight[data[ch]].sum()
-
-    def fill_hists(self, hist_dict, accumulator, is_mc, dsname, data,
-                   systematics, cut):
-        do_systematics = (self.config["compute_systematics"]
-                          and systematics is not None)
-        if systematics is not None:
-            weight = systematics["weight"].flatten()
-        else:
-            weight = None
-        channels = self.get_present_channels(data)
-        for histname, fill_func in hist_dict.items():
-            dsforsys = self.config["dataset_for_systematics"]
-            if dsname in dsforsys:
-                # But only if we want to compute systematics
-                if do_systematics:
-                    replacename, sysname = dsforsys[dsname]
-                    if (cut, histname, sysname) in accumulator:
-                        hist = accumulator[(cut, histname, sysname)]
-                        if pepper.misc.hist_counts(hist) > 0:
-                            continue
-                    sys_hist = fill_func(data=data,
-                                         channels=channels,
-                                         dsname=replacename,
-                                         is_mc=is_mc,
-                                         weight=weight)
-                    accumulator[(cut, histname, sysname)] = sys_hist
-            else:
-                if (cut, histname) in accumulator:
-                    hist = accumulator[(cut, histname)]
-                    if pepper.misc.hist_counts(hist) > 0:
-                        continue
-                accumulator[(cut, histname)] = fill_func(data=data,
-                                                         channels=channels,
-                                                         dsname=dsname,
-                                                         is_mc=is_mc,
-                                                         weight=weight)
-
-                if do_systematics:
-                    for syscol in systematics.columns:
-                        if syscol == "weight":
-                            continue
-                        sysweight = weight * systematics[syscol].flatten()
-                        hist = fill_func(data=data, channels=channels,
-                                         dsname=dsname, is_mc=is_mc,
-                                         weight=sysweight)
-                        accumulator[(cut, histname, syscol)] = hist
-                    # In order to have the hists specific to dedicated
-                    # systematic datasets contain also all the events from
-                    # unaffected datasets, copy the nominal hists
-                    systoreplace = defaultdict(list)
-                    for sysds, (replace, sys) in dsforsys.items():
-                        systoreplace[sys].append(replace)
-                    for sys, replacements in systoreplace.items():
-                        # If the dataset is replaced in this sys, don't copy
-                        if dsname in replacements:
-                            continue
-                        accumulator[(cut, histname, sys)] =\
-                            accumulator[(cut, histname)].copy()
 
     def gentop(self, data):
         part = pepper.misc.jcafromjagged(
@@ -638,6 +655,24 @@ class Processor(processor.ProcessorABC):
     def dilep_pt(self, data):
         return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).pt
 
+    def compute_junc_factor(self, data, variation, source="jes"):
+        if variation not in ("up", "down"):
+            raise ValueError("variation must be either 'up' or 'down'")
+        if source not in self._junc.levels:
+            raise ValueError(f"Jet uncertainty not found: {source}")
+        counts = data["Jet_pt"].counts
+        if counts.size == 0 or counts.sum() == 0:
+            return awkward.JaggedArray.fromcounts(counts, [])
+        # Make sure pt and eta aren't offset arrays.
+        # Needed by JetCorrectionUncertainty
+        pt = awkward.JaggedArray.fromcounts(counts, data["Jet_pt"].flatten())
+        eta = awkward.JaggedArray.fromcounts(counts, data["Jet_eta"].flatten())
+        junc = dict(self._junc.getUncertainty(JetPt=pt, JetEta=eta))[source]
+        if variation == "up":
+            return junc[:, :, 0]
+        else:
+            return junc[:, :, 1]
+
     def compute_jer_factor(self, data, variation="central"):
         # Coffea offers a class named JetTransformer for this. Unfortunately
         # it is more inconvinient and bugged than useful.
@@ -670,6 +705,14 @@ class Processor(processor.ProcessorABC):
         factor[hasgen] = (1 + (jersf - 1) * (pt - genpt) / pt)[hasgen]
         return factor
 
+    def compute_jet_factor(self, junc, jer, data):
+        factor = data["Jet_pt"].ones_like()
+        if junc is not None:
+            factor = factor * self.compute_junc_factor(data, *junc)
+        if jer is not None:
+            factor = factor * self.compute_jer_factor(data, jer)
+        return factor
+
     def good_jet(self, data):
         j_id, j_puId, lep_dist, eta_min, eta_max, pt_min = self.config[[
             "good_jet_id", "good_jet_puId", "good_jet_lepton_distance",
@@ -700,10 +743,9 @@ class Processor(processor.ProcessorABC):
         # Only apply PUID if pT < 50 GeV
         has_puId = has_puId | (data["Jet_pt"] >= 50)
 
-        if "jerfac" in data:
-            j_pt = data["Jet_pt"] * data["jerfac"]
-        else:
-            j_pt = data["Jet_pt"]
+        j_pt = data["Jet_pt"]
+        if "jetfac" in data:
+            j_pt = j_pt * data["jetfac"]
 
         j_eta = data["Jet_eta"]
         j_phi = data["Jet_phi"]
@@ -729,11 +771,10 @@ class Processor(processor.ProcessorABC):
         for key in keys:
             if "Jet_" + key not in data:
                 continue
-            if key in ("pt", "mass") and "jerfac" in data:
-                # Scale pt and mass according to smearing
-                arr = (data["Jet_" + key] * data["jerfac"])[gj]
-            else:
-                arr = data["Jet_" + key][gj]
+            arr = data["Jet_" + key]
+            if key in ("pt", "mass") and "jetfac" in data:
+                arr = arr * data["jetfac"]
+            arr = arr[gj]
             offsets = arr.offsets
             jet_dict[key] = arr.flatten()
 
@@ -761,18 +802,32 @@ class Processor(processor.ProcessorABC):
         jets = jets[jets.pt.argsort()]
         return jets
 
-    def build_met_column(self, data):
+    def build_met_column(self, data, variation="central"):
         met = TLorentzVectorArray.from_ptetaphim(data["MET_pt"],
                                                  np.zeros(data.size),
                                                  data["MET_phi"],
                                                  np.zeros(data.size))
-        if "jerfac" in data:
+        if variation == "up":
+            dx = data["MET_MetUnclustEnUpDeltaX"]
+            dy = data["MET_MetUnclustEnUpDeltaY"]
+            met = TLorentzVectorArray.from_cartesian(
+                met.x + dx, met.y + dy, met.z, met.t)
+        elif variation == "down":
+            dx = data["MET_MetUnclustEnUpDeltaX"]
+            dy = data["MET_MetUnclustEnUpDeltaY"]
+            met = TLorentzVectorArray.from_cartesian(
+                met.x - dx, met.y - dy, met.z, met.t)
+        elif variation != "central":
+            raise ValueError(
+                "variation must be one of 'central', 'up' or 'down'")
+        if "jetfac" in data:
             jets = TLorentzVectorArray.from_ptetaphim(data["Jet_pt"],
                                                       data["Jet_eta"],
                                                       data["Jet_phi"],
                                                       data["Jet_mass"])
-            newx = met.x - (jets.x * (data["jerfac"] - 1)).sum()
-            newy = met.y - (jets.y * (data["jerfac"] - 1)).sum()
+            factor = data["jetfac"] - 1
+            newx = met.x - (jets.x * factor).sum()
+            newy = met.y - (jets.y * factor).sum()
             met = TLorentzVectorArray.from_ptetaphim(np.hypot(newx, newy),
                                                      np.zeros(data.size),
                                                      np.arctan2(newy, newx),

@@ -48,20 +48,23 @@ class Processor(pepper.Processor):
             {"mlb": mlb, "mw": mw, "mt": mt, "alphal": alphal,
              "alphaj": alphaj, "energyfl": energyfl, "energyfj": energyfj})
 
-    def setup_selection(self, data, dsname, is_mc, output):
+    def setup_outputfiller(self, data, dsname, is_mc):
+        return pepper.DummyOutputFiller(self.accumulator.identity())
+
+    def setup_selection(self, data, dsname, is_mc, filler):
         return pepper.Selector(data, data["genWeight"])
 
-    def process_selection(self, selector, dsname, is_mc, output):
+    def process_selection(self, selector, dsname, is_mc, filler):
         selector.set_multiple_columns(self.build_gen_columns)
         selector.add_cut(self.has_gen_particles, "Has gen particles")
 
         self.fill_before_selection(
-            selector.masked, selector.masked_systematics, output)
+            selector.masked, selector.masked_systematics, filler.output)
 
-        super().process_selection(selector, dsname, is_mc, output)
+        super().process_selection(selector, dsname, is_mc, filler)
 
         self.fill_after_selection(
-            selector.final, selector.final_systematics, output)
+            selector.final, selector.final_systematics, filler.output)
 
     @staticmethod
     def sortby(data, field):
