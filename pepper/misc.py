@@ -347,6 +347,7 @@ def hist_counts(hist):
         return 0
     return next(iter(values.values()))
 
+
 def get_parsl_config(num_jobs, runtime=3*60*60, hostname=None):
     """Get a parsl config for a host.
 
@@ -359,7 +360,7 @@ def get_parsl_config(num_jobs, runtime=3*60*60, hostname=None):
         hostname = parsl.addresses.address_by_hostname()
     scriptdir = sys.path[0]
     condor_config = ("requirements = (OpSysAndVer == \"SL6\" || OpSysAndVer =="
-                    " \"CentOS7\")\n")
+                     " \"CentOS7\")\n")
     if runtime is not None:
         if hostname.endswith(".desy.de"):
             condor_config += f"+RequestRuntime = {runtime}\n"
