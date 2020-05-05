@@ -37,9 +37,6 @@ parser.add_argument(
     "--chunksize", type=int, default=500000, help="Number of events to "
     "process at once. Defaults to 5*10^5")
 parser.add_argument(
-    "--skip_sysds", action="store_true", help="Skip the datasets that are "
-    "used for systematics calculation as given by datasets_for_systematics")
-parser.add_argument(
     "--mc", action="store_true", help="Only process MC files")
 parser.add_argument(
     "-d", "--debug", action="store_true", help="Enable debug messages and "
@@ -72,8 +69,8 @@ else:
             datasets[dataset[0]].append(dataset[1])
         else:
             datasets[dataset[0]] = [dataset[1]]
-if args.skip_sysds:
-    for sysds in config["datasets_for_systematics"].keys():
+if not config["compute_systematics"]:
+    for sysds in config["dataset_for_systematics"].keys():
         if sysds in datasets:
             del datasets[sysds]
 
