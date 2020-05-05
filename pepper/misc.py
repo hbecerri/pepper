@@ -1,12 +1,13 @@
 import os
+import sys
 from glob import glob
 import h5py
 import uproot
 from collections import defaultdict
-from coffea import hist
 from coffea.analysis_objects import JaggedCandidateArray as Jca
 import awkward
 import numpy as np
+import parsl
 
 
 def concatenate(arr1, arr2):
@@ -345,3 +346,60 @@ def hist_counts(hist):
     if len(values) == 0:
         return 0
     return next(iter(values.values()))
+
+def get_parsl_config(num_jobs, runtime=3*60*60, hostname=None):
+    """Get a parsl config for a host.
+
+    Arguments:
+    num_jobs -- Number of jobs/processes to run in parallel
+    runtime -- Requested runtime in seconds. If None, do not request a runtime
+    hostname -- hostname of the machine to submit from. If None, use current
+    """
+    if hostname is None:
+        hostname = parsl.addresses.address_by_hostname()
+    scriptdir = sys.path[0]
+    condor_config = ("requirements = (OpSysAndVer == \"SL6\" || OpSysAndVer =="
+                    " \"CentOS7\")\n")
+    if runtime is not None:
+        if hostname.endswith(".desy.de"):
+            condor_config += f"+RequestRuntime = {runtime}\n"
+        elif hostname.endswith(".cern.ch"):
+            condor_config += f"+MaxRuntime = {runtime}\n"
+        else:
+            raise NotImplementedError(f"runtime on unknown host {hostname}")
+    # Need to unset PYTHONPATH because of DESY NAF setting it incorrectly
+    condor_init = """
+source /cvmfs/cms.cern.ch/cmsset_default.sh
+if lsb_release -r | grep -q 7\\.; then
+cd /cvmfs/cms.cern.ch/slc7_amd64_gcc700/cms/cmssw-patch/CMSSW_10_2_4_patch1/src
+else
+cd /cvmfs/cms.cern.ch/slc6_amd64_gcc700/cms/cmssw-patch/CMSSW_10_2_4_patch1/src
+fi
+eval `scramv1 runtime -sh`
+cd -
+"""
+    if hostname.endswith(".desy.de"):
+        # DESY NAF has set PYTHONPATH to old python2 paths, causing crashes
+        condor_init += "unset PYTHONPATH\n"
+    # Need to put own directory into PYTHONPATH for unpickling to work.
+    # Need to extend PATH to be able to execute the main parsl script.
+    condor_init += f"export PYTHONPATH={scriptdir}:$PYTHONPATH\n"
+    condor_init += "PATH=~/.local/bin:$PATH"
+    provider = parsl.providers.CondorProvider(
+        init_blocks=num_jobs,
+        max_blocks=num_jobs,
+        scheduler_options=condor_config,
+        worker_init=condor_init
+    )
+    parsl_executor = parsl.executors.HighThroughputExecutor(
+        label="HTCondor",
+        address=hostname,
+        max_workers=1,
+        provider=provider,
+    )
+    parsl_config = parsl.config.Config(
+        executors=[parsl_executor],
+        # Set retries to a large number to retry infinitely
+        retries=100000,
+    )
+    return parsl_config

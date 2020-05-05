@@ -12,6 +12,7 @@ from parsl.addresses import address_by_hostname
 from argparse import ArgumentParser
 import logging
 
+import pepper
 from pepper import Config, Processor
 from pepper.datasets import expand_datasetdict
 
@@ -119,45 +120,10 @@ os.makedirs(args.histdir, exist_ok=True)
 processor = Processor(config, args.eventdir)
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
-    conor_config = ("requirements = (OpSysAndVer == \"SL6\" || OpSysAndVer =="
-                    " \"CentOS7\")")
-    # Need to unset PYTHONPATH because of DESY NAF setting it incorrectly
-    # Need to put own directory into PYTHONPATH for unpickling processor to
-    # work. Should be unncessecary, once we have correct module structure.
-    # Need to extend PATH to be able to execute the main parsl script
-    condor_init = """
-source /cvmfs/cms.cern.ch/cmsset_default.sh
-if lsb_release -r | grep -q 7\\.; then
-cd /cvmfs/cms.cern.ch/slc7_amd64_gcc700/cms/cmssw-patch/CMSSW_10_2_4_patch1/src
-else
-cd /cvmfs/cms.cern.ch/slc6_amd64_gcc700/cms/cmssw-patch/CMSSW_10_2_4_patch1/src
-fi
-eval `scramv1 runtime -sh`
-cd -
-export PYTHONPATH={}
-export PATH=~/.local/bin:$PATH
-""".format(os.path.dirname(os.path.abspath(__file__)))
-    provider = parsl.providers.CondorProvider(
-        init_blocks=args.condor,
-        max_blocks=args.condor,
-        scheduler_options=conor_config,
-        worker_init=condor_init
-        )
-    parsl_executor = parsl.executors.HighThroughputExecutor(
-        label="HTCondor",
-        address=address_by_hostname(),
-        max_workers=1,
-        provider=provider,
-    )
-    parsl_config = parsl.config.Config(
-        executors=[parsl_executor],
-        retries=100000,
-    )
-
-    # Load config now instead of putting it into executor_args to be able to
-    # use the same jobs for preprocessing and processing
+    # Load parsl config immediately instead of putting it into executor_args
+    # to be able to use the same jobs for preprocessing and processing
     print("Spawning jobs. This can take a while")
-    parsl.load(parsl_config)
+    parsl.load(pepper.misc.get_parsl_config(args.condor))
     executor_args = {}
 else:
     executor = coffea.processor.iterative_executor
