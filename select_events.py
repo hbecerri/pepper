@@ -77,6 +77,12 @@ if not config["compute_systematics"]:
 
 datasets, paths2dsname = expand_datasetdict(datasets, store)
 if args.dataset is None:
+    missing_datasets = ((config["mc_datasets"].keys()
+                         | config["exp_datasets"].keys())
+                        - datasets.keys())
+    if len(missing_datasets) > 0:
+        print("Could not find files for: " + ", ".join(missing_datasets))
+        exit(1)
     num_files = len(paths2dsname)
     num_mc_files = sum(len(datasets[dsname])
                        for dsname in config["mc_datasets"].keys())
