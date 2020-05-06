@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
 
 import os
-import numpy as np
-import awkward
 import coffea
-from functools import partial
 import shutil
 import parsl
 import json
-from parsl.addresses import address_by_hostname
 from argparse import ArgumentParser
 import logging
 
 import pepper
-from pepper import Config, Processor
-from pepper.datasets import expand_datasetdict
 
 
 parser = ArgumentParser(description="Select events from nanoAODs")
@@ -49,7 +43,7 @@ logger.addHandler(logging.StreamHandler())
 if args.debug:
     logger.setLevel(logging.DEBUG)
 
-config = Config(args.config)
+config = pepper.Config(args.config)
 store = config["store"]
 
 
@@ -75,7 +69,7 @@ if not config["compute_systematics"]:
         if sysds in datasets:
             del datasets[sysds]
 
-datasets, paths2dsname = expand_datasetdict(datasets, store)
+datasets, paths2dsname = pepper.datasets.expand_datasetdict(datasets, store)
 if args.dataset is None:
     requested_datasets = config["mc_datasets"].keys()
     if not args.mc:
@@ -124,7 +118,7 @@ if args.eventdir is not None:
 # Create histdir and in case of errors, raise them now (before processing)
 os.makedirs(args.histdir, exist_ok=True)
 
-processor = Processor(config, args.eventdir)
+processor = pepper.Processor(config, args.eventdir)
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
     # Load parsl config immediately instead of putting it into executor_args
