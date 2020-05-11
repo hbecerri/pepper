@@ -9,5 +9,6 @@ from pepper.output_filler import DummyOutputFiller
 from pepper.output_filler import OutputFiller
 from pepper.selector import Selector
 from pepper.kinreco import sonnenschein
+from pepper.betchart_kinreco import betchart
 from pepper.config import Config
 from pepper.processor import Processor
