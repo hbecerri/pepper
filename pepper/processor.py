@@ -312,8 +312,8 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.met_requirement, "MET > %d GeV"
                          % self.config["ee/mm_min_met"])
 
-        if (self.config["do_ttbar_reconstruction"]=="Sonnenschein" or
-                        self.config["do_ttbar_reconstruction"]=="Betchart"):
+        if (self.config["do_ttbar_reconstruction"] == "Sonnenschein" or
+                self.config["do_ttbar_reconstruction"] == "Betchart"):
             selector.set_column(self.pick_leps, "recolepton", all_cuts=True)
             selector.set_column(self.pick_bs, "recob", all_cuts=True)
             selector.set_column(self.ttbar_system, "recot", all_cuts=True)
@@ -1005,14 +1005,14 @@ class Processor(processor.ProcessorABC):
                 mt = self.config["reco_t_mass"]
             else:
                 mt = f[self.config["reco_t_mass"]]
-        if self.config["do_ttbar_reconstruction"]=="Sonnenschein":
+        if self.config["do_ttbar_reconstruction"] == "Sonnenschein":
             top, antitop = sonnenschein(
                 lep, antilep, b, antib, met, mwp=mw, mwm=mw, mt=mt, mat=mt,
-                energyfl=energyfl, energyfj=energyfj, alphal=alphal, alphaj=alphaj,
-                hist_mlb=mlb, num_smear=num_smear)
+                energyfl=energyfl, energyfj=energyfj, alphal=alphal,
+                alphaj=alphaj, hist_mlb=mlb, num_smear=num_smear)
             top = awkward.concatenate([top, antitop], axis=1)
             return Jca.candidatesfromcounts(top.counts, p4=top.flatten())
-        elif self.config["do_ttbar_reconstruction"]=="Betchart":
+        elif self.config["do_ttbar_reconstruction"] == "Betchart":
             top, antitop = betchart(
                 lep, antilep, b, antib, met, MW=mw, Mt=mt)
             return awkward.concatenate([top, antitop], axis=1)
