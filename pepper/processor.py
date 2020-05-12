@@ -406,7 +406,7 @@ class Processor(processor.ProcessorABC):
         if is_mc:
             # Lumimask only present in data, all events pass in MC
             # Compute lumi variation here
-            allpass = np.full(len(data["genWeight"]), True)
+            allpass = np.full(data.size, True)
             if self.config["compute_systematics"]:
                 weight = {}
                 if (self.config["year"] == "2018"
