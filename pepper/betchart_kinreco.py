@@ -249,15 +249,15 @@ def test_func(es, met, params):
     return ret_xy
 
 
-def _run_kinreco(l, al, b, bbar, METx, METy, Wm2=80.385**2, Tm2=172.5**2):
-    nevents = len(l)
+def _run_kinreco(lep, alep, b, bbar, METx, METy, Wm2=80.385**2, Tm2=172.5**2):
+    nevents = len(lep)
     nu = np.empty((3, 4 * nevents), dtype=np.float64)
     nubar = np.empty((3, 4 * nevents), dtype=np.float64)
     fails = 0
     nsols = np.zeros(nevents, dtype=np.int64)
     for eventi in range(nevents):
         bs = (b[eventi], bbar[eventi])
-        mus = (al[eventi], l[eventi])
+        mus = (alep[eventi], lep[eventi])
         metX, metY = METx[eventi], METy[eventi]
         solutionSets = [nuSolutionSet(B, M, Wm2, Tm2) for B, M in zip(bs, mus)]
 
