@@ -8,6 +8,7 @@ from coffea.analysis_objects import JaggedCandidateArray as Jca
 import awkward
 import numpy as np
 import parsl
+import parsl.addresses
 
 
 def concatenate(arr1, arr2):
@@ -359,6 +360,7 @@ def get_parsl_config(num_jobs, runtime=3*60*60, hostname=None):
     if hostname is None:
         hostname = parsl.addresses.address_by_hostname()
     scriptdir = sys.path[0]
+    pythonpath = os.environ["PYTHONPATH"]
     condor_config = ("requirements = (OpSysAndVer == \"SL6\" || OpSysAndVer =="
                      " \"CentOS7\")\n")
     if runtime is not None:
@@ -379,12 +381,9 @@ fi
 eval `scramv1 runtime -sh`
 cd -
 """
-    if hostname.endswith(".desy.de"):
-        # DESY NAF has set PYTHONPATH to old python2 paths, causing crashes
-        condor_init += "unset PYTHONPATH\n"
     # Need to put own directory into PYTHONPATH for unpickling to work.
     # Need to extend PATH to be able to execute the main parsl script.
-    condor_init += f"export PYTHONPATH={scriptdir}:$PYTHONPATH\n"
+    condor_init += f"export PYTHONPATH={scriptdir}:{pythonpath}\n"
     condor_init += "PATH=~/.local/bin:$PATH"
     provider = parsl.providers.CondorProvider(
         init_blocks=num_jobs,
