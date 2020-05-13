@@ -84,4 +84,11 @@ for key in counts.keys():
                                                               counts[key],
                                                               factors[key]))
 
-json.dump(factors, open(args.out, "w"), indent=4)
+if os.path.exists(args.out):
+    with open(args.out) as f:
+        factors_old = json.load(f)
+    factors_old.update(factors)
+    factors = factors_old
+
+with open(args.out, "w") as f:
+    json.dump(factors, f, indent=4)
