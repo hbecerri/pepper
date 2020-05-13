@@ -40,13 +40,21 @@ for process_name, proc_datasets in datasets.items():
         continue
     for path in proc_datasets:
         f = uproot.open(path)
-        gen_event_sumw = f["Runs"]["genEventSumw"].array()[0]
-        has_lhe = f["Runs"]["LHEScaleSumw"].array()[0].size != 0
+        if "genEventSumw_" in f["Runs"]:  # inconsistent naming in NanoAODv6
+            geskey = "genEventSumw_"
+            lhesskey = "LHEScaleSumw_"
+            lhepdfskey = "LHEPdfSumw_"
+        else:
+            geskey = "genEventSumw"
+            lhesskey = "LHEScaleSumw"
+            lhepdfskey = "LHEPdfSumw"
+        gen_event_sumw = f["Runs"][geskey].array()[0]
+        has_lhe = f["Runs"][lhesskey].array()[0].size != 0
         if has_lhe:
-            lhe_scale_sumw = f["Runs"]["LHEScaleSumw"].array()[0]
+            lhe_scale_sumw = f["Runs"][lhesskey].array()[0]
             lhe_scale_sumw /= lhe_scale_sumw[4]
             lhe_scale_sumw *= gen_event_sumw
-            lhe_pdf_sumw = f["Runs"]["LHEPdfSumw"].array()[0] * gen_event_sumw
+            lhe_pdf_sumw = f["Runs"][lhepdfskey].array()[0] * gen_event_sumw
 
         counts[process_name] += gen_event_sumw
         if has_lhe:
