@@ -1,6 +1,7 @@
 before_script:
   - yum install -y python3-pip > /dev/null
   - pip3 install pycodestyle > /dev/null
+  - echo pycodestyle version `python3 -m pycodestyle --version`
 
 pycodestyle:
   script:
