@@ -195,11 +195,11 @@ class Processor(processor.ProcessorABC):
                 outf[key] = out_dict[key]
 
     def process(self, df):
+        dsname = df["dataset"]
         logger.debug(f"Started processing {df._tree._context.sourcepath} "
                      f"from event {df._branchargs['entrystart']} to "
-                     f"{df._branchargs['entrystop'] - 1}")
+                     f"{df._branchargs['entrystop'] - 1} for dataset {dsname}")
         data = LazyTable(df)
-        dsname = df["dataset"]
         is_mc = (dsname in self.config["mc_datasets"].keys())
 
         filler = self.setup_outputfiller(data, dsname, is_mc)
