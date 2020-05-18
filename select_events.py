@@ -69,18 +69,17 @@ if not config["compute_systematics"]:
         if sysds in datasets:
             del datasets[sysds]
 
+requested_datasets = datasets.keys()
 datasets, paths2dsname = pepper.datasets.expand_datasetdict(datasets, store)
 if args.dataset is None:
-    requested_datasets = config["mc_datasets"].keys()
-    if not args.mc:
-        requested_datasets |= config["exp_datasets"].keys()
     missing_datasets = requested_datasets - datasets.keys()
     if len(missing_datasets) > 0:
         print("Could not find files for: " + ", ".join(missing_datasets))
         exit(1)
     num_files = len(paths2dsname)
     num_mc_files = sum(len(datasets[dsname])
-                       for dsname in config["mc_datasets"].keys())
+                       for dsname in config["mc_datasets"].keys()
+                       if dsname in requested_datasets)
 
     print("Got a total of {} files of which {} are MC".format(num_files,
                                                               num_mc_files))
