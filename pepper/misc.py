@@ -108,16 +108,6 @@ def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None):
     return list(dict.fromkeys(pos_triggers)), list(dict.fromkeys(neg_triggers))
 
 
-def jagged_reduce(jarr):
-    """Remove any unused content from a JaggedArray, making it ready for
-    saving"""
-    if isinstance(jarr, np.ndarray):
-        return jarr
-    cls = awkward.array.objects.Methods.maybemixin(type(jarr),
-                                                   awkward.JaggedArray)
-    return cls.fromcounts(jarr.counts, jarr.flatten())
-
-
 def get_event_files(eventdir, eventext, datasets):
     out = {}
     for dsname in datasets:

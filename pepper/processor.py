@@ -146,13 +146,48 @@ class Processor(processor.ProcessorABC):
                 continue
             else:
                 break
+        logger.debug(f"Opened output {filepath}")
         return f
+
+    def _prepare_saved_columns(self, selector):
+        columns = {}
+        for specifier in self.config["columns_to_save"]:
+            item = selector.masked
+            if isinstance(specifier, str):
+                specifier = [specifier]
+            elif not isinstance(specifier, list):
+                raise pepper.config.ConfigError(
+                    "columns_to_save must be str or list")
+            for subspecifier in specifier:
+                try:
+                    item = item[subspecifier]
+                except KeyError:
+                    try:
+                        item = getattr(item, subspecifier)
+                    except AttributeError:
+                        logger.info("Skipping to save column because it is "
+                                    f"not present: {specifier}")
+                        continue
+            if isinstance(item, awkward.JaggedArray):
+                # Strip rows that are not selected from memory
+                item = item.deepcopy()
+                if isinstance(item.content, awkward.Table):
+                    # Remove columns used for caching by Coffea
+                    for column in item.content.columns:
+                        if column.startswith("__"):
+                            del item.content[column]
+            key = "_".join(specifier)
+            if key in columns:
+                raise pepper.config.ConfigError(
+                    f"Ambiguous column to save '{key}', (from {specifier})")
+            columns[key] = item
+        return awkward.Table(columns)
 
     def _save_per_event_info(self, dsname, selector):
         with self._open_output(dsname) as f:
             outf = awkward.hdf5(f)
-            out_dict = selector.get_columns_from_config(
-                self.config["columns_to_save"])
+            out_dict = {}
+            out_dict["events"] = self._prepare_saved_columns(selector)
             out_dict["weight"] = selector.weight
             out_dict["cutflags"] = selector.get_cuts()
 

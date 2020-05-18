@@ -257,11 +257,24 @@
             "HLT_IsoMu24"
         ]
     },
-    "columns_to_save": {
-        "part_props": {},
-        "other_cols": {},
-        "cuts": "Current"
-    },
+    "columns_to_save": [
+        [
+            "Lepton",
+            "p4"
+        ],
+        [
+            "Jet",
+            "p4"
+        ],
+        [
+            "Jet",
+            "btagged"
+        ],
+        [
+            "MET",
+            "p4"
+        ]
+    ],
 
     "apply_met_filters": true,
     "mc_lumifactors": "$DATADIR/2018ttbar_mclumifactors.json",

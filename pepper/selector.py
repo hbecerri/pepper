@@ -293,55 +293,6 @@ class Selector():
                 cb(data=self.final, systematics=self.final_systematics,
                    cut=cut_name)
 
-    def get_columns(self, part_props={}, other_cols=set(), cuts="Current",
-                    prefix=""):
-        """Get columns of events passing cuts
-
-        Arguments:
-        part_props- A dictionary of particles, followed by a list of properties
-                     one wishes to save for those particles- "p4" will add all
-                     components of the 4-momentum
-        other_cols- The other columns one wishes to save
-        cuts      - "Current", "All" or a list of cuts - the list of cuts to
-                     apply before saving- The default, "Current", only applies
-                     the cuts before freeze_selection
-        prefix    - A string that gets prepended to every key in return_dict
-
-        Returns:
-        return_dict - A dict containing JaggedArrays or numpy arrays of the
-                      columns
-        """
-        if cuts == "Current":
-            cuts = self._current_cuts
-        elif cuts == "All":
-            cuts = self._cuts.names
-        elif not isinstance(cuts, list):
-            raise ValueError("cuts needs to be one of 'Current', 'All' or a "
-                             "list")
-        data = self.table[self._cuts.all(*cuts)]
-        return_dict = {}
-        for part in part_props.keys():
-            props = set(part_props[part])
-            if "p4" in props:
-                props |= {"pt", "eta", "phi", "mass"}
-            props -= {"p4"}
-            for prop in props:
-                if not hasattr(data[part], prop):
-                    continue
-                arr = pepper.misc.jagged_reduce(getattr(data[part], prop))
-                return_dict[part + "_" + prop] = arr
-        for col in other_cols:
-            if col not in data:
-                continue
-            return_dict[prefix + col] = pepper.misc.jagged_reduce(data[col])
-        return return_dict
-
-    def get_columns_from_config(self, to_save, prefix=""):
-        return self.get_columns(to_save["part_props"],
-                                to_save["other_cols"],
-                                to_save["cuts"],
-                                prefix=prefix)
-
     def get_cuts(self, cuts="Current"):
         """Get information on what events pass which cuts
 
