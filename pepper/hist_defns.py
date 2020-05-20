@@ -171,30 +171,30 @@ class HistDefinition():
                         break
 
                 if "leading" in sel:
-                    if "slice" in sel:
-                        raise HistDefinitionError(
-                            "'leading' and 'slice' can't be specified at the "
-                            "same time")
-                    n = sel["leading"]
-                    if n <= 0:
-                        raise HistDefinitionError("'leading' must be positive")
-                    data = data[:, n - 1]
-                if "slice" in sel:
-                    slidef = sel["slice"]
-                    if isinstance(slidef, int):
-                        # Simple stop slice
-                        sli = slidef
-                    elif isinstance(slidef, list):
-                        # Multi-dimensional slice
-                        sli = tuple(slice(*x) for x in slidef)
+                    leading = sel["leading"]
+                    if isinstance(leading, (list, tuple)):
+                        start = leading[0] - 1
+                        end = leading[1] - 1
+                        if start >= end:
+                            raise HistDefinitionError(
+                                "First entry in 'leading' must be larger than "
+                                "the second one")
                     else:
-                        sli = slice(*slidef)
-                    if (isinstance(data, awkward.JaggedArray)
-                            and isinstance(sli, list)
-                            and len(sli) >= 2):
-                        # Jagged slice, ignore events that have too few counts
-                        data = data[data.counts > sli[1].stop]
-                    data = data[sli]
+                        start = leading - 1
+                        end = start + 1
+                    print(start, end)
+                    if isinstance(data, np.ndarray):
+                        data = awkward.JaggedArray.fromregular(data)
+                    elif not isinstance(data, awkward.JaggedArray):
+                        raise HistDefinitionError(
+                            "Can only do 'leading' on numpy or jagged arrays")
+                    # Do not change data.size as we later need to apply channel
+                    # masks
+                    num_entries = np.where(
+                        data.counts >= end - 1, end - start, 0)
+                    start = np.minimum(data.stops, data.starts + start)
+                    end = np.minimum(data.stops, data.starts + end)
+                    data = awkward.JaggedArray(start, end, data.content)
         else:
             return data
         return None
