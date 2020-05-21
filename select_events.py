@@ -89,9 +89,8 @@ if args.dataset is None:
                                                               num_mc_files))
 
 if args.debug:
-    print("Processing only one file because of --debug")
-    key = list(key for key, value in datasets.items() if len(value) > 0)[0]
-    datasets = {key: datasets[key][:1]}
+    print("Processing only one file per dataset because of --debug")
+    datasets = {key: [val[0]] for key, val in datasets.items()}
 
 if len(datasets) == 0:
     print("No datasets found")
