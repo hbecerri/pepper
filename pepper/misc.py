@@ -383,8 +383,9 @@ cd -
         condor_config = config["condor_config"]
         condor_init = config["condor_init"]
     provider = parsl.providers.CondorProvider(
-        init_blocks=num_jobs,
+        init_blocks=5,
         max_blocks=num_jobs,
+        parallelism=0.5,
         scheduler_options=condor_config,
         worker_init=condor_init
     )
