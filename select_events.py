@@ -36,6 +36,10 @@ parser.add_argument(
 parser.add_argument(
     "-d", "--debug", action="store_true", help="Enable debug messages and "
     "only process a small amount of files to make debugging feasible")
+parser.add_argument(
+    "-p", "--parsl_config", help="Path to a json specifying the condor_init "
+    "and condor_configs to be used with parsl. If not specified, the default "
+    "settings in misc.py will be used")
 args = parser.parse_args()
 
 logger = logging.getLogger("pepper")
@@ -123,7 +127,11 @@ if args.condor is not None:
     # Load parsl config immediately instead of putting it into executor_args
     # to be able to use the same jobs for preprocessing and processing
     print("Spawning jobs. This can take a while")
-    parsl.load(pepper.misc.get_parsl_config(args.condor))
+    print(args.parsl_config)
+    if args.parsl_config is not None:
+        parsl.load(pepper.misc.get_parsl_config(args.condor, args.parsl_config))
+    else:
+        parsl.load(pepper.misc.get_parsl_config(args.condor, None))
     executor_args = {}
 else:
     executor = coffea.processor.iterative_executor
