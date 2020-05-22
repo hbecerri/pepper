@@ -90,9 +90,9 @@ class Processor(processor.ProcessorABC):
             self._jer = self.config["jet_resolution"]
             self._jersf = self.config["jet_ressf"]
         else:
-            if config["compute_systematics"]:
-                logger.warning("No jet resolution or no jet resolution scale "
-                               "factor specified")
+            logger.warning("No jet resolution or no jet resolution scale "
+                           "factor specified- this is necessary for "
+                           "smearing, even if not computing systematics")
             self._jer = None
             self._jersf = None
 
