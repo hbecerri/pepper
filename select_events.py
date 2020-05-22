@@ -128,7 +128,8 @@ if args.condor is not None:
     print("Spawning jobs. This can take a while")
     print(args.parsl_config)
     if args.parsl_config is not None:
-        parsl.load(pepper.misc.get_parsl_config(args.condor, args.parsl_config))
+        parsl.load(pepper.misc.get_parsl_config(args.condor,
+                                                args.parsl_config))
     else:
         parsl.load(pepper.misc.get_parsl_config(args.condor, None))
     executor_args = {}
