@@ -1,6 +1,5 @@
 import os
 import sys
-import json
 from glob import glob
 import h5py
 import uproot
@@ -340,33 +339,39 @@ def hist_counts(hist):
     return next(iter(values.values()))
 
 
-def get_parsl_config(num_jobs, config, runtime=3*60*60, hostname=None):
+def get_parsl_config(num_jobs, runtime=3*60*60, hostname=None, *,
+                     condor_submit=None, condor_init=None):
     """Get a parsl config for a host.
 
     Arguments:
     num_jobs -- Number of jobs/processes to run in parallel
     runtime -- Requested runtime in seconds. If None, do not request a runtime
     hostname -- hostname of the machine to submit from. If None, use current
+    condor_submit -- String that gets appended to the Condor submit file
+    condor_init -- Overwrite default environment setup on Condor node. This
+                   needs to be a string containing Bash commands
     """
     if hostname is None:
         hostname = parsl.addresses.address_by_hostname()
-    if config is None:
-        scriptdir = os.path.realpath(sys.path[0])
-        if "PYTHONPATH" in os.environ:
-            pythonpath = os.environ["PYTHONPATH"]
+    scriptdir = os.path.realpath(sys.path[0])
+    if "PYTHONPATH" in os.environ:
+        pythonpath = os.environ["PYTHONPATH"]
+    else:
+        pythonpath = ""
+    condor_requirement = ("(OpSysAndVer == \"SL6\" || "
+                          "OpSysAndVer == \"CentOS7\")\n")
+    condor_config = ""
+    if runtime is not None:
+        if hostname.endswith(".desy.de"):
+            condor_config += f"+RequestRuntime = {runtime}\n"
+        elif hostname.endswith(".cern.ch"):
+            condor_config += f"+MaxRuntime = {runtime}\n"
         else:
-            pythonpath = ""
-        condor_config = ("requirements = (OpSysAndVer == \"SL6\" || "
-                         "OpSysAndVer == \"CentOS7\")\n")
-        if runtime is not None:
-            if hostname.endswith(".desy.de"):
-                condor_config += f"+RequestRuntime = {runtime}\n"
-            elif hostname.endswith(".cern.ch"):
-                condor_config += f"+MaxRuntime = {runtime}\n"
-            else:
-                raise NotImplementedError(
-                        f"runtime on unknown host {hostname}")
-        # Need to unset PYTHONPATH because of DESY NAF setting it incorrectly
+            raise NotImplementedError(
+                    f"runtime on unknown host {hostname}")
+    if condor_submit is not None:
+        condor_config += condor_submit
+    if condor_init is None:
         condor_init = """
 source /cvmfs/cms.cern.ch/cmsset_default.sh
 if lsb_release -r | grep -q 7\\.; then
@@ -379,16 +384,12 @@ cd -
 """
         # Need to put own directory into PYTHONPATH for unpickling to work.
         condor_init += f"export PYTHONPATH={scriptdir}:{pythonpath}\n"
-    else:
-        with open(config, "r") as conf:
-            config = json.load(conf)
-        condor_config = config["condor_config"]
-        condor_init = config["condor_init"]
     provider = parsl.providers.CondorProvider(
         init_blocks=5,
         max_blocks=num_jobs,
         parallelism=0.5,
         scheduler_options=condor_config,
+        requirements=condor_requirement,
         worker_init=condor_init
     )
     launch_cmd = ("python3 "

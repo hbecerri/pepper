@@ -126,14 +126,20 @@ if args.condor is not None:
     # Load parsl config immediately instead of putting it into executor_args
     # to be able to use the same jobs for preprocessing and processing
     print("Spawning jobs. This can take a while")
-    print(args.parsl_config)
     if args.parsl_config is not None:
-        parsl.load(pepper.misc.get_parsl_config(args.condor,
-                                                args.parsl_config))
+        with open(args.parsl_config) as f:
+            parsl_config = json.load(f)
+        parsl_config = pepper.misc.get_parsl_config(
+            args.condor,
+            condor_submit=parsl_config["condor_config"],
+            condor_init=parsl_config["condor_init"])
     else:
-        parsl.load(pepper.misc.get_parsl_config(args.condor, None))
+        parsl_config = pepper.misc.get_parsl_config(args.condor)
+    parsl.load(parsl_config)
     executor_args = {}
 else:
+    if args.parsl_config is not None:
+        print("Ignoring parsl_config because condor is not specified")
     executor = coffea.processor.iterative_executor
     executor_args = {}
 
