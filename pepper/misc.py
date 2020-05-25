@@ -351,7 +351,11 @@ def get_parsl_config(num_jobs, config, runtime=3*60*60, hostname=None):
     if hostname is None:
         hostname = parsl.addresses.address_by_hostname()
     if config is None:
-        scriptdir = sys.path[0]
+        scriptdir = os.path.realpath(sys.path[0])
+        if "PYTHONPATH" in os.environ:
+            pythonpath = os.environ["PYTHONPATH"]
+        else:
+            pythonpath = ""
         pythonpath = os.environ["PYTHONPATH"]
         condor_config = ("requirements = (OpSysAndVer == \"SL6\" || "
                          "OpSysAndVer == \"CentOS7\")\n")
