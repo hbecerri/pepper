@@ -356,7 +356,6 @@ def get_parsl_config(num_jobs, config, runtime=3*60*60, hostname=None):
             pythonpath = os.environ["PYTHONPATH"]
         else:
             pythonpath = ""
-        pythonpath = os.environ["PYTHONPATH"]
         condor_config = ("requirements = (OpSysAndVer == \"SL6\" || "
                          "OpSysAndVer == \"CentOS7\")\n")
         if runtime is not None:
