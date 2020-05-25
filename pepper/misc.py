@@ -378,9 +378,7 @@ eval `scramv1 runtime -sh`
 cd -
 """
         # Need to put own directory into PYTHONPATH for unpickling to work.
-        # Need to extend PATH to be able to execute the main parsl script.
         condor_init += f"export PYTHONPATH={scriptdir}:{pythonpath}\n"
-        condor_init += "PATH=~/.local/bin:$PATH"
     else:
         with open(config, "r") as conf:
             config = json.load(conf)
@@ -393,8 +391,23 @@ cd -
         scheduler_options=condor_config,
         worker_init=condor_init
     )
+    launch_cmd = ("python3 "
+                  "~/.local/bin/process_worker_pool.py "
+                  "{debug} "
+                  "{max_workers} "
+                  "-p {prefetch_capacity} "
+                  "-c {cores_per_worker} "
+                  "-m {mem_per_worker} "
+                  "--poll {poll_period} "
+                  "--task_url={task_url} "
+                  "--result_url={result_url} "
+                  "--logdir={logdir} "
+                  "--block_id={{block_id}} "
+                  "--hb_period={heartbeat_period} "
+                  "--hb_threshold={heartbeat_threshold} ")
     parsl_executor = parsl.executors.HighThroughputExecutor(
         label="HTCondor",
+        launch_cmd=launch_cmd,
         address=hostname,
         max_workers=1,
         provider=provider,
