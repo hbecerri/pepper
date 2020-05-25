@@ -91,7 +91,7 @@ class Processor(processor.ProcessorABC):
             self._jersf = self.config["jet_ressf"]
         else:
             logger.warning("No jet resolution or no jet resolution scale "
-                           "factor specified- this is necessary for "
+                           "factor specified. This is necessary for "
                            "smearing, even if not computing systematics")
             self._jer = None
             self._jersf = None
@@ -307,7 +307,8 @@ class Processor(processor.ProcessorABC):
             filler.sys_overwrite = None
 
         # Do normal, no-variation run
-        self.process_selection_jet_part(selector, is_mc, VariationArg(None))
+        self.process_selection_jet_part(
+            selector, is_mc, self.get_jetmet_nominal_arg())
         logger.debug("Selection done")
 
     def get_jetmet_variation_args(self):
@@ -326,6 +327,12 @@ class Processor(processor.ProcessorABC):
             ret.append(VariationArg("Jer_up", jer="up"))
             ret.append(VariationArg("Jer_down", jer="down"))
         return ret
+
+    def get_jetmet_nominal_arg(self):
+        if self._jer is not None and self._jersf is not None:
+            return VariationArg(None)
+        else:
+            return VariationArg(None, jer=None)
 
     def process_selection_jet_part(self, selector, is_mc, variation):
         logger.debug(f"Running jet_part with variation {variation.name}")
