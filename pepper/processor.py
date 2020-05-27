@@ -104,6 +104,24 @@ class Processor(processor.ProcessorABC):
             raise pepper.config.ConfigError(
                 "Need kinreco_info_file for kinematic reconstruction")
         self.mc_lumifactors = config["mc_lumifactors"]
+        
+        # Construct a dict of datasets for which we are not processing the relevant
+        # dedicated systematic datasets, and so the nominal histograms need to be copied
+        self.copy_nominal = {}
+        for sysdataset, sys in self.config["dataset_for_systematics"].items():
+            replaced, sysname = sys
+            if sysname not in self.copy_nominal:
+                self.copy_nominal[sysname] = []
+                # Copy all normal mc datasets
+                for dataset in self.config["mc_datasets"].keys():
+                    if dataset in self.config["dataset_for_systematics"]:
+                        continue
+                    self.copy_nominal[sysname].append(dataset)
+            try:
+                # Remove the ones that get replaced by a dedicated dataset
+                self.copy_nominal[sysname].remove(replaced)
+            except ValueError:
+                pass
 
     @staticmethod
     def _get_hists_from_config(config, key, todokey):
@@ -224,27 +242,9 @@ class Processor(processor.ProcessorABC):
             dsname_in_hist = dsname
             sys_overwrite = None
 
-        copy_nominal = {}
-        # Copy nominal histogram for the errors that have a dedicated dataset,
-        # when we are not processing such a dataset
-        for sysdataset, sys in self.config["dataset_for_systematics"].items():
-            replaced, sysname = sys
-            if sysname not in copy_nominal:
-                copy_nominal[sysname] = []
-                # Copy all normal mc datasets
-                for dataset in self.config["mc_datasets"].keys():
-                    if dataset in self.config["dataset_for_systematics"]:
-                        continue
-                    copy_nominal[sysname].append(dataset)
-            try:
-                # Remove the ones that get replaced by a dedicated dataset
-                copy_nominal[sysname].remove(replaced)
-            except ValueError:
-                pass
-
         filler = OutputFiller(
             output, self.hists, is_mc, dsname, dsname_in_hist, sys_enabled,
-            sys_overwrite=sys_overwrite, copy_nominal=copy_nominal)
+            sys_overwrite=sys_overwrite, copy_nominal=self.copy_nominal)
 
         return filler
 
