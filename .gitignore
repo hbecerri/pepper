@@ -11,3 +11,4 @@ out_hists
 ttDM_config
 nohup.out
 *.pyc
+hists
