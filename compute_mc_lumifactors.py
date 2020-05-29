@@ -13,6 +13,22 @@ from itertools import chain
 import pepper
 
 
+def update_counts(f, counts, process_name, geskey, lhesskey, lhepdfskey):
+    gen_event_sumw = f["Runs"][geskey].array()[0]
+    has_lhe = f["Runs"][lhesskey].array()[0].size != 0
+    if has_lhe:
+        lhe_scale_sumw = f["Runs"][lhesskey].array()[0]
+        lhe_scale_sumw /= lhe_scale_sumw[4]
+        lhe_scale_sumw *= gen_event_sumw
+        lhe_pdf_sumw = f["Runs"][lhepdfskey].array()[0] * gen_event_sumw
+
+    counts[process_name] += gen_event_sumw
+    if has_lhe:
+        counts[process_name + "_LHEScaleSumw"] += lhe_scale_sumw
+        counts[process_name + "_LHEPdfSumw"] += lhe_pdf_sumw
+    return counts
+
+
 parser = ArgumentParser(description="Compute factors from luminosity and "
                                     "cross sections to scale MC")
 parser.add_argument("lumi", type=float, help="The luminosity in 1/fb")
@@ -30,38 +46,53 @@ if "dataset_for_systematics" in config:
     dsforsys = config["dataset_for_systematics"]
 else:
     dsforsys = {}
+if "randomised_parameter_scan_datasets" in config:
+    rps_datasets = config["randomised_parameter_scan_datasets"]
+else:
+    rps_datasets = {}
 crosssections = json.load(open(args.crosssections))
 counts = defaultdict(int)
 num_files = len(list(chain(*datasets.values())))
 i = 0
 for process_name, proc_datasets in datasets.items():
-    if process_name not in crosssections and process_name not in dsforsys:
+    if (process_name not in crosssections and process_name not in dsforsys
+            and process_name not in rps_datasets):
         print("Could not find crosssection for {}".format(process_name))
         continue
-    for path in proc_datasets:
-        f = uproot.open(path)
-        if "genEventSumw_" in f["Runs"]:  # inconsistent naming in NanoAODv6
-            geskey = "genEventSumw_"
-            lhesskey = "LHEScaleSumw_"
-            lhepdfskey = "LHEPdfSumw_"
-        else:
-            geskey = "genEventSumw"
-            lhesskey = "LHEScaleSumw"
-            lhepdfskey = "LHEPdfSumw"
-        gen_event_sumw = f["Runs"][geskey].array()[0]
-        has_lhe = f["Runs"][lhesskey].array()[0].size != 0
-        if has_lhe:
-            lhe_scale_sumw = f["Runs"][lhesskey].array()[0]
-            lhe_scale_sumw /= lhe_scale_sumw[4]
-            lhe_scale_sumw *= gen_event_sumw
-            lhe_pdf_sumw = f["Runs"][lhepdfskey].array()[0] * gen_event_sumw
-
-        counts[process_name] += gen_event_sumw
-        if has_lhe:
-            counts[process_name + "_LHEScaleSumw"] += lhe_scale_sumw
-            counts[process_name + "_LHEPdfSumw"] += lhe_pdf_sumw
-        print("[{}/{}] Processed {}".format(i + 1, num_files, path))
-        i += 1
+    if process_name in rps_datasets:
+        for path in proc_datasets:
+            try:
+                f = uproot.open(path)
+            except ValueError:
+                # handle empty files
+                continue
+            masspoints = [key.decode("utf-8").split("_", 1)[1]
+                          for key in f["Runs"].iterkeys()
+                          if key.decode("utf-8").startswith("genEventSumw_")]
+            for mp in masspoints:
+                geskey = "genEventSumw_" + mp
+                lhesskey = "LHEScaleSumw_" + mp
+                lhepdfskey = "LHEPdfSumw_" + mp
+                counts = update_counts(f, counts, mp,
+                                       geskey, lhesskey, lhepdfskey)
+            print("[{}/{}] Processed {}".format(i + 1, num_files, path))
+            i += 1
+    else:
+        for path in proc_datasets:
+            f = uproot.open(path)
+            if "genEventSumw_" in f["Runs"]:
+                # inconsistent naming in NanoAODv6
+                geskey = "genEventSumw_"
+                lhesskey = "LHEScaleSumw_"
+                lhepdfskey = "LHEPdfSumw_"
+            else:
+                geskey = "genEventSumw"
+                lhesskey = "LHEScaleSumw"
+                lhepdfskey = "LHEPdfSumw"
+            counts = update_counts(f, counts, process_name,
+                                   geskey, lhesskey, lhepdfskey)
+            print("[{}/{}] Processed {}".format(i + 1, num_files, path))
+            i += 1
 factors = {}
 for key in counts.keys():
     if key.endswith("_LHEScaleSumw") or key.endswith("_LHEPdfSumw"):
