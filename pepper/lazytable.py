@@ -69,4 +69,4 @@ class LazyTable(object):
 
     @property
     def columns(self):
-        return self._df._dict.keys()
+        return set(self._df._dict.keys()) | self._df.available
