@@ -385,7 +385,7 @@ cd -
         # Need to put own directory into PYTHONPATH for unpickling to work.
         condor_init += f"export PYTHONPATH={scriptdir}:{pythonpath}\n"
     provider = parsl.providers.CondorProvider(
-        init_blocks=5,
+        init_blocks=min(5, num_jobs),
         max_blocks=num_jobs,
         parallelism=0.5,
         scheduler_options=condor_config,
