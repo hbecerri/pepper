@@ -61,11 +61,6 @@ for process_name, proc_datasets in datasets.items():
         continue
     if process_name in rps_datasets:
         for path in proc_datasets:
-            try:
-                f = uproot.open(path)
-            except ValueError:
-                # handle empty files
-                continue
             masspoints = [key.decode("utf-8").split("_", 1)[1]
                           for key in f["Runs"].iterkeys()
                           if key.decode("utf-8").startswith("genEventSumw_")]
