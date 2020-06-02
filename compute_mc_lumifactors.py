@@ -59,8 +59,9 @@ for process_name, proc_datasets in datasets.items():
             and process_name not in rps_datasets):
         print("Could not find crosssection for {}".format(process_name))
         continue
-    if process_name in rps_datasets:
-        for path in proc_datasets:
+    for path in proc_datasets:
+        f = uproot.open(path)
+        if process_name in rps_datasets:
             masspoints = [key.decode("utf-8").split("_", 1)[1]
                           for key in f["Runs"].iterkeys()
                           if key.decode("utf-8").startswith("genEventSumw_")]
@@ -70,11 +71,7 @@ for process_name, proc_datasets in datasets.items():
                 lhepdfskey = "LHEPdfSumw_" + mp
                 counts = update_counts(f, counts, mp,
                                        geskey, lhesskey, lhepdfskey)
-            print("[{}/{}] Processed {}".format(i + 1, num_files, path))
-            i += 1
-    else:
-        for path in proc_datasets:
-            f = uproot.open(path)
+        else:
             if "genEventSumw_" in f["Runs"]:
                 # inconsistent naming in NanoAODv6
                 geskey = "genEventSumw_"
@@ -86,8 +83,8 @@ for process_name, proc_datasets in datasets.items():
                 lhepdfskey = "LHEPdfSumw"
             counts = update_counts(f, counts, process_name,
                                    geskey, lhesskey, lhepdfskey)
-            print("[{}/{}] Processed {}".format(i + 1, num_files, path))
-            i += 1
+        print("[{}/{}] Processed {}".format(i + 1, num_files, path))
+        i += 1
 factors = {}
 for key in counts.keys():
     if key.endswith("_LHEScaleSumw") or key.endswith("_LHEPdfSumw"):
