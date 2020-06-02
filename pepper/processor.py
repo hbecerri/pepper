@@ -33,6 +33,7 @@ else:
 
 logger = logging.getLogger(__name__)
 
+
 class Processor(processor.ProcessorABC):
     def __init__(self, config, destdir):
         """Create a new Processor
