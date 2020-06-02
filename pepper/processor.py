@@ -244,7 +244,7 @@ class Processor(processor.ProcessorABC):
         data = LazyTable(df)
         is_mc = (dsname in self.config["mc_datasets"].keys())
         filler = self.setup_outputfiller(data, dsname, is_mc)
-        masspoints = [key for key in data._df.columns
+        masspoints = [key for key in data.columns
                       if key.startswith("GenModel_")]
         print(data._df.materialized)
         for mp in masspoints:
