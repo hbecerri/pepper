@@ -111,10 +111,14 @@ for key in counts.keys():
                                                               factors[key]))
 
 if os.path.exists(args.out):
-    with open(args.out) as f:
-        factors_old = json.load(f)
-    factors_old.update(factors)
-    factors = factors_old
+    try:
+        with open(args.out) as f:
+            factors_old = json.load(f)
+    except json.decoder.JSONDecodeError:
+        pass
+    else:
+        factors_old.update(factors)
+        factors = factors_old
 
 with open(args.out, "w") as f:
     json.dump(factors, f, indent=4)
