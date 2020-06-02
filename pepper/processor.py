@@ -33,7 +33,6 @@ else:
 
 logger = logging.getLogger(__name__)
 
-
 class Processor(processor.ProcessorABC):
     def __init__(self, config, destdir):
         """Create a new Processor
@@ -104,9 +103,10 @@ class Processor(processor.ProcessorABC):
             raise pepper.config.ConfigError(
                 "Need kinreco_info_file for kinematic reconstruction")
         self.mc_lumifactors = config["mc_lumifactors"]
-        
-        # Construct a dict of datasets for which we are not processing the relevant
-        # dedicated systematic datasets, and so the nominal histograms need to be copied
+
+        # Construct a dict of datasets for which we are not processing the
+        # relevant dedicated systematic datasets, and so the nominal histograms
+        # need to be copied
         self.copy_nominal = {}
         for sysdataset, sys in self.config["dataset_for_systematics"].items():
             replaced, sysname = sys
@@ -122,6 +122,11 @@ class Processor(processor.ProcessorABC):
                 self.copy_nominal[sysname].remove(replaced)
             except ValueError:
                 pass
+
+        if "randomised_parameter_scan_datasets" in config:
+            self.rps_datasets = config["randomised_parameter_scan_datasets"]
+        else:
+            self.rps_datasets = []
 
     @staticmethod
     def _get_hists_from_config(config, key, todokey):
@@ -217,6 +222,8 @@ class Processor(processor.ProcessorABC):
         logger.debug(f"Started processing {df._tree._context.sourcepath} "
                      f"from event {df._branchargs['entrystart']} to "
                      f"{df._branchargs['entrystop'] - 1} for dataset {dsname}")
+        if dsname in self.rps_datasets:
+            return self.process_rps(df, dsname)
         data = LazyTable(df)
         is_mc = (dsname in self.config["mc_datasets"].keys())
 
@@ -230,6 +237,33 @@ class Processor(processor.ProcessorABC):
 
         logger.debug("Processing finished")
         return filler.output
+
+    def process_rps(self, df, dsname):
+        logger.debug("This is a randomised parameter signal sample- processing"
+                     " each mass point separately")
+        data = LazyTable(df)
+        is_mc = (dsname in self.config["mc_datasets"].keys())
+        filler = self.setup_outputfiller(data, dsname, is_mc)
+        masspoints = [key for key in data._df.columns
+                      if key.startswith("GenModel_")]
+        print(data._df.materialized)
+        for mp in masspoints:
+            logger.debug(f"Processing mass point {mp}")
+            dsname = mp.split("_", 1)[1]
+            filler.update_ds(dsname, dsname, None)
+            selector = self.setup_selection(data, dsname, is_mc, filler)
+            selector.add_cut(partial(self.pick_mass_point, mp),
+                             "Select mass point", no_callback=True)
+            self.process_selection(selector, dsname, is_mc, filler)
+            if self.destdir is not None:
+                logger.debug("Saving per event info")
+                self._save_per_event_info(dsname, selector)
+
+        logger.debug("Processing finished")
+        return filler.output
+
+    def pick_mass_point(self, mp, data):
+        return data[mp]
 
     def setup_outputfiller(self, data, dsname, is_mc):
         output = self.accumulator.identity()
