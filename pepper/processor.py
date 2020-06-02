@@ -247,7 +247,6 @@ class Processor(processor.ProcessorABC):
         filler = self.setup_outputfiller(data, dsname, is_mc)
         masspoints = [key for key in data.columns
                       if key.startswith("GenModel_")]
-        print(data._df.materialized)
         for mp in masspoints:
             logger.debug(f"Processing mass point {mp}")
             dsname = mp.split("_", 1)[1]
