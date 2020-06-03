@@ -53,7 +53,7 @@ class LazyTable(object):
         return key in self._df
 
     def __copy__(self):
-        # Tweat copy a bit to make it behave as if the LazyDataFrame and its
+        # Tweak copy a bit to make it behave as if the LazyDataFrame and its
         # dict were copied directly
 
         c = self.__class__(copy(self._df), self._slice)
