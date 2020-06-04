@@ -12,3 +12,4 @@ from pepper.kinreco import sonnenschein
 from pepper.betchart_kinreco import betchart
 from pepper.config import Config
 from pepper.processor import Processor
+from pepper.DY_CR_processor import DY_processor
