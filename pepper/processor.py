@@ -13,6 +13,7 @@ import uproot
 from uproot_methods import TLorentzVectorArray
 import h5py
 import logging
+from copy import copy
 
 import pepper
 from pepper import sonnenschein, betchart, Selector, LazyTable, OutputFiller
@@ -251,7 +252,7 @@ class Processor(processor.ProcessorABC):
             logger.debug(f"Processing mass point {mp}")
             dsname = mp.split("_", 1)[1]
             filler.update_ds(dsname, dsname, None)
-            selector = self.setup_selection(data, dsname, is_mc, filler)
+            selector = self.setup_selection(copy(data), dsname, is_mc, filler)
             selector.add_cut(partial(self.pick_mass_point, mp),
                              "Select mass point", no_callback=True)
             self.process_selection(selector, dsname, is_mc, filler)
@@ -392,7 +393,7 @@ class Processor(processor.ProcessorABC):
                 self.config["do_ttbar_reconstruction"] == "Betchart"):
             selector.set_column(self.pick_leps, "recolepton", all_cuts=True)
             selector.set_column(self.pick_bs, "recob", all_cuts=True)
-            selector.set_column(self.ttbar_system, "recot", all_cuts=True)
+            selector.set_column(partial(self.ttbar_system, self.config["do_ttbar_reconstruction"]), "recot", all_cuts=True)
             selector.add_cut(self.passing_reco, "Reco")
 
     def gentop(self, data):
@@ -1053,7 +1054,7 @@ class Processor(processor.ProcessorABC):
         return awkward.concatenate([bs[bestbpair_mlb], bbars[bestbpair_mlb]],
                                    axis=1)
 
-    def ttbar_system(self, data):
+    def ttbar_system(self, reco_alg, data):
         lep = data["recolepton"].p4[:, 0]
         antilep = data["recolepton"].p4[:, 1]
         b = data["recob"].p4[:, 0]
@@ -1081,14 +1082,14 @@ class Processor(processor.ProcessorABC):
                 mt = self.config["reco_t_mass"]
             else:
                 mt = f[self.config["reco_t_mass"]]
-        if self.config["do_ttbar_reconstruction"] == "Sonnenschein":
+        if reco_alg == "Sonnenschein":
             top, antitop = sonnenschein(
                 lep, antilep, b, antib, met, mwp=mw, mwm=mw, mt=mt, mat=mt,
                 energyfl=energyfl, energyfj=energyfj, alphal=alphal,
                 alphaj=alphaj, hist_mlb=mlb, num_smear=num_smear)
             top = awkward.concatenate([top, antitop], axis=1)
             return Jca.candidatesfromcounts(top.counts, p4=top.flatten())
-        elif self.config["do_ttbar_reconstruction"] == "Betchart":
+        elif reco_alg == "Betchart":
             top, antitop = betchart(
                 lep, antilep, b, antib, met, MW=mw, Mt=mt)
             return awkward.concatenate([top, antitop], axis=1)
