@@ -84,11 +84,11 @@ def compute_systematic(nominal_hist, syshists, scales=None):
     return np.sqrt((uncerts ** 2).sum(axis=0))
 
 
-def plot(data_hist, bkgd_hist, sig_hist, sys, namebase, bkgd_cols={}, log=False,
-         cmsyear=None, ext=".svg", sig_scaling=1, sig_cols={}):
+def plot(data_hist, bkgd_hist, sig_hist, sys, namebase, bkgd_cols={},
+         log=False, cmsyear=None, ext=".svg", sig_scaling=1, sig_cols={}):
     fig, (ax1, ax2) = plt.subplots(
         nrows=2, sharex=True, gridspec_kw={"height_ratios": [3, 1]})
-    
+
     coffea.hist.plot1d(bkgd_hist,
                        ax=ax1,
                        overlay="proc",
@@ -146,7 +146,8 @@ def plot(data_hist, bkgd_hist, sig_hist, sys, namebase, bkgd_cols={}, log=False,
 
 parser = ArgumentParser(
     description="Plot histograms from previously created histograms")
-parser.add_argument("plot_config", help="Path to a configuration file for plotting")
+parser.add_argument(
+    "plot_config", help="Path to a configuration file for plotting")
 parser.add_argument(
     "histfile", nargs="+", help="Coffea file with a single histogram or a "
     "JSON file containing histogram info. See output of select_events.py")
@@ -162,13 +163,13 @@ parser.add_argument(
     "--ext", choices=["pdf", "svg", "png"], help="Output file format",
     default="svg")
 parser.add_argument(
-    "-s", "--signals", nargs='*', default=["None"], help="Set of signal points to "
-    "plot. Can be All, None (default) or a name (or series of names) of a specific "
-    "set defined in the config")
+    "-s", "--signals", nargs='*', default=["None"], help="Set of signal "
+    "points to plot. Can be All, None (default) or a name (or series of names)"
+    " of a specific set defined in the config")
 parser.add_argument(
-    "-c", "--cut",  type=int, metavar="cut_num", help="If specified, only plot a given "
-    "cut number. Negative numbers count from the last cut (as for numpy), so -1 is "
-    "the final cut")
+    "-c", "--cut",  type=int, metavar="cut_num", help="If specified, only "
+    "plot a given cut number. Negative numbers count from the last cut (as "
+    "for numpy), so -1 is the final cut")
 args = parser.parse_args()
 
 plt.set_loglevel("error")
@@ -246,24 +247,29 @@ for histfilename in histfiles:
                     outdirchan = os.path.join(outdir, chan.replace("/", ""))
                     os.makedirs(outdirchan, exist_ok=True)
                 else:
-                    outdirchan = os.path.join(outdir, chan.replace("/", "") + 
-                                              "_" + sig.replace("/", ""))
+                    outdirchan = os.path.join(outdir, chan.replace("/", "")
+                                              + "_" + sig.replace("/", ""))
                     os.makedirs(outdirchan, exist_ok=True)
                 data_prepared = prepare(data_hist, dense, chan)
                 mc_prepared = prepare(mc_hist, dense, chan)
-                mc_bkgd_hist = mc_prepared[list(config["MC_bkgd"].keys())].copy()
+                mc_bkgd_hist = \
+                    mc_prepared[list(config["MC_bkgd"].keys())].copy()
                 syshists_prep = {k: [prepare(vi, dense, chan) for vi in v]
                                  for k, v in syshists.items()}
                 sys = compute_systematic(mc_bkgd_hist,
                                          syshists_prep,
                                          scales[:, None, None])
                 if sig is not "None":
-                    sig_hist = mc_prepared[list(config["Signal_samples"][sig].keys())]
-                    plot(data_prepared, mc_bkgd_hist, sig_hist, sys, os.path.join(
-                         outdirchan, f"{namebase}_{chan}"), bkgd_cols=config["MC_bkgd"],
-                         log=args.log, cmsyear=config["year"], ext="." + args.ext,
-                         sig_scaling = 1000, sig_cols=config["Signal_samples"][sig])
+                    sig_hist = \
+                        mc_prepared[list(config["Signal_samples"][sig].keys())]
+                    plot(data_prepared, mc_bkgd_hist, sig_hist, sys,
+                         os.path.join(outdirchan, f"{namebase}_{chan}"),
+                         bkgd_cols=config["MC_bkgd"], log=args.log,
+                         cmsyear=config["year"], ext="." + args.ext,
+                         sig_scaling=1000,
+                         sig_cols=config["Signal_samples"][sig])
                 else:
-                    plot(data_prepared, mc_bkgd_hist, None, sys, os.path.join(
-                         outdirchan, f"{namebase}_{chan}"), bkgd_cols=config["MC_bkgd"],
-                         log=args.log, cmsyear=config["year"], ext="." + args.ext)
+                    plot(data_prepared, mc_bkgd_hist, None, sys,
+                         os.path.join(outdirchan, f"{namebase}_{chan}"),
+                         bkgd_cols=config["MC_bkgd"], log=args.log,
+                         cmsyear=config["year"], ext="." + args.ext)
