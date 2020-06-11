@@ -40,8 +40,6 @@ parser.add_argument(
     "-p", "--parsl_config", help="Path to a json specifying the condor_init "
     "and condor_configs to be used with parsl. If not specified, the default "
     "settings in misc.py will be used")
-parser.add_argument(
-    "--DY", action="store_true", help="Run on the processor for the DY CR")
 args = parser.parse_args()
 
 logger = logging.getLogger("pepper")
@@ -122,10 +120,7 @@ if args.eventdir is not None:
 # Create histdir and in case of errors, raise them now (before processing)
 os.makedirs(args.histdir, exist_ok=True)
 
-if args.DY:
-    processor = pepper.DY_processor(config, args.eventdir)
-else:
-    processor = pepper.Processor(config, args.eventdir)
+processor = pepper.Processor(config, args.eventdir)
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
     # Load parsl config immediately instead of putting it into executor_args
