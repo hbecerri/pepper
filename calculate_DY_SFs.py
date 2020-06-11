@@ -32,6 +32,7 @@ else:
         def __new__(cls, name, junc=None, jer="central", met="central"):
             return cls.__bases__[0].__new__(cls, name, junc, jer, met)
 
+
 class DY_processor(pepper.Processor):
 
     @property
@@ -96,14 +97,31 @@ class DY_processor(pepper.Processor):
         output = filler.output
         if dsname.startswith("DY"):
             weights = selector.final_systematics["weight"].flatten()
-            self.fill_DY_nums(output, weights[selector.final["is_ee"] & Z_window], "Zee_in", dsname)
-            self.fill_DY_nums(output, weights[selector.final["is_mm"] & Z_window], "Zmm_in", dsname)
-            self.fill_DY_nums(output, weights[selector.final["is_ee"] & ~Z_window], "Zee_out", dsname)
-            self.fill_DY_nums(output, weights[selector.final["is_mm"] & ~Z_window], "Zmm_out", dsname)
+            self.fill_DY_nums(output,
+                              weights[selector.final["is_ee"] & Z_window],
+                              "Zee_in", dsname)
+            self.fill_DY_nums(output,
+                              weights[selector.final["is_mm"] & Z_window],
+                              "Zmm_in", dsname)
+            self.fill_DY_nums(output,
+                              weights[selector.final["is_ee"] & ~Z_window],
+                              "Zee_out", dsname)
+            self.fill_DY_nums(output,
+                              weights[selector.final["is_mm"] & ~Z_window],
+                              "Zmm_out", dsname)
         elif not is_mc:
-            self.fill_DY_nums(output, np.ones((selector.final["is_ee"] & Z_window).sum()), "Nee_in", dsname, True)
-            self.fill_DY_nums(output, np.ones((selector.final["is_em"] & Z_window).sum()), "Nem_in", dsname, True)
-            self.fill_DY_nums(output, np.ones((selector.final["is_mm"] & Z_window).sum()), "Nmm_in", dsname, True)
+            self.fill_DY_nums(output,
+                              np.ones((selector.final["is_ee"]
+                                       & Z_window).sum()),
+                              "Nee_in", dsname, True)
+            self.fill_DY_nums(output,
+                              np.ones((selector.final["is_em"]
+                                       & Z_window).sum()),
+                              "Nem_in", dsname, True)
+            self.fill_DY_nums(output,
+                              np.ones((selector.final["is_mm"]
+                                       & Z_window).sum()),
+                              "Nmm_in", dsname, True)
 
         logger.debug("Selection done")
 
@@ -111,7 +129,7 @@ class DY_processor(pepper.Processor):
         LO_DY_ds = ["DYJetsToLL_M-10to50_TuneCP5_13TeV-madgraphMLM-pythia8",
                     "DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8"]
         NLO_DY_ds = ["DYJetsToLL_M-10to50_TuneCP5_13TeV-madgraphMLM-pythia8",
-                    "DYJetsToLL_M-50_TuneCP5_13TeV-amcatnloFXFX-pythia8"]
+                     "DYJetsToLL_M-50_TuneCP5_13TeV-amcatnloFXFX-pythia8"]
         print(dsname)
         if data or dsname in LO_DY_ds:
             print(output)
@@ -120,6 +138,7 @@ class DY_processor(pepper.Processor):
         if data or dsname in NLO_DY_ds:
             output["NLO_DY_numbers"][name] += weights.sum()
             output["NLO_DY_errs"][name] += (weights**2).sum()
+
 
 parser = ArgumentParser(description="Select events from nanoAODs")
 parser.add_argument("config", help="Path to a configuration file")
@@ -175,7 +194,8 @@ if args.dataset is None:
     DY_ds = ["DYJetsToLL_M-10to50_TuneCP5_13TeV-madgraphMLM-pythia8",
              "DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8",
              "DYJetsToLL_M-50_TuneCP5_13TeV-amcatnloFXFX-pythia8"]
-    mc_ds = {key: val for key, val in config["mc_datasets"].items() if key in DY_ds}
+    mc_ds = {key: val for key, val in config["mc_datasets"].items()
+             if key in DY_ds}
     datasets.update(mc_ds)
 else:
     datasets = {}
@@ -259,7 +279,8 @@ kee = np.sqrt(Nee_in/Nmm_in)
 
 nums["LO_SFs"]["is_ee"] = (Nee_in - 0.5 * kee * Nem_in) / Zee_in
 nums["LO_SFs"]["is_mm"] = (Nmm_in - 0.5 * Nem_in / kee) / Zmm_in
-nums["LO_SFs"]["is_em"] = np.sqrt(nums["LO_SFs"]["is_ee"] * nums["LO_SFs"]["is_mm"])
+nums["LO_SFs"]["is_em"] = np.sqrt(nums["LO_SFs"]["is_ee"]
+                                  * nums["LO_SFs"]["is_mm"])
 
 Nee_in = output["NLO_DY_numbers"]["Nee_in"]
 Nem_in = output["NLO_DY_numbers"]["Nem_in"]
@@ -270,6 +291,7 @@ kee = np.sqrt(Nee_in/Nmm_in)
 
 nums["NLO_SFs"]["is_ee"] = (Nee_in - 0.5 * kee * Nem_in) / Zee_in
 nums["NLO_SFs"]["is_mm"] = (Nmm_in - 0.5 * Nem_in / kee) / Zmm_in
-nums["NLO_SFs"]["is_em"] = np.sqrt(nums["NLO_SFs"]["is_ee"] * nums["NLO_SFs"]["is_mm"])
+nums["NLO_SFs"]["is_em"] = np.sqrt(nums["NLO_SFs"]["is_ee"]
+                                   * nums["NLO_SFs"]["is_mm"])
 with open("DY_sfs.json", "w") as f:
     json.dump(nums, f, indent=4)

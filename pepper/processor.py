@@ -393,7 +393,11 @@ class Processor(processor.ProcessorABC):
                 self.config["do_ttbar_reconstruction"] == "Betchart"):
             selector.set_column(self.pick_leps, "recolepton", all_cuts=True)
             selector.set_column(self.pick_bs, "recob", all_cuts=True)
-            selector.set_column(partial(self.ttbar_system, self.config["do_ttbar_reconstruction"]), "recot", all_cuts=True)
+            selector.set_column(
+                partial(self.ttbar_system,
+                        self.config["do_ttbar_reconstruction"]),
+                "recot",
+                all_cuts=True)
             selector.add_cut(self.passing_reco, "Reco")
 
     def gentop(self, data):
