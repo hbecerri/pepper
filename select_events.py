@@ -12,21 +12,22 @@ import pepper
 
 
 parser = ArgumentParser(description="Select events from nanoAODs")
-parser.add_argument("config", help="Path to a configuration file")
+parser.add_argument("config", help="JSON configuration file")
 parser.add_argument(
-    "--eventdir", help="Path to event destination output directory. If not "
+    "--eventdir", help="Event destination output directory. If not "
     "specified, no events will be saved")
 parser.add_argument(
-    "--histdir", help="Path to the histogram destination output directory. By "
-    "default, ./hists will be used.", default="./hists")
+    "--histdir", help="Histogram destination output directory. By default, "
+    "./hists will be used.", default="./hists")
 parser.add_argument(
     "--dataset", nargs=2, action="append", metavar=("name", "path"),
     help="Can be specified multiple times. Ignore datasets given in "
     "config and instead process these")
 parser.add_argument(
     "-c", "--condor", type=int, const=10, nargs="?", metavar="simul_jobs",
-    help="Split and submit to HTCondor. By default 10 condor jobs are "
-    "submitted. The number can be changed by supplying it to this option"
+    help="Split and submit to HTCondor. By default a maximum of 10 condor "
+    "jobs are submitted. The number can be changed by supplying it to this "
+    "option."
 )
 parser.add_argument(
     "--chunksize", type=int, default=500000, help="Number of events to "
@@ -37,9 +38,10 @@ parser.add_argument(
     "-d", "--debug", action="store_true", help="Enable debug messages and "
     "only process a small amount of files to make debugging feasible")
 parser.add_argument(
-    "-p", "--parsl_config", help="Path to a json specifying the condor_init "
-    "and condor_configs to be used with parsl. If not specified, the default "
-    "settings in misc.py will be used")
+    "-p", "--parsl_config", help="JSON file holding a dictionary with the "
+    "keys condor_init and condor_config. Former overwrites the enviroment "
+    "script that is executed at the start of a Condor job. Latter is appended "
+    "to the job submit file.")
 args = parser.parse_args()
 
 logger = logging.getLogger("pepper")

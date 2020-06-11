@@ -358,8 +358,6 @@ def get_parsl_config(num_jobs, runtime=3*60*60, hostname=None, *,
         pythonpath = os.environ["PYTHONPATH"]
     else:
         pythonpath = ""
-    condor_requirement = ("(OpSysAndVer == \"SL6\" || "
-                          "OpSysAndVer == \"CentOS7\")\n")
     condor_config = ""
     if runtime is not None:
         if hostname.endswith(".desy.de"):
@@ -389,7 +387,6 @@ cd -
         max_blocks=num_jobs,
         parallelism=0.5,
         scheduler_options=condor_config,
-        requirements=condor_requirement,
         worker_init=condor_init
     )
     launch_cmd = ("python3 "
