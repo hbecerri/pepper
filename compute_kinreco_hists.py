@@ -7,8 +7,6 @@ import awkward
 import uproot
 import coffea
 import parsl
-import json
-from parsl.addresses import address_by_hostname
 from argparse import ArgumentParser
 
 import pepper

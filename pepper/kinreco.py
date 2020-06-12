@@ -1,5 +1,4 @@
 import numpy as np
-import uproot
 import uproot_methods
 import coffea
 from coffea.analysis_objects import JaggedCandidateArray
@@ -141,7 +140,7 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     alphaj -- Same as alphal for bottom quarks
     hist_mlb -- Histogram of the lepton-bottom-quark-mass distribution. Is
                 needed, if num_smear is not None
-    Inputs should be Lorentz vectors rather than candidate arrays"""
+    """
 
     if jaggeddepth(lep) > 1:
         # Get rid of jagged dimension, as we have one particle per row and

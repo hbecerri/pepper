@@ -39,7 +39,6 @@ class ScaleFactors(object):
         if len(edges) != len(dimlabels):
             raise ValueError("Got {} dimenions but {} labels"
                              .format(len(edges), len(dimlabels)))
-        edges_new = []
         # Set overflow bins to 1 so that events outside the histogram
         # get scaled by 1
         cls._setoverflow(factors, 1)

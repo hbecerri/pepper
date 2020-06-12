@@ -3,7 +3,6 @@ import awkward
 import copy
 import logging
 
-import pepper
 from pepper import PackedSelectionAccumulator
 
 

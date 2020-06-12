@@ -1,4 +1,3 @@
-import os
 import json
 import coffea
 import awkward
@@ -190,8 +189,6 @@ class HistDefinition():
                             "Can only do 'leading' on numpy or jagged arrays")
                     # Do not change data.size as we later need to apply channel
                     # masks
-                    num_entries = np.where(
-                        data.counts >= end - 1, end - start, 0)
                     start = np.minimum(data.stops, data.starts + start)
                     end = np.minimum(data.stops, data.starts + end)
                     data = awkward.JaggedArray(start, end, data.content)
@@ -208,7 +205,7 @@ class HistDefinition():
         kwargs = {}
         if "args" in sel:
             if not isinstance(sel["args"], list):
-                raise HistDefinitionError(f"args for function must be list")
+                raise HistDefinitionError("args for function must be list")
             for value in sel["args"]:
                 if isinstance(value, list):
                     args.append(self.pick_data(value, orig_data))
@@ -218,7 +215,7 @@ class HistDefinition():
                     args.append(value)
         if "kwargs" in sel:
             if not isinstance(sel["kwargs"], dict):
-                raise HistDefinitionError(f"kwargs for function must be dict")
+                raise HistDefinitionError("kwargs for function must be dict")
             for key, value in sel["kwargs"].items():
                 if isinstance(value, list):
                     kwargs[key] = self.pick_data(value, orig_data)
