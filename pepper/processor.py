@@ -246,14 +246,14 @@ class Processor(processor.ProcessorABC):
         data = LazyTable(df)
         is_mc = (dsname in self.config["mc_datasets"].keys())
         filler = self.setup_outputfiller(data, dsname, is_mc)
-        masspoints = [key for key in data.columns
+        scanpoints = [key for key in data.columns
                       if key.startswith("GenModel_")]
-        for mp in masspoints:
-            logger.debug(f"Processing mass point {mp}")
-            dsname = mp.split("_", 1)[1]
+        for sp in scanpoints:
+            logger.debug(f"Processing mass point {sp}")
+            dsname = sp.split("_", 1)[1]
             filler.update_ds(dsname, dsname, None)
             selector = self.setup_selection(copy(data), dsname, is_mc, filler)
-            selector.add_cut(partial(self.pick_mass_point, mp),
+            selector.add_cut(partial(self.pick_mass_point, sp),
                              "Select mass point", no_callback=True)
             self.process_selection(selector, dsname, is_mc, filler)
             if self.destdir is not None:
@@ -263,8 +263,8 @@ class Processor(processor.ProcessorABC):
         logger.debug("Processing finished")
         return filler.output
 
-    def pick_mass_point(self, mp, data):
-        return data[mp]
+    def pick_scan_point(self, sp, data):
+        return data[sp]
 
     def setup_outputfiller(self, data, dsname, is_mc):
         output = self.accumulator.identity()
