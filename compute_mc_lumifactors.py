@@ -62,14 +62,14 @@ for process_name, proc_datasets in datasets.items():
     for path in proc_datasets:
         f = uproot.open(path)
         if process_name in rps_datasets:
-            masspoints = [key.decode("utf-8").split("_", 1)[1]
+            scanpoints = [key.decode("utf-8").split("_", 1)[1]
                           for key in f["Runs"].iterkeys()
                           if key.decode("utf-8").startswith("genEventSumw_")]
-            for mp in masspoints:
-                geskey = "genEventSumw_" + mp
-                lhesskey = "LHEScaleSumw_" + mp
-                lhepdfskey = "LHEPdfSumw_" + mp
-                counts = update_counts(f, counts, mp,
+            for sp in scanpoints:
+                geskey = "genEventSumw_" + sp
+                lhesskey = "LHEScaleSumw_" + sp
+                lhepdfskey = "LHEPdfSumw_" + sp
+                counts = update_counts(f, counts, sp,
                                        geskey, lhesskey, lhepdfskey)
         else:
             if "genEventSumw_" in f["Runs"]:
