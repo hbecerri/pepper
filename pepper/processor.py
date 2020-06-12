@@ -1,12 +1,11 @@
 import os
 import sys
 from functools import partial
-from collections import defaultdict, namedtuple
+from collections import namedtuple
 import numpy as np
 import awkward
 import coffea
 import coffea.lumi_tools
-from coffea import hist
 from coffea.analysis_objects import JaggedCandidateArray as Jca
 import coffea.processor as processor
 import uproot
@@ -110,8 +109,8 @@ class Processor(processor.ProcessorABC):
         # relevant dedicated systematic datasets, and so the nominal histograms
         # need to be copied
         self.copy_nominal = {}
-        for sysdataset, sys in self.config["dataset_for_systematics"].items():
-            replaced, sysname = sys
+        for sysdataset, syst in self.config["dataset_for_systematics"].items():
+            replaced, sysname = syst
             if sysname not in self.copy_nominal:
                 self.copy_nominal[sysname] = []
                 # Copy all normal mc datasets
@@ -331,7 +330,6 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.good_mll, "M_ll")
         selector.add_cut(self.z_window, "Z window")
 
-        variargs = self.get_jetmet_variation_args()
         if (is_mc and self.config["compute_systematics"]
                 and dsname not in self.config["dataset_for_systematics"]):
             assert filler.sys_overwrite is None

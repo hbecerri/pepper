@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 
 import os
-import sys
 import numpy as np
 from argparse import ArgumentParser
 import json
-from glob import glob
 from collections import defaultdict
 import uproot
 from itertools import chain

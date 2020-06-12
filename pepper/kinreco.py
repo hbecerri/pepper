@@ -1,5 +1,4 @@
 import numpy as np
-import uproot
 import uproot_methods
 import coffea
 from coffea.analysis_objects import JaggedCandidateArray

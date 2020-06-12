@@ -4,14 +4,14 @@ import os
 import numpy as np
 import matplotlib as mpl
 mpl.use("Agg")  # noqa: E402
-import matplotlib.pyplot as plt
-import mplhep as hep
-from argparse import ArgumentParser
-import coffea
-from collections import defaultdict
-import json
+import matplotlib.pyplot as plt  # noqa: E402
+import mplhep as hep  # noqa: E402
+from argparse import ArgumentParser  # noqa: E402
+import coffea  # noqa: E402
+from collections import defaultdict  # noqa: E402
+import json  # noqa: E402
 
-from pepper import Config
+from pepper import Config  # noqa: E402
 
 
 # Luminosities needed for CMS label at the top of plots

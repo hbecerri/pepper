@@ -12,7 +12,6 @@ import parsl.addresses
 
 
 def concatenate(arr1, arr2):
-    keys = ["pt", "eta", "phi", "mass"]
     arr_dict = {}
     offsets = awkward.concatenate([arr1.pt, arr2.pt], axis=1).offsets
     arr_dict["pt"] = \
@@ -136,7 +135,6 @@ def montecarlo_iterate(datasets, factors, branches, treepath="Events"):
     for group, group_paths in datasets.items():
         chunks = defaultdict(list)
         weight_chunks = []
-        weight = np.array([])
         for path in group_paths:
             tree = treeopen(path, treepath, list(branches) + ["weight"])
             for branch in branches:
@@ -194,10 +192,10 @@ def export(hist):
         pass
 
     class TAxis(object):
-        def __init__(self, fNbins, fXmin, fXmax):
-            self._fNbins = fNbins
-            self._fXmin = fXmin
-            self._fXmax = fXmax
+        def __init__(self, fnbins, fxmin, fxmax):
+            self._fNbins = fnbins
+            self._fXmin = fxmin
+            self._fXmax = fxmax
 
     out = TH.__new__(TH)
     axisattrs = ["_fXaxis", "_fYaxis", "_fZaxis"][:d]

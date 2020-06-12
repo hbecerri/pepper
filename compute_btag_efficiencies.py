@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-import os
 import numpy as np
+import uproot
 import coffea
 from argparse import ArgumentParser
 
