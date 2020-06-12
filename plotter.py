@@ -3,7 +3,6 @@
 import os
 import numpy as np
 import matplotlib as mpl
-mpl.use("Agg")  # noqa: E402
 import matplotlib.pyplot as plt
 import mplhep as hep
 from argparse import ArgumentParser
@@ -14,6 +13,8 @@ from cycler import cycler
 
 from pepper import Config
 
+
+mpl.use("Agg")
 
 # Luminosities needed for CMS label at the top of plots
 LUMIS = {
@@ -243,7 +244,7 @@ for histfilename in histfiles:
             else:
                 sigs = args.signals
             for sig in sigs:
-                if sig is "None":
+                if sig == "None":
                     outdirchan = os.path.join(outdir, chan.replace("/", ""))
                     os.makedirs(outdirchan, exist_ok=True)
                 else:
@@ -259,7 +260,7 @@ for histfilename in histfiles:
                 sys = compute_systematic(mc_bkgd_hist,
                                          syshists_prep,
                                          scales[:, None, None])
-                if sig is not "None":
+                if sig != "None":
                     sig_hist = \
                         mc_prepared[list(config["Signal_samples"][sig].keys())]
                     plot(data_prepared, mc_bkgd_hist, sig_hist, sys,

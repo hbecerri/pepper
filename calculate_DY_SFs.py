@@ -1,22 +1,14 @@
-import os
 import sys
 import numpy as np
-import awkward
-import uproot
 import coffea
-from coffea.analysis_objects import JaggedCandidateArray as Jca
-import matplotlib.pyplot as plt
 from functools import partial
-from collections import defaultdict, namedtuple
-import shutil
+from collections import namedtuple
 import parsl
 import json
 import logging
 from argparse import ArgumentParser
 
 import pepper
-from pepper.misc import jcafromjagged, sortby
-from pepper.datasets import expand_datasetdict
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +25,7 @@ else:
             return cls.__bases__[0].__new__(cls, name, junc, jer, met)
 
 
-class DY_processor(pepper.Processor):
+class DYprocessor(pepper.Processor):
 
     @property
     def accumulator(self):
@@ -97,35 +89,35 @@ class DY_processor(pepper.Processor):
         output = filler.output
         if dsname.startswith("DY"):
             weights = selector.final_systematics["weight"].flatten()
-            self.fill_DY_nums(output,
+            self.fill_dy_nums(output,
                               weights[selector.final["is_ee"] & Z_window],
                               "Zee_in", dsname)
-            self.fill_DY_nums(output,
+            self.fill_dy_nums(output,
                               weights[selector.final["is_mm"] & Z_window],
                               "Zmm_in", dsname)
-            self.fill_DY_nums(output,
+            self.fill_dy_nums(output,
                               weights[selector.final["is_ee"] & ~Z_window],
                               "Zee_out", dsname)
-            self.fill_DY_nums(output,
+            self.fill_dy_nums(output,
                               weights[selector.final["is_mm"] & ~Z_window],
                               "Zmm_out", dsname)
         elif not is_mc:
-            self.fill_DY_nums(output,
+            self.fill_dy_nums(output,
                               np.ones((selector.final["is_ee"]
                                        & Z_window).sum()),
                               "Nee_in", dsname, True)
-            self.fill_DY_nums(output,
+            self.fill_dy_nums(output,
                               np.ones((selector.final["is_em"]
                                        & Z_window).sum()),
                               "Nem_in", dsname, True)
-            self.fill_DY_nums(output,
+            self.fill_dy_nums(output,
                               np.ones((selector.final["is_mm"]
                                        & Z_window).sum()),
                               "Nmm_in", dsname, True)
 
         logger.debug("Selection done")
 
-    def fill_DY_nums(self, output, weights, name, dsname, data=False):
+    def fill_dy_nums(self, output, weights, name, dsname, data=False):
         LO_DY_ds = ["DYJetsToLL_M-10to50_TuneCP5_13TeV-madgraphMLM-pythia8",
                     "DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8"]
         NLO_DY_ds = ["DYJetsToLL_M-10to50_TuneCP5_13TeV-madgraphMLM-pythia8",
@@ -235,7 +227,7 @@ if len(datasets) == 0:
 # Plotting hists is pointless since we're not running over the full mc:
 config["hists"] = {}
 
-processor = DY_processor(config, args.eventdir)
+processor = DYprocessor(config, args.eventdir)
 
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
