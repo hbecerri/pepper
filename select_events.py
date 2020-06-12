@@ -26,8 +26,8 @@ parser.add_argument(
 parser.add_argument(
     "-c", "--condor", type=int, const=10, nargs="?", metavar="simul_jobs",
     help="Split and submit to HTCondor. By default a maximum of 10 condor "
-    "jobs are submitted. The number can be changed by supplying it to this "
-    "option."
+    "simultaneous jobs are submitted. The number can be changed by supplying "
+    "it to this option."
 )
 parser.add_argument(
     "--chunksize", type=int, default=500000, help="Number of events to "
