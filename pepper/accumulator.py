@@ -2,6 +2,8 @@
 
 from coffea.processor import PackedSelection, AccumulatorABC
 import numpy as np
+from copy import copy
+import awkward
 
 
 class PackedSelectionAccumulator(PackedSelection, AccumulatorABC):
@@ -57,7 +59,7 @@ class ArrayAccumulator(AccumulatorABC):
         return "ArrayAccumulator(%r)" % self.value
 
     def identity(self):
-        return array_accumulator(self._empty)
+        return ArrayAccumulator()
 
     def add(self, other):
         if self._value is None:
