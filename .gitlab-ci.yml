@@ -1,9 +1,8 @@
 before_script:
   - yum install -y python3-pip > /dev/null
-  - pip3 install pycodestyle > /dev/null
-  - echo pycodestyle version `python3 -m pycodestyle --version`
+  - pip3 install pep8-naming > /dev/null
+  - echo flake8 version `flake8 --version`
 
-pycodestyle:
+flake8:
   script:
-    - python3 -m pycodestyle $(find . -type f -name "*.py")
-
+    - flake8 --extend-ignore N806
