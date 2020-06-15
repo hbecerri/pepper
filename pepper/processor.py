@@ -191,20 +191,22 @@ class Processor(processor.ProcessorABC):
                     except AttributeError:
                         logger.info("Skipping to save column because it is "
                                     f"not present: {specifier}")
-                        continue
-            if isinstance(item, awkward.JaggedArray):
-                # Strip rows that are not selected from memory
-                item = item.deepcopy()
-                if isinstance(item.content, awkward.Table):
-                    # Remove columns used for caching by Coffea
-                    for column in item.content.columns:
-                        if column.startswith("__"):
-                            del item.content[column]
-            key = "_".join(specifier)
-            if key in columns:
-                raise pepper.config.ConfigError(
-                    f"Ambiguous column to save '{key}', (from {specifier})")
-            columns[key] = item
+                        break
+            else:
+                if isinstance(item, awkward.JaggedArray):
+                    # Strip rows that are not selected from memory
+                    item = item.deepcopy()
+                    if isinstance(item.content, awkward.Table):
+                        # Remove columns used for caching by Coffea
+                        for column in item.content.columns:
+                            if column.startswith("__"):
+                                del item.content[column]
+                key = "_".join(specifier)
+                if key in columns:
+                    raise pepper.config.ConfigError(
+                        f"Ambiguous column to save '{key}', (from "
+                        f"{specifier})")
+                columns[key] = item
         return awkward.Table(columns)
 
     def _save_per_event_info(self, dsname, selector):
