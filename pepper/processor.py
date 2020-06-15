@@ -98,11 +98,11 @@ class Processor(processor.ProcessorABC):
 
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
-        if "kinreco_info_file" in self.config:
-            self.kinreco_info_filepath = self.config["kinreco_info_file"]
-        elif self.config["do_ttbar_reconstruction"]:
+        if "reco_info_file" in self.config:
+            self.reco_info_filepath = self.config["reco_info_file"]
+        elif self.config["reco_algorithm"] is not None:
             raise pepper.config.ConfigError(
-                "Need kinreco_info_file for kinematic reconstruction")
+                "Need reco_info_file for kinematic reconstruction")
         self.mc_lumifactors = config["mc_lumifactors"]
 
         # Construct a dict of datasets for which we are not processing the
@@ -387,13 +387,12 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.met_requirement, "MET > %d GeV"
                          % self.config["ee/mm_min_met"])
 
-        if (self.config["do_ttbar_reconstruction"] == "Sonnenschein" or
-                self.config["do_ttbar_reconstruction"] == "Betchart"):
+        reco_alg = self.config["reco_algorithm"].lower()
+        if reco_alg is not None:
             selector.set_column(self.pick_leps, "recolepton", all_cuts=True)
             selector.set_column(self.pick_bs, "recob", all_cuts=True)
             selector.set_column(
-                partial(self.ttbar_system,
-                        self.config["do_ttbar_reconstruction"]),
+                partial(self.ttbar_system, reco_alg),
                 "recot",
                 all_cuts=True)
             selector.add_cut(self.passing_reco, "Reco")
@@ -1045,7 +1044,7 @@ class Processor(processor.ProcessorABC):
         bbars = pepper.misc.concatenate(b1, b0)
         alb = bs.cross(antilep)
         lbbar = bbars.cross(lep)
-        hist_mlb = uproot.open(self.kinreco_info_filepath)["mlb"]
+        hist_mlb = uproot.open(self.reco_info_filepath)["mlb"]
         p_m_alb = awkward.JaggedArray.fromcounts(
             bs.counts, hist_mlb.allvalues[np.searchsorted(
                 hist_mlb.alledges, alb.mass.content)-1])
@@ -1063,7 +1062,7 @@ class Processor(processor.ProcessorABC):
         antib = data["recob"].p4[:, 1]
         met = data["MET"].p4.flatten()
 
-        with uproot.open(self.kinreco_info_filepath) as f:
+        with uproot.open(self.reco_info_filepath) as f:
             if self.config["reco_num_smear"] is None:
                 energyfl = energyfj = 1
                 alphal = alphaj = 0
@@ -1084,17 +1083,19 @@ class Processor(processor.ProcessorABC):
                 mt = self.config["reco_t_mass"]
             else:
                 mt = f[self.config["reco_t_mass"]]
-        if reco_alg == "Sonnenschein":
+        if reco_alg == "sonnenschein":
             top, antitop = sonnenschein(
                 lep, antilep, b, antib, met, mwp=mw, mwm=mw, mt=mt, mat=mt,
                 energyfl=energyfl, energyfj=energyfj, alphal=alphal,
                 alphaj=alphaj, hist_mlb=mlb, num_smear=num_smear)
             top = awkward.concatenate([top, antitop], axis=1)
             return Jca.candidatesfromcounts(top.counts, p4=top.flatten())
-        elif reco_alg == "Betchart":
+        elif reco_alg == "betchart":
             top, antitop = betchart(
                 lep, antilep, b, antib, met, MW=mw, Mt=mt)
             return awkward.concatenate([top, antitop], axis=1)
+        else:
+            raise ValueError(f"Invalid value for reco algorithm: {reco_alg}")
 
     def passing_reco(self, data):
         return data["recot"].counts > 0

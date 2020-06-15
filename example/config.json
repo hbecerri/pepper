@@ -356,8 +356,8 @@
         }
     },
 
-    "do_ttbar_reconstruction": "Sonnenschein",
-    "kinreco_info_file": "$DATADIR/kinreco.root",
+    "reco_algorithm": "Sonnenschein",
+    "reco_info_file": "$DATADIR/kinreco.root",
     "reco_w_mass": "mw",
     "reco_t_mass": 172.5,
     "reco_num_smear": 100,
