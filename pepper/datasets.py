@@ -3,6 +3,7 @@
 import os
 from glob import glob
 import logging
+from collections import defaultdict
 
 
 logger = logging.getLogger(__name__)
@@ -84,7 +85,7 @@ def expand_datasetdict(datasets, store, ignore_path=None, ext=".root"):
     the inverse mapping.
     """
     paths2dsname = {}
-    datasetpaths = {}
+    datasetpaths = defaultdict(list)
     for key in datasets.keys():
         paths = list(dict.fromkeys([
             a for b in datasets[key] for a in read_paths(b, store, ext)]))
@@ -95,14 +96,12 @@ def expand_datasetdict(datasets, store, ignore_path=None, ext=".root"):
                     processed_paths.append(path)
             paths = processed_paths
 
-        paths_nodups = []
         for path in paths:
             if path in paths2dsname:
-                print("Path {} given for {} but already present in datasets "
-                      "for {}".format(path, key, paths2dsname[path]))
-            else:
-                paths2dsname[path] = key
-                paths_nodups.append(path)
-        datasetpaths[key] = paths_nodups
+                raise RuntimeError(
+                    f"Path {path} is found to belong to more than one "
+                    f"dataset: {key} and {paths2dsname[path]}")
+            datasetpaths[key].append(path)
+            paths2dsname[path] = key
 
     return datasetpaths, paths2dsname
