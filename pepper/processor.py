@@ -389,12 +389,12 @@ class Processor(processor.ProcessorABC):
         selector.add_cut(self.met_requirement, "MET > %d GeV"
                          % self.config["ee/mm_min_met"])
 
-        reco_alg = self.config["reco_algorithm"].lower()
+        reco_alg = self.config["reco_algorithm"]
         if reco_alg is not None:
             selector.set_column(self.pick_leps, "recolepton", all_cuts=True)
             selector.set_column(self.pick_bs, "recob", all_cuts=True)
             selector.set_column(
-                partial(self.ttbar_system, reco_alg),
+                partial(self.ttbar_system, reco_alg.lower()),
                 "recot",
                 all_cuts=True)
             selector.add_cut(self.passing_reco, "Reco")
