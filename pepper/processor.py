@@ -215,7 +215,9 @@ class Processor(processor.ProcessorABC):
             out_dict = {}
             out_dict["events"] = self._prepare_saved_columns(selector)
             out_dict["weight"] = selector.weight
-            out_dict["cutflags"] = selector.get_cuts()
+            cutnames, cutflags = selector.get_cuts()
+            out_dict["cutnames"] = cutnames
+            out_dict["cutflags"] = cutflags
 
             for key in out_dict.keys():
                 outf[key] = out_dict[key]

@@ -299,6 +299,11 @@ class Selector():
         cuts -- "Current", "All" or a list of cuts - the list of cuts to
                 apply before saving- The default, "Current", only applies
                 the cuts before freeze_selection
+
+        Returns:
+        names -- Names of cuts that are applied
+        flags -- Per event bit flags, least significant bit is 1 if event
+                 passes the first cut and so on
         """
         if cuts == "Current":
             cuts = self._current_cuts
@@ -307,7 +312,7 @@ class Selector():
         elif not isinstance(cuts, list):
             raise ValueError("cuts needs to be one of 'Current', 'All' or a "
                              "list")
-        return self._cuts.mask[self._cuts.all(*cuts)]
+        return self._cuts.names, self._cuts.mask[self._cuts.all(*cuts)]
 
     def copy(self):
         """Create a copy of the Selector instance, containing shallow copies
