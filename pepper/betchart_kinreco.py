@@ -279,7 +279,7 @@ def _run_kinreco(lep, alep, b, bbar, met_x, met_y,
             for sol_i, s in enumerate(v):
                 for i in [0, 1, 2]:
                     nu[i, 4 * eventi + sol_i] = K.dot(s)[i]
-            for i, s_ in enumerate(v_):
+            for sol_i, s_ in enumerate(v_):
                 for i in [0, 1, 2]:
                     nubar[i, 4 * eventi + sol_i] = K_.dot(s_)[i]
             nsols[eventi] = len(v)
