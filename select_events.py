@@ -149,6 +149,7 @@ output = coffea.processor.run_uproot_job(
     datasets, "Events", processor, executor, executor_args,
     chunksize=args.chunksize)
 
+# Save histograms with a hist.json describing the hist files
 hists = output["hists"]
 jsonname = "hists.json"
 hists_forjson = {}
@@ -170,3 +171,6 @@ hists_injson.update(hists_forjson)
 with open(os.path.join(args.histdir, jsonname), "w") as f:
     json.dump([[tuple(k) for k in hists_injson.keys()],
                list(hists_injson.values())], f, indent=4)
+
+# Save cutflows
+coffea.util.save(output["cutflows"], "cutflows.coffea")
