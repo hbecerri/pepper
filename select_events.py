@@ -11,7 +11,9 @@ import logging
 import pepper
 
 
-parser = ArgumentParser(description="Select events from nanoAODs")
+parser = ArgumentParser(description="Select events from nanoAODs. This will "
+                                    "save cutflows, histograms and, if "
+                                    "wished, per-event data ")
 parser.add_argument("config", help="JSON configuration file")
 parser.add_argument(
     "--eventdir", help="Event destination output directory. If not "
@@ -27,8 +29,7 @@ parser.add_argument(
     "-c", "--condor", type=int, const=10, nargs="?", metavar="simul_jobs",
     help="Split and submit to HTCondor. By default a maximum of 10 condor "
     "simultaneous jobs are submitted. The number can be changed by supplying "
-    "it to this option."
-)
+    "it to this option.")
 parser.add_argument(
     "--chunksize", type=int, default=500000, help="Number of events to "
     "process at once. Defaults to 5*10^5")
