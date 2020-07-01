@@ -7,6 +7,7 @@ import json
 from collections import defaultdict
 import uproot
 from itertools import chain
+from tqdm import tqdm
 
 import pepper
 
@@ -52,12 +53,12 @@ crosssections = json.load(open(args.crosssections))
 counts = defaultdict(int)
 num_files = len(list(chain(*datasets.values())))
 i = 0
-for process_name, proc_datasets in datasets.items():
+for process_name, proc_datasets in tqdm(datasets.items(), desc="Total"):
     if (process_name not in crosssections and process_name not in dsforsys
             and process_name not in rps_datasets):
         print("Could not find crosssection for {}".format(process_name))
         continue
-    for path in proc_datasets:
+    for path in tqdm(proc_datasets, desc="Per dataset"):
         f = uproot.open(path)
         if process_name in rps_datasets:
             scanpoints = [key.decode("utf-8").split("_", 1)[1]
@@ -81,8 +82,9 @@ for process_name, proc_datasets in datasets.items():
                 lhepdfskey = "LHEPdfSumw"
             counts = update_counts(f, counts, process_name,
                                    geskey, lhesskey, lhepdfskey)
-        print("[{}/{}] Processed {}".format(i + 1, num_files, path))
         i += 1
+    print("\033[F\033[F")  # Workaround for tqdm adding a new line
+print("")
 factors = {}
 for key in counts.keys():
     if key.endswith("_LHEScaleSumw") or key.endswith("_LHEPdfSumw"):
