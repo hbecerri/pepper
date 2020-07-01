@@ -25,28 +25,16 @@ LUMIS = {
 def get_syshists(histmap, histkey, dirname, ignore=None):
     if ignore is None:
         ignore = []
-    sysmap = defaultdict(lambda: [None, None])
+    sysmap = defaultdict(list)
     klen = len(histkey)
     for key, histname in histmap.items():
         if len(key) == klen + 1 and key[:klen] == histkey:
-            sysname = key[klen]
+            sysname, direction = key[-1].rsplit("_", 1)
             if any(x in sysname for x in ignore):
                 continue
             if not os.path.isabs(histname):
                 histname = os.path.join(dirname, histname)
-            if sysname.endswith("_down"):
-                sysidx = 1
-                sysname = sysname[:-len("_down")]
-            elif sysname.endswith("_up"):
-                sysidx = 0
-                sysname = sysname[:-len("_up")]
-            else:
-                raise RuntimeError(f"Invalid sysname {sysname}, expecting it "
-                                   "to end with '_up' or '_down'.")
-            sysmap[sysname][sysidx] = coffea.util.load(histname)
-    for key, updown in sysmap.items():
-        if None in updown:
-            raise RuntimeError(f"Missing variation for systematic {key}")
+            sysmap[sysname].append(coffea.util.load(histname))
     return sysmap
 
 
@@ -68,10 +56,9 @@ def compute_systematic(nominal_hist, syshists, scales=None):
     nominal_hist = nominal_hist.sum("proc")
     nom = nominal_hist.values()[()]
     uncerts = []
-    for up_hist, down_hist in syshists.values():
-        up = up_hist.values()[()]
-        down = down_hist.values()[()]
-        diff = np.stack([down, up]) - nom
+    for hists in syshists.values():
+        values = np.stack([hist.values()[()] for hist in hists])
+        diff = values - nom
         lo = np.minimum(np.min(diff, axis=0), 0)
         hi = np.maximum(np.max(diff, axis=0), 0)
         uncerts.append((lo, hi))
@@ -123,7 +110,7 @@ def plot(data_hist, pred_hist, sys, namebase, colors={}, log=False,
     ax2.set_ylim(0.75, 1.25)
     fig.subplots_adjust(hspace=0)
     if cmsyear is not None:
-        ax1 = hep.cms.cmslabel(
+        ax1 = hep.cms.label(
             ax=ax1, data=True, paper=False, year=cmsyear, lumi=LUMIS[cmsyear])
     if log:
         ax1.autoscale(axis="y")
@@ -206,10 +193,12 @@ for histfilename in histfiles:
     if histmap is not None:
         syshists = get_syshists(histmap, histkey, srcdir, args.ignoresys)
     else:
-        syshists = []
+        syshists = {}
     scales = np.ones(len(syshists))
     if "tmass" in syshists:
-        scales[list(syshists.keys()).index("tmass")] = 0.5
+        # Scale down top mass uncertainty. This assumes that the 175p5 and
+        # 169p5 datasets were used.
+        scales[list(syshists.keys()).index("tmass")] = 1 / 6
 
     proc_axis = coffea.hist.Cat("proc", "Process", "placement")
 
