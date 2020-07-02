@@ -34,6 +34,14 @@ def concatenate(*arr, axis=0):
     return awkward.concatenate(arr_processed, axis=axis)
 
 
+def Mttbar(ttbar):
+    return (ttbar[:, 0].p4 + ttbar[:, 1].p4).mass
+
+
+def Pt_ttbar(ttbar):
+    return (ttbar[:, 0].p4 + ttbar[:, 1].p4).pt
+
+
 func_dict = {
     "sin": np.sin,
     "cos": np.cos,
@@ -55,6 +63,8 @@ func_dict = {
 
     "leaddiff": leaddiff,
     "concatenate": concatenate,
+    "Mttbar": Mttbar,
+    "Pt_ttbar": Pt_ttbar
 }
 
 

@@ -397,11 +397,10 @@ class Processor(processor.ProcessorABC):
             selector.set_column(self.pick_bs, "recob", all_cuts=True)
             selector.set_column(
                 partial(self.ttbar_system, reco_alg.lower()),
-                "recot",
-                all_cuts=True)
+                "recot", all_cuts=True, no_callback=True)
             selector.add_cut(self.passing_reco, "Reco")
             selector.set_column(self.build_nu_column, "reconu", all_cuts=True)
-            selector.set_column(self.calculate_dark_pt)
+            selector.set_column(self.calculate_dark_pt, "dark_pt", all_cuts=True)
 
     def gentop(self, data):
         part = pepper.misc.jcafromjagged(
