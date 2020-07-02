@@ -245,19 +245,19 @@ class Processor(processor.ProcessorABC):
 
     def process_rps(self, df, dsname):
         logger.debug("This is a randomised parameter signal sample- processing"
-                     " each mass point separately")
+                     " each scan point separately")
         data = LazyTable(df)
         is_mc = (dsname in self.config["mc_datasets"].keys())
         filler = self.setup_outputfiller(data, dsname, is_mc)
         scanpoints = [key for key in data.columns
                       if key.startswith("GenModel_")]
         for sp in scanpoints:
-            logger.debug(f"Processing mass point {sp}")
+            logger.debug(f"Processing scan point {sp}")
             dsname = sp.split("_", 1)[1]
             filler.update_ds(dsname, dsname, None)
             selector = self.setup_selection(copy(data), dsname, is_mc, filler)
-            selector.add_cut(partial(self.pick_mass_point, sp),
-                             "Select mass point", no_callback=True)
+            selector.add_cut(partial(self.pick_scan_point, sp),
+                             "Select scan point", no_callback=True)
             self.process_selection(selector, dsname, is_mc, filler)
             if self.destdir is not None:
                 logger.debug("Saving per event info")
