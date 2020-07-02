@@ -400,6 +400,8 @@ class Processor(processor.ProcessorABC):
                 "recot",
                 all_cuts=True)
             selector.add_cut(self.passing_reco, "Reco")
+            selector.set_column(self.build_nu_column, "reconu", all_cuts=True)
+            selector.set_column(self.calculate_dark_pt)
 
     def gentop(self, data):
         part = pepper.misc.jcafromjagged(
@@ -1103,3 +1105,20 @@ class Processor(processor.ProcessorABC):
 
     def passing_reco(self, data):
         return data["recot"].counts > 0
+
+    def build_nu_column(self, data):
+        lep = data["recolepton"].p4[:, 0]
+        antilep = data["recolepton"].p4[:, 1]
+        b = data["recob"].p4[:, 0]
+        antib = data["recob"].p4[:, 1]
+        top = data["recot"].p4[:, 0]
+        antitop = data["recot"].p4[:, 1]
+        nu = Jca.candidatesfromcounts(np.ones(data.size), p4=top - b - antilep)
+        antinu = Jca.candidatesfromcounts(np.ones(data.size), p4=antitop - antib - lep)
+        return awkward.concatenate([nu, antinu], axis=1)
+
+    def calculate_dark_pt(self, data):
+        nu = data["reconu"].p4[:, 0]
+        antinu = data["reconu"].p4[:, 1]
+        met = data["MET"].p4.flatten()
+        return Jca.candidatesfromcounts(np.ones(data.size), p4=met - nu - antinu)
