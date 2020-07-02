@@ -22,9 +22,14 @@ parser.add_argument(
     "--histdir", help="Histogram destination output directory. By default, "
     "./hists will be used.", default="./hists")
 parser.add_argument(
-    "--dataset", nargs=2, action="append", metavar=("name", "path"),
+    "--file", nargs=2, action="append", metavar=("dataset_name", "path"),
     help="Can be specified multiple times. Ignore datasets given in "
-    "config and instead process these")
+    "config and instead process these. Can be specified multiple times.")
+parser.add_argument(
+    "--dataset", action="append", help="Only process this dataset. Can be "
+    "specified multiple times.")
+parser.add_argument(
+    "--mc", action="store_true", help="Only process MC files")
 parser.add_argument(
     "-c", "--condor", type=int, const=10, nargs="?", metavar="simul_jobs",
     help="Split and submit to HTCondor. By default a maximum of 10 condor "
@@ -32,9 +37,8 @@ parser.add_argument(
     "it to this option.")
 parser.add_argument(
     "--chunksize", type=int, default=500000, help="Number of events to "
-    "process at once. Defaults to 5*10^5")
-parser.add_argument(
-    "--mc", action="store_true", help="Only process MC files")
+    "process at once. A smaller value means less memory usage. Defaults to "
+    "5*10^5")
 parser.add_argument(
     "-d", "--debug", action="store_true", help="Enable debug messages and "
     "only process a small amount of files to make debugging feasible")
@@ -55,10 +59,8 @@ store = config["store"]
 
 
 datasets = {}
-if args.dataset is None:
-    datasets = {}
-    if not args.mc:
-        datasets.update(config["exp_datasets"])
+if args.file is None:
+    datasets = config["exp_datasets"]
     duplicate = set(datasets.keys()) & set(config["mc_datasets"])
     if len(duplicate) > 0:
         print("Got duplicate dataset names: {}".format(", ".join(duplicate)))
@@ -66,19 +68,22 @@ if args.dataset is None:
     datasets.update(config["mc_datasets"])
 else:
     datasets = {}
-    for dataset in args.dataset:
-        if dataset[0] in datasets:
-            datasets[dataset[0]].append(dataset[1])
+    for customfile in args.file:
+        if customfile[0] in datasets:
+            datasets[customfile[0]].append(customfile[1])
         else:
-            datasets[dataset[0]] = [dataset[1]]
-if not config["compute_systematics"]:
-    for sysds in config["dataset_for_systematics"].keys():
-        if sysds in datasets:
-            del datasets[sysds]
+            datasets[customfile[0]] = [customfile[1]]
+for dataset in set(datasets.keys()):
+    if ((args.mc and dataset not in config["mc_datasets"])
+            or (args.dataset is not None and dataset not in args.dataset)
+            or (not config["compute_systematics"]
+                and dataset in config["dataset_for_systematics"])):
+        del datasets[dataset]
+
 
 requested_datasets = datasets.keys()
 datasets, paths2dsname = pepper.datasets.expand_datasetdict(datasets, store)
-if args.dataset is None:
+if args.file is None:
     missing_datasets = requested_datasets - datasets.keys()
     if len(missing_datasets) > 0:
         print("Could not find files for: " + ", ".join(missing_datasets))

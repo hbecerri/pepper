@@ -44,6 +44,7 @@ class Processor(processor.ProcessorABC):
                    Every chunk will be saved in its own file. If `None`,
                    nothing will be saved.
         """
+        self._check_config_integrity(config)
         self.config = config
         if destdir is not None:
             self.destdir = os.path.realpath(destdir)
@@ -128,6 +129,43 @@ class Processor(processor.ProcessorABC):
             self.rps_datasets = config["randomised_parameter_scan_datasets"]
         else:
             self.rps_datasets = []
+
+    @staticmethod
+    def _check_config_integrity(config):
+        inv_datasets_for_systematics = {}
+        dataset_for_systematics = config["dataset_for_systematics"]
+        for sysds, (replaceds, variation) in dataset_for_systematics.items():
+            if sysds not in config["mc_datasets"]:
+                raise pepper.config.ConfigError(
+                    "Got systematic dataset that is not mentioned in "
+                    f"mc_datasets: {sysds}")
+            if replaceds not in config["mc_datasets"]:
+                raise pepper.config.ConfigError(
+                    "Got dataset to be replaced by a systematic dataset and "
+                    f"that is not mentioned in mc_datasets: {replaceds}")
+            if (replaceds, variation) in inv_datasets_for_systematics:
+                prevds = inv_datasets_for_systematics[(replaceds, variation)]
+                raise pepper.config.ConfigError(
+                    f"{replaceds} already being replaced for {variation} by "
+                    f"{prevds} but is being repeated with {sysds}")
+            inv_datasets_for_systematics[(replaceds, variation)] = sys
+
+        if "crosssection_uncertainty" in config:
+            xsuncerts = config["crosssection_uncertainty"]
+            for dsname in xsuncerts.keys():
+                if dsname not in config["mc_datasets"]:
+                    raise pepper.config.ConfigError(
+                        f"{dsname} in crosssection_uncertainty but not in "
+                        "mc_datasets")
+            for dsname in config["mc_datasets"].keys():
+                if dsname in dataset_for_systematics:
+                    continue
+                if dsname not in xsuncerts:
+                    raise pepper.config.ConfigError(
+                        f"{dsname} in mc_datasets but not in "
+                        "crosssection_uncertainty")
+
+        # TODO: Check other config variables if necessary
 
     @staticmethod
     def _get_hists_from_config(config, key, todokey):
