@@ -8,6 +8,7 @@ import os
 import coffea
 from coffea.lookup_tools.extractor import file_converters
 import logging
+import warnings
 
 from pepper import btagging, HistDefinition
 
@@ -83,8 +84,10 @@ def get_evaluator(filename, fileform, filetype=None):
         filetype = "default"
     converter = file_converters[fileform][filetype]
     extractor = coffea.lookup_tools.extractor()
-    for key, value in converter(filename).items():
-        extractor.add_weight_set(key[0], key[1], value)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning)
+        for key, value in converter(filename).items():
+            extractor.add_weight_set(key[0], key[1], value)
     extractor.finalize()
     return extractor.make_evaluator()
 
