@@ -143,7 +143,8 @@ class Selector():
         """
         if name in self._cuts.names:
             raise ValueError("A cut with name {} already exists".format(name))
-        logger.info(f"Adding cut '{name}'")
+        logger.info(f"Adding cut '{name}'"
+                    + (" (no callback)" if no_callback else ""))
         if callable(accept):
             accepted = accept(self.masked)
         else:
