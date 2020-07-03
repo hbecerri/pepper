@@ -481,12 +481,6 @@ class Processor(processor.ProcessorABC):
             selector.set_systematic("MEfac",
                                     data["LHEScaleWeight"][:, 5] * norm[5],
                                     data["LHEScaleWeight"][:, 3] * norm[3])
-
-            # Fix for the PSWeight: NanoAOD divides by XWGTUP. This is wrong,
-            # if the cross section isn't multiplied in HepMC
-            psweight = (data["PSWeight"]
-                        * data["LHEWeight_originalXWGTUP"]
-                        / data["genWeight"])
         else:
             selector.set_systematic("MEren",
                                     np.full(data.size, 1),
@@ -494,9 +488,9 @@ class Processor(processor.ProcessorABC):
             selector.set_systematic("MEfac",
                                     np.full(data.size, 1),
                                     np.full(data.size, 1))
-            psweight = data["PSWeight"]
 
         # Parton shower scale
+        psweight = data["PSWeight"]
         selector.set_systematic("PSisr",
                                 psweight[:, 2],
                                 psweight[:, 0])
