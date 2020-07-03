@@ -247,10 +247,10 @@ class Processor(processor.ProcessorABC):
                 columns[key] = item
         return awkward.Table(columns)
 
-    def _save_per_event_info(self, dsname, selector):
+    def _save_per_event_info(self, dsname, selector, identifier):
         with self._open_output(dsname) as f:
             outf = awkward.hdf5(f)
-            out_dict = {}
+            out_dict = {"dsname": dsname, "identifier": identifier}
             out_dict["events"] = self._prepare_saved_columns(selector)
             out_dict["weight"] = selector.weight
             cutnames, cutflags = selector.get_cuts()
@@ -262,11 +262,14 @@ class Processor(processor.ProcessorABC):
 
     def process(self, df):
         dsname = df["dataset"]
-        logger.debug(f"Started processing {df._tree._context.sourcepath} "
-                     f"from event {df._branchargs['entrystart']} to "
-                     f"{df._branchargs['entrystop'] - 1} for dataset {dsname}")
+        filename = df["filename"]
+        entrystart = df._branchargs["entrystart"]
+        entrystop = df._branchargs["entrystop"]
+        logger.debug(f"Started processing {filename} from event "
+                     f"{entrystart} to {entrystop - 1} for dataset {dsname}")
         if dsname in self.rps_datasets:
-            return self.process_rps(df, dsname)
+            return self.process_rps(
+                df, dsname, filename, entrystart, entrystop)
         data = LazyTable(df)
         is_mc = (dsname in self.config["mc_datasets"].keys())
 
@@ -276,12 +279,13 @@ class Processor(processor.ProcessorABC):
 
         if self.destdir is not None:
             logger.debug("Saving per event info")
-            self._save_per_event_info(dsname, selector)
+            self._save_per_event_info(
+                dsname, selector, (filename, entrystart, entrystop))
 
         logger.debug("Processing finished")
         return filler.output
 
-    def process_rps(self, df, dsname):
+    def process_rps(self, df, dsname, filename, entrystart, entrystop):
         logger.debug("This is a randomised parameter signal sample- processing"
                      " each scan point separately")
         data = LazyTable(df)
@@ -299,7 +303,8 @@ class Processor(processor.ProcessorABC):
             self.process_selection(selector, dsname, is_mc, filler)
             if self.destdir is not None:
                 logger.debug("Saving per event info")
-                self._save_per_event_info(dsname, selector)
+                self._save_per_event_info(
+                    dsname, selector, (filename, entrystart, entrystop))
 
         logger.debug("Processing finished")
         return filler.output
