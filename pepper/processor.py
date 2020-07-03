@@ -491,12 +491,16 @@ class Processor(processor.ProcessorABC):
 
         # Parton shower scale
         psweight = data["PSWeight"]
-        selector.set_systematic("PSisr",
-                                psweight[:, 2],
-                                psweight[:, 0])
-        selector.set_systematic("PSfsr",
-                                psweight[:, 3],
-                                psweight[:, 1])
+        if psweight.counts[0] != 1:
+            # NanoAOD containts one 1.0 per event in PSWeight if there are no
+            # PS weights available, otherwise all counts > 1.
+            selector.set_systematic("PSisr", psweight[:, 2], psweight[:, 0])
+            selector.set_systematic("PSfsr", psweight[:, 3], psweight[:, 1])
+        else:
+            selector.set_systematic(
+                "PSisr", np.ones(data.size), np.ones(data.size))
+            selector.set_systematic(
+                "PSfsr", np.ones(data.size), np.ones(data.size))
 
     def add_crosssection_scale(self, selector, dsname):
         num_events = selector.num_selected
