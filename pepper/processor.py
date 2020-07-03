@@ -509,15 +509,15 @@ class Processor(processor.ProcessorABC):
         lumifactors = self.mc_lumifactors
         factor = np.full(num_events, lumifactors[dsname])
         selector.modify_weight("lumi_factor", factor)
-        if self.config["compute_systematics"]:
+        if (self.config["compute_systematics"]
+                and dsname not in self.config["dataset_for_systematics"]):
             xsuncerts = self.config["crosssection_uncertainty"]
-            for name, affected_datasets in xsuncerts.items():
-                for affected_dataset, uncert in affected_datasets.items():
-                    if dsname == affected_dataset:
-                        break
-                else:
+            for group in set(v[0] for v in xsuncerts.values()):
+                if xsuncerts[dsname] is None or group != xsuncerts[dsname][0]:
                     uncert = 0
-                selector.set_systematic(name + "XS",
+                else:
+                    uncert = xsuncerts[dsname][1]
+                selector.set_systematic(group + "XS",
                                         np.full(num_events, 1 + uncert),
                                         np.full(num_events, 1 - uncert))
 
