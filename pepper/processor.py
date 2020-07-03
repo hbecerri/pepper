@@ -482,12 +482,10 @@ class Processor(processor.ProcessorABC):
                                     data["LHEScaleWeight"][:, 5] * norm[5],
                                     data["LHEScaleWeight"][:, 3] * norm[3])
         else:
-            selector.set_systematic("MEren",
-                                    np.full(data.size, 1),
-                                    np.full(data.size, 1))
-            selector.set_systematic("MEfac",
-                                    np.full(data.size, 1),
-                                    np.full(data.size, 1))
+            selector.set_systematic(
+                "MEren", np.ones(data.size), np.ones(data.size))
+            selector.set_systematic(
+                "MEfac", np.ones(data.size), np.ones(data.size))
 
         # Parton shower scale
         psweight = data["PSWeight"]

@@ -196,9 +196,9 @@ class Selector():
         """
         if name == "weight":
             raise ValueError("The name of a systematic can't be 'weight'")
-        self.systematics[name + "_up"] = self._pad_npcolumndata(up, 1, mask)
+        self.systematics[name + "_up"] = self._pad_npcolumndata(up, 1., mask)
         self.systematics[name + "_down"] = self._pad_npcolumndata(
-            down, 1, mask)
+            down, 1., mask)
 
     def modify_weight(self, name, factor=None, updown=None, mask=None):
         """Modify the event weight. The weight will be multiplied by `factor`.
