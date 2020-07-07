@@ -195,19 +195,19 @@
             "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8",
             "tune_down"
         ],
-        "TTToSemiLeptonic_mtop173p5_TuneCP5_13TeV-powheg-pythia8": [
+        "TTToSemiLeptonic_mtop175p5_TuneCP5_13TeV-powheg-pythia8": [
             "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8",
             "tmass_up"
         ],
-        "TTToSemiLeptonic_mtop171p5_TuneCP5_13TeV-powheg-pythia8": [
+        "TTToSemiLeptonic_mtop169p5_TuneCP5_13TeV-powheg-pythia8": [
             "TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8",
             "tmass_down"
         ],
-        "TTTo2L2Nu_mtop173p5_TuneCP5_13TeV-powheg-pythia8": [
+        "TTTo2L2Nu_mtop175p5_TuneCP5_13TeV-powheg-pythia8": [
             "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8",
             "tmass_up"
         ],
-        "TTTo2L2Nu_mtop171p5_TuneCP5_13TeV-powheg-pythia8": [
+        "TTTo2L2Nu_mtop169p5_TuneCP5_13TeV-powheg-pythia8": [
             "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8",
             "tmass_down"
         ]
