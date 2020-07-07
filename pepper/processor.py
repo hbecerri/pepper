@@ -587,7 +587,7 @@ class Processor(processor.ProcessorABC):
         return passing_filters
 
     def in_transreg(self, abs_eta):
-        return (1.4442 < abs_eta) & (abs_eta < 1.566)
+        return (1.444 < abs_eta) & (abs_eta < 1.566)
 
     def electron_id(self, e_id, data):
         if e_id == "skip":
