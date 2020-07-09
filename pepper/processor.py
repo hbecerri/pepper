@@ -295,7 +295,10 @@ class Processor(processor.ProcessorABC):
                       if key.startswith("GenModel_")]
         for sp in scanpoints:
             logger.debug(f"Processing scan point {sp}")
-            dsname = sp.split("_", 1)[1]
+            if sp.startswith("GenModel__"):
+                dsname = sp[10:]
+            else:
+                dsname = sp[9:]
             filler.update_ds(dsname, dsname, None)
             selector = self.setup_selection(copy(data), dsname, is_mc, filler)
             selector.add_cut(partial(self.pick_scan_point, sp),
