@@ -2,11 +2,16 @@ import json
 import coffea
 import awkward
 import numpy as np
+from copy import copy
 
 
 def create_hist_dict(config_json):
     hist_config = json.load(open(config_json))
     return {key: HistDefinition(val) for key, val in hist_config.items()}
+
+
+def not_arr(arr):
+    return ~arr
 
 
 def leaddiff(quantity):
@@ -53,6 +58,7 @@ func_dict = {
     "abs": np.abs,
     "sign": np.sign,
 
+    "not": not_arr,
     "leaddiff": leaddiff,
     "concatenate": concatenate
 }
@@ -69,8 +75,8 @@ class HistDefinition():
         self.channel_axis = coffea.hist.Cat("channel", "Channel")
         self.axes = [coffea.hist.Bin(**kwargs) for kwargs in config["bins"]]
         if "cats" in config:
-            self.axes.extend(
-                [coffea.hist.Cat(**kwargs) for kwargs in config["cats"]])
+            self.cats = [coffea.hist.Cat(**kwargs) for kwargs in config["cats"]]
+            self.cat_fill_methods = config["cat_fills"]
         self.fill_methods = config["fill"]
 
     @staticmethod
@@ -118,21 +124,42 @@ class HistDefinition():
     def __call__(self, data, channels, dsname, is_mc, weight):
         fill_vals = {name: self.pick_data(method, data)
                      for name, method in self.fill_methods.items()}
+        cat_masks = {name: {cat: self.pick_data(method, data) 
+                            for cat, method in val.items()}
+                     for name, val in self.cat_fill_methods.items()}
         if weight is not None:
             fill_vals["weight"] = weight
+        cat_present = {name: (val if any(mask is not None for mask in val.values())
+                              else {"All": np.full(data.size, True)})
+                       for name, val in cat_masks.items()}
+        cat_axes = copy(self.cats)
         if channels is not None and len(channels) > 0:
-            hist = coffea.hist.Hist(
-                self.ylabel, self.dataset_axis, self.channel_axis, *self.axes)
-
-            for ch in channels:
-                prepared = self._prepare_fills(fill_vals, data[ch])
-                if all(val is not None for val in prepared.values()):
-                    hist.fill(dataset=dsname, channel=ch, **prepared)
-        else:
-            hist = coffea.hist.Hist(self.ylabel, self.dataset_axis, *self.axes)
+            cat_axes.append(self.channel_axis)
+            cat_present["channel"] = {ch: data[ch] for ch in channels}
+        hist = coffea.hist.Hist(self.ylabel, self.dataset_axis, *cat_axes, *self.axes)
+        if len(cat_present) == 0:
             prepared = self._prepare_fills(fill_vals)
+            
             if all(val is not None for val in prepared.values()):
                 hist.fill(dataset=dsname, **prepared)
+        else:
+            cat_combinations = None
+            for name, val in cat_present.items():
+                if cat_combinations is None:
+                    cat_combinations = {((name, cat), ): mask for cat, mask in val.items()}
+                else:
+                    new_cc = {}
+                    for cat, mask in val.items():
+                        for key, _mask in cat_combinations.items():
+                            key += ((name, cat),)
+                            new_cc[key] = mask & _mask
+                    cat_combinations = new_cc
+            for combination, mask in cat_combinations.items():
+                prepared = self._prepare_fills(fill_vals, mask)
+                combination = {key: val for key, val in combination}
+                if all(val is not None for val in prepared.values()):
+                    hist.fill(dataset=dsname, **combination, **prepared)
+
         return hist
 
     def pick_data(self, method, data):
