@@ -75,7 +75,8 @@ class HistDefinition():
         self.channel_axis = coffea.hist.Cat("channel", "Channel")
         self.axes = [coffea.hist.Bin(**kwargs) for kwargs in config["bins"]]
         if "cats" in config:
-            self.cats = [coffea.hist.Cat(**kwargs) for kwargs in config["cats"]]
+            self.cats = [coffea.hist.Cat(**kwargs)
+                         for kwargs in config["cats"]]
             self.cat_fill_methods = config["cat_fills"]
         self.fill_methods = config["fill"]
 
@@ -124,29 +125,32 @@ class HistDefinition():
     def __call__(self, data, channels, dsname, is_mc, weight):
         fill_vals = {name: self.pick_data(method, data)
                      for name, method in self.fill_methods.items()}
-        cat_masks = {name: {cat: self.pick_data(method, data) 
+        cat_masks = {name: {cat: self.pick_data(method, data)
                             for cat, method in val.items()}
                      for name, val in self.cat_fill_methods.items()}
         if weight is not None:
             fill_vals["weight"] = weight
-        cat_present = {name: (val if any(mask is not None for mask in val.values())
+        cat_present = {name: (val if any(mask is not None
+                                         for mask in val.values())
                               else {"All": np.full(data.size, True)})
                        for name, val in cat_masks.items()}
         cat_axes = copy(self.cats)
         if channels is not None and len(channels) > 0:
             cat_axes.append(self.channel_axis)
             cat_present["channel"] = {ch: data[ch] for ch in channels}
-        hist = coffea.hist.Hist(self.ylabel, self.dataset_axis, *cat_axes, *self.axes)
+        hist = coffea.hist.Hist(self.ylabel, self.dataset_axis,
+                                *cat_axes, *self.axes)
         if len(cat_present) == 0:
             prepared = self._prepare_fills(fill_vals)
-            
+
             if all(val is not None for val in prepared.values()):
                 hist.fill(dataset=dsname, **prepared)
         else:
             cat_combinations = None
             for name, val in cat_present.items():
                 if cat_combinations is None:
-                    cat_combinations = {((name, cat), ): mask for cat, mask in val.items()}
+                    cat_combinations = {((name, cat), ): mask
+                                        for cat, mask in val.items()}
                 else:
                     new_cc = {}
                     for cat, mask in val.items():
