@@ -96,6 +96,12 @@ class Processor(processor.ProcessorABC):
                            "smearing, even if not computing systematics")
             self._jer = None
             self._jersf = None
+        if ((self._jer is not None or self._junc is not None)
+                and "jet_correction" not in self.config):
+            raise pepper.config.ConfigError(
+                "Need jet_correction for propagating jet corrections to MET")
+        else:
+            self._jec = self.config["jet_correction"]
 
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
@@ -420,11 +426,10 @@ class Processor(processor.ProcessorABC):
     def process_selection_jet_part(self, selector, is_mc, variation):
         logger.debug(f"Running jet_part with variation {variation.name}")
         if is_mc:
-            selector.set_column(partial(
-                self.compute_jet_factor, variation.junc, variation.jer),
-                "jetfac")
+            selector.set_multiple_columns(partial(
+                self.compute_jet_factors, variation.junc, variation.jer))
         selector.set_column(self.build_jet_column, "Jet")
-        selector.set_column(partial(self.build_met_column,
+        selector.set_column(partial(self.build_met_column, variation.junc,
                                     variation=variation.met), "MET")
         selector.add_cut(self.has_jets, "#Jets >= %d"
                          % self.config["num_jets_atleast"])
@@ -782,18 +787,23 @@ class Processor(processor.ProcessorABC):
     def dilep_pt(self, data):
         return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).pt
 
-    def compute_junc_factor(self, data, variation, source="jes"):
+    def compute_junc_factor(self, data, variation, source="jes", pt=None,
+                            eta=None):
         if variation not in ("up", "down"):
             raise ValueError("variation must be either 'up' or 'down'")
         if source not in self._junc.levels:
             raise ValueError(f"Jet uncertainty not found: {source}")
-        counts = data["Jet_pt"].counts
+        if pt is None:
+            pt = data["Jet_pt"]
+        if eta is None:
+            eta = data["Jet_eta"]
+        counts = pt.counts
         if counts.size == 0 or counts.sum() == 0:
             return awkward.JaggedArray.fromcounts(counts, [])
-        # Make sure pt and eta aren't offset arrays.
+        # Make sure pt and eta aren't starts-stops arrays.
         # Needed by JetCorrectionUncertainty
-        pt = awkward.JaggedArray.fromcounts(counts, data["Jet_pt"].flatten())
-        eta = awkward.JaggedArray.fromcounts(counts, data["Jet_eta"].flatten())
+        pt = awkward.JaggedArray.fromcounts(counts, pt.flatten())
+        eta = awkward.JaggedArray.fromcounts(counts, eta.flatten())
         junc = dict(self._junc.getUncertainty(JetPt=pt, JetEta=eta))[source]
         if variation == "up":
             return junc[:, :, 0]
@@ -832,13 +842,18 @@ class Processor(processor.ProcessorABC):
         factor[hasgen] = (1 + (jersf - 1) * (pt - genpt) / pt)[hasgen]
         return factor
 
-    def compute_jet_factor(self, junc, jer, data):
+    def compute_jet_factors(self, junc, jer, data):
         factor = data["Jet_pt"].ones_like()
         if junc is not None:
-            factor = factor * self.compute_junc_factor(data, *junc)
+            juncfac = self.compute_junc_factor(data, *junc)
+        else:
+            juncfac = data["Jet_pt"].ones_like()
         if jer is not None:
-            factor = factor * self.compute_jer_factor(data, jer)
-        return factor
+            jerfac = self.compute_jer_factor(data, jer)
+        else:
+            jerfac = data["Jet_pt"].ones_like()
+        factor = juncfac * jerfac
+        return {"jetfac": factor, "juncfac": juncfac, "jerfac": jerfac}
 
     def good_jet(self, data):
         j_id, j_puId, lep_dist, eta_min, eta_max, pt_min = self.config[[
@@ -929,7 +944,39 @@ class Processor(processor.ProcessorABC):
         jets = jets[jets.pt.argsort()]
         return jets
 
-    def build_met_column(self, data, variation="central"):
+    def build_lowptjet_column(self, junc, data):
+        rawpt = data["CorrT1METJet_rawPt"]
+        eta = data["CorrT1METJet_eta"]
+        # For MET we care about jets close to 15 GeV. JEC is derived with
+        # pt > 10 GeV and |eta| < 5.2, thus cut there
+        mask = (rawpt > 10) & (abs(eta) < 5.2)
+        rawpt = rawpt[mask]
+        eta = eta[mask]
+        phi = data["CorrT1METJet_phi"][mask]
+        area = data["CorrT1METJet_area"][mask]
+        counts = rawpt.counts
+        rho = np.repeat(data["fixedGridRhoFastjetAll"], counts)
+        rho = awkward.JaggedArray.fromcounts(counts, rho)
+        l1l2l3 = self._jec.getCorrection(JetPt=rawpt, JetEta=eta, JetA=area,
+                                         Rho=rho)
+        pt = rawpt * l1l2l3
+        pt_nomuon = pt * (1 - data["CorrT1METJet_muonSubtrFactor"][mask])
+        factor = pt.ones_like()
+        if junc is not None:
+            factor = factor * self.compute_junc_factor(data, *junc, pt=pt,
+                                                       eta=eta)
+
+        zeros = pt.zeros_like()
+        return pepper.misc.jcafromjagged(**{
+            "pt": pt,
+            "pt_nomuon": pt_nomuon,
+            "juncfac": factor,
+            "eta": eta,
+            "phi": phi,
+            "mass": zeros,
+            "emef": zeros})
+
+    def build_met_column(self, junc, data, variation="central"):
         met = TLorentzVectorArray.from_ptetaphim(data["MET_pt"],
                                                  np.zeros(data.size),
                                                  data["MET_phi"],
@@ -947,23 +994,30 @@ class Processor(processor.ProcessorABC):
         elif variation != "central":
             raise ValueError(
                 "variation must be one of 'central', 'up' or 'down'")
-        if "jetfac" in data:
-            jets = TLorentzVectorArray.from_ptetaphim(data["Jet_pt"],
-                                                      data["Jet_eta"],
-                                                      data["Jet_phi"],
-                                                      data["Jet_mass"])
-            factor = data["jetfac"] - 1
-            newx = met.x - (jets.x * factor).sum()
-            newy = met.y - (jets.y * factor).sum()
+        if "juncfac" in data and (data["juncfac"] != 1).any().any():
+            # Do MET type-1 corrections
+            jets = pepper.misc.jcafromjagged(**{
+                "pt": data["Jet_pt"],
+                "pt_nomuon": (data["Jet_pt"]
+                              * (1 - data["Jet_muonSubtrFactor"])),
+                "juncfac": data["juncfac"],
+                "eta": data["Jet_eta"],
+                "phi": data["Jet_phi"],
+                "mass": data["Jet_mass"],
+                "emef": data["Jet_neEmEF"] + data["Jet_chEmEF"]})
+            lowptjets = self.build_lowptjet_column(junc, data)
+            jets = pepper.misc.concatenate([jets, lowptjets], axis=1)
+            # Cut according to MissingETRun2Corrections Twiki
+            jets = jets[(jets["pt_nomuon"] > 15) & (jets["emef"] < 0.9)]
+
+            factor = jets["juncfac"] - 1
+            newx = met.x - (jets.p4.x * factor).sum()
+            newy = met.y - (jets.p4.y * factor).sum()
             met = TLorentzVectorArray.from_ptetaphim(np.hypot(newx, newy),
                                                      np.zeros(data.size),
                                                      np.arctan2(newy, newx),
                                                      np.zeros(data.size))
-        return Jca.candidatesfromoffsets(np.arange(data.size + 1),
-                                         pt=met.pt,
-                                         eta=met.eta,
-                                         phi=met.phi,
-                                         mass=met.mass)
+        return Jca.candidatesfromoffsets(np.arange(data.size + 1), p4=met)
 
     def in_hem1516(self, phi, eta):
         return ((-3.0 < eta) & (eta < -1.3) & (-1.57 < phi) & (phi < -0.87))
@@ -1088,8 +1142,8 @@ class Processor(processor.ProcessorABC):
         b0, b1 = pepper.misc.pairswhere(btags.counts > 1,
                                         btags.distincts(),
                                         btags.cross(jetsnob))
-        bs = pepper.misc.concatenate(b0, b1)
-        bbars = pepper.misc.concatenate(b1, b0)
+        bs = pepper.misc.concatenate(b0, b1, axis=1)
+        bbars = pepper.misc.concatenate(b1, b0, axis=1)
         alb = bs.cross(antilep)
         lbbar = bbars.cross(lep)
         hist_mlb = uproot.open(self.reco_info_filepath)["mlb"]

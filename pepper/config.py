@@ -220,6 +220,14 @@ class Config(object):
                 weighters.append(btagweighter)
             self._cache[key] = weighters
             return weighters
+        elif key == "jet_correction":
+            evaluators = {}
+            for path in self._config[key]:
+                path = self._replace_special_vars(path)
+                evaluators.update(get_evaluator(path, "txt", "jec"))
+            fjc = coffea.jetmet_tools.FactorizedJetCorrector(**evaluators)
+            self._cache[key] = fjc
+            return fjc
         elif key == "jet_uncertainty":
             path = self._replace_special_vars(self._config[key])
             evaluator = get_evaluator(path, "txt", "junc")

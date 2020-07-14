@@ -11,21 +11,16 @@ import parsl
 import parsl.addresses
 
 
-def concatenate(arr1, arr2):
-    arr_dict = {}
-    offsets = awkward.concatenate([arr1.pt, arr2.pt], axis=1).offsets
-    arr_dict["pt"] = \
-        awkward.concatenate([arr1.pt, arr2.pt], axis=1).flatten()
-    arr_dict["eta"] = \
-        awkward.concatenate([arr1.eta, arr2.eta], axis=1).flatten()
-    arr_dict["phi"] = \
-        awkward.concatenate([arr1.phi, arr2.phi], axis=1).flatten()
-    arr_dict["mass"] = \
-        awkward.concatenate([arr1.mass, arr2.mass], axis=1).flatten()
-    if "pdgId" in arr1.flatten().contents:
-        arr_dict["pdgId"] = awkward.concatenate([arr1["pdgId"], arr2["pdgId"]],
-                                                axis=1).flatten()
-    return Jca.candidatesfromoffsets(offsets, **arr_dict)
+def concatenate(arrays, axis=0):
+    arraytype = None
+    for array in arrays:
+        if arraytype is not None and type(array) is not arraytype:
+            raise TypeError("All arrays need to have the same type")
+        else:
+            arraytype = type(array)
+    concated = awkward.concatenate(arrays, axis=axis)
+    mixin = awkward.Methods.maybemixin(arraytype, awkward.JaggedArray)
+    return mixin.fromcounts(concated.counts, concated.flatten())
 
 
 def pairswhere(condition, x, y):
