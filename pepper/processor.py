@@ -516,7 +516,8 @@ class Processor(processor.ProcessorABC):
         if (self.config["compute_systematics"]
                 and dsname not in self.config["dataset_for_systematics"]):
             xsuncerts = self.config["crosssection_uncertainty"]
-            for group in set(v[0] for v in xsuncerts.values()):
+            groups = set(v[0] for v in xsuncerts.values() if v is not None)
+            for group in groups:
                 if xsuncerts[dsname] is None or group != xsuncerts[dsname][0]:
                     uncert = 0
                 else:
