@@ -13,6 +13,7 @@ from uproot_methods import TLorentzVectorArray
 import h5py
 import logging
 from copy import copy
+from time import time
 
 import pepper
 from pepper import sonnenschein, betchart, Selector, LazyTable, OutputFiller
@@ -267,6 +268,7 @@ class Processor(processor.ProcessorABC):
                 outf[key] = out_dict[key]
 
     def process(self, df):
+        starttime = time()
         dsname = df["dataset"]
         filename = df["filename"]
         entrystart = df._branchargs["entrystart"]
@@ -288,7 +290,8 @@ class Processor(processor.ProcessorABC):
             self._save_per_event_info(
                 dsname, selector, (filename, entrystart, entrystop))
 
-        logger.debug("Processing finished")
+        timetaken = time() - starttime
+        logger.debug(f"Processing finished. Took {timetaken:.3f} s.")
         return filler.output
 
     def process_rps(self, df, dsname, filename, entrystart, entrystop):
