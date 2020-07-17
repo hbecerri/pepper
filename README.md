@@ -4,9 +4,9 @@ A python framework for analysing NanoAODs. Easy to use and highly configurable.
 Currently focusing on <img src="https://latex.codecogs.com/gif.latex?\mathrm{t\bar{t}}\rightarrow\mathrm{ll\nu\nu}" />.
 
 ## Installation
-Requires Python3 and the Python packages `coffea` and `parsl`
+Requires Python3 and the Python packages `coffea`, `parsl` and `h5py`
 
-> pip3 install --user coffea parsl
+> pip3 install --user coffea parsl h5py
 
 The features of the framework are implemented as a Python package, which is inside the `pepper` directory. To use it, you can add the path to where you downloaded the repository to the `PYTHONPATH` variable
 
