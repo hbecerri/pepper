@@ -116,7 +116,7 @@ if args.eventdir is not None:
 # Create histdir and in case of errors, raise them now (before processing)
 os.makedirs(args.histdir, exist_ok=True)
 
-processor = pepper.Processor(config, args.eventdir)
+processor = pepper.ProcessorTTbarLL(config, args.eventdir)
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
     # Load parsl config immediately instead of putting it into executor_args
