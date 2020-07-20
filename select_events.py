@@ -11,9 +11,10 @@ import logging
 import pepper
 
 
-parser = ArgumentParser(description="Select events from nanoAODs. This will "
-                                    "save cutflows, histograms and, if "
-                                    "wished, per-event data ")
+parser = ArgumentParser(
+    description="Select events from nanoAODs. This will save cutflows, "
+    "histograms and, if wished, per-event data. Histograms are saved in a "
+    "Coffea format and are ready to be plotted by plot_control.py")
 parser.add_argument("config", help="JSON configuration file")
 parser.add_argument(
     "--eventdir", help="Event destination output directory. If not "
