@@ -23,7 +23,7 @@
         ],
         [
             "$DATADIR/scale_factors/Muon2018_RunABCD_SF_ISO.root",
-            "NUM_LooseRelIso_DEN_TightIDandIPCut_pt_abseta"
+            "NUM_LooseRelIso_DEN_MediumID_pt_abseta"
         ]
     ],
     "btag_sf": [
@@ -32,7 +32,12 @@
 	    "$DATADIR/scale_factors/deepjet_medium_efficiency.root"
 	]
     ],
-    "jet_uncertainty": "$DATADIR/scale_factors/Autumn18_V8_MC_Uncertainty_AK4PFchs.txt",
+    "jet_correction": [
+        "$DATADIR/scale_factors/Autumn18_V19_MC_L1FastJet_AK4PFchs.txt",
+        "$DATADIR/scale_factors/Autumn18_V19_MC_L2Relative_AK4PFchs.txt",
+        "$DATADIR/scale_factors/Autumn18_V19_MC_L3Absolute_AK4PFchs.txt"
+    ],
+    "jet_uncertainty": "$DATADIR/scale_factors/Autumn18_V19_MC_Uncertainty_AK4PFchs.txt",
     "jet_resolution": "$DATADIR/scale_factors/Autumn18_V7b_MC_PtResolution_AK4PFchs.txt",
     "jet_ressf": "$DATADIR/scale_factors/Autumn18_V7b_MC_SF_AK4PFchs.txt",
     "exp_datasets": {

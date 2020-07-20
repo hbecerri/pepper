@@ -10,6 +10,7 @@ from coffea.lookup_tools.extractor import file_converters
 import logging
 import warnings
 
+import pepper
 from pepper import btagging, HistDefinition
 
 
@@ -111,9 +112,25 @@ class ConfigError(RuntimeError):
 
 
 class Config(object):
-    def __init__(self, path):
-        with open(path) as f:
-            self._config = json.load(f)
+    def __init__(self, path_or_file, textparser=json.load):
+        """Initialize the configuration.
+
+        Arguments:
+        path_or_file -- Either a path to the file containing the configuration
+                        or a file-like object of it
+        textparser -- Callable to be used to parse the text contained in
+                      path_or_file
+        """
+        if isinstance(path_or_file, str):
+            with open(path_or_file) as f:
+                self._config = textparser(f)
+                path = path_or_file
+        else:
+            self._config = textparser(f)
+            if hasattr(f, "name"):
+                path = f.name
+            else:
+                path = "unknown"
         self._cache = {}
         self._config["configdir"] = os.path.dirname(os.path.realpath(path))
 
@@ -220,6 +237,14 @@ class Config(object):
                 weighters.append(btagweighter)
             self._cache[key] = weighters
             return weighters
+        elif key == "jet_correction":
+            evaluators = {}
+            for path in self._config[key]:
+                path = self._replace_special_vars(path)
+                evaluators.update(get_evaluator(path, "txt", "jec"))
+            fjc = coffea.jetmet_tools.FactorizedJetCorrector(**evaluators)
+            self._cache[key] = fjc
+            return fjc
         elif key == "jet_uncertainty":
             path = self._replace_special_vars(self._config[key])
             evaluator = get_evaluator(path, "txt", "junc")
@@ -280,3 +305,27 @@ class Config(object):
 
     def __setitem__(self, key, value):
         self._cache[key] = value
+
+    def get_datasets(self, dsnames=None, dstype="any"):
+        if dstype not in ("any", "mc", "data"):
+            raise ValueError("dstype must be either 'any', 'mc' or 'data'")
+        datasets = self["exp_datasets"]
+        duplicate = set(datasets.keys()) & set(self["mc_datasets"])
+        if len(duplicate) > 0:
+            raise ConfigError("Got duplicate dataset names: {}".format(
+                ", ".join(duplicate)))
+        datasets.update(self["mc_datasets"])
+        for dataset in set(datasets.keys()):
+            if ((dstype == "mc" and dataset not in self["mc_datasets"])
+                    or (dstype == "data"
+                        and dataset not in self["expdatasets"])
+                    or (dsnames is not None and dataset not in dsnames)):
+                del datasets[dataset]
+        requested_datasets = datasets.keys()
+        datasets, paths2dsname =\
+            pepper.datasets.expand_datasetdict(datasets, self["store"])
+        missing_datasets = requested_datasets - datasets.keys()
+        if len(missing_datasets) > 0:
+            raise ConfigError("Could not find files for: "
+                              + ", ".join(missing_datasets))
+        return datasets

@@ -12,6 +12,7 @@ from pepper.kinreco import sonnenschein
 from pepper.betchart_kinreco import betchart
 from pepper.config import Config
 from pepper.processor import Processor
+from pepper.processor_ttbarll import ProcessorTTbarLL
 
 __all__ = [
     "PackedSelectionAccumulator",
@@ -28,4 +29,5 @@ __all__ = [
     "betchart",
     "Config",
     "Processor",
+    "ProcessorTTbarLL",
 ]

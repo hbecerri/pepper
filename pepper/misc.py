@@ -11,21 +11,16 @@ import parsl
 import parsl.addresses
 
 
-def concatenate(arr1, arr2):
-    arr_dict = {}
-    offsets = awkward.concatenate([arr1.pt, arr2.pt], axis=1).offsets
-    arr_dict["pt"] = \
-        awkward.concatenate([arr1.pt, arr2.pt], axis=1).flatten()
-    arr_dict["eta"] = \
-        awkward.concatenate([arr1.eta, arr2.eta], axis=1).flatten()
-    arr_dict["phi"] = \
-        awkward.concatenate([arr1.phi, arr2.phi], axis=1).flatten()
-    arr_dict["mass"] = \
-        awkward.concatenate([arr1.mass, arr2.mass], axis=1).flatten()
-    if "pdgId" in arr1.flatten().contents:
-        arr_dict["pdgId"] = awkward.concatenate([arr1["pdgId"], arr2["pdgId"]],
-                                                axis=1).flatten()
-    return Jca.candidatesfromoffsets(offsets, **arr_dict)
+def concatenate(arrays, axis=0):
+    arraytype = None
+    for array in arrays:
+        if arraytype is not None and type(array) is not arraytype:
+            raise TypeError("All arrays need to have the same type")
+        else:
+            arraytype = type(array)
+    concated = awkward.concatenate(arrays, axis=axis)
+    mixin = awkward.Methods.maybemixin(arraytype, awkward.JaggedArray)
+    return mixin.fromcounts(concated.counts, concated.flatten())
 
 
 def pairswhere(condition, x, y):
@@ -255,6 +250,13 @@ def export(hist):
     return out
 
 
+def export_with_sparse(hist):
+    ret = {}
+    for key in hist.values().keys():
+        ret[key] = export(hist[key].project(*hist.dense_axes()))
+    return ret
+
+
 def hist_divide(num, denom):
     """Return a histogram with bin heights = num / denum and errors set
     accordingly"""
@@ -391,15 +393,17 @@ cd -
                   "~/.local/bin/process_worker_pool.py "
                   "{debug} "
                   "{max_workers} "
+                  "-a {addresses} "
                   "-p {prefetch_capacity} "
                   "-c {cores_per_worker} "
                   "-m {mem_per_worker} "
                   "--poll {poll_period} "
-                  "--task_url={task_url} "
-                  "--result_url={result_url} "
+                  "--task_port={task_port} "
+                  "--result_port={result_port} "
                   "--logdir={logdir} "
                   "--block_id={{block_id}} "
                   "--hb_period={heartbeat_period} "
+                  "{address_probe_timeout_string} "
                   "--hb_threshold={heartbeat_threshold} ")
     parsl_executor = parsl.executors.HighThroughputExecutor(
         label="HTCondor",

@@ -14,7 +14,7 @@ from pepper.misc import jcafromjagged, export
 from pepper.datasets import expand_datasetdict
 
 
-class Processor(pepper.Processor):
+class Processor(pepper.ProcessorTTbarLL):
     def __init__(self, config):
         config["do_ttbar_reconstruction"] = False
         config["blinding_denom"] = None

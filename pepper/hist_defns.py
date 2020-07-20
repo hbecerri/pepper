@@ -78,6 +78,9 @@ class HistDefinition():
             self.cats = [coffea.hist.Cat(**kwargs)
                          for kwargs in config["cats"]]
             self.cat_fill_methods = config["cat_fills"]
+        else:
+            self.cats = []
+            self.cat_fill_methods = {}
         self.fill_methods = config["fill"]
 
     @staticmethod
