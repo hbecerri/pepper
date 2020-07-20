@@ -250,6 +250,13 @@ def export(hist):
     return out
 
 
+def export_with_sparse(hist):
+    ret = {}
+    for key in hist.values().keys():
+        ret[key] = export(hist[key].project(*hist.dense_axes()))
+    return ret
+
+
 def hist_divide(num, denom):
     """Return a histogram with bin heights = num / denum and errors set
     accordingly"""
