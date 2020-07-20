@@ -11,7 +11,8 @@ import coffea  # noqa: E402
 from collections import defaultdict  # noqa: E402
 import json  # noqa: E402
 
-from pepper import Config  # noqa: E402
+import pepper  # noqa: E402
+import pepper.plot  # noqa: E402
 
 
 # Luminosities needed for CMS label at the top of plots
@@ -74,7 +75,7 @@ def plot(data_hist, pred_hist, sys, namebase, colors={}, log=False,
          cmsyear=None, ext=".svg"):
     fig, (ax1, ax2) = plt.subplots(
         nrows=2, sharex=True, gridspec_kw={"height_ratios": [3, 1]})
-    coffea.hist.plot1d(pred_hist,
+    pepper.plot.plot1d(pred_hist,
                        ax=ax1,
                        overlay="proc",
                        clear=False,
@@ -92,7 +93,7 @@ def plot(data_hist, pred_hist, sys, namebase, colors={}, log=False,
                            "color": "black",
                            "marker": "o",
                            "markersize": 4})
-    coffea.hist.plotratio(data_hist.sum("proc"),
+    pepper.plot.plotratio(data_hist.sum("proc"),
                           pred_hist.sum("proc"),
                           ax=ax2,
                           error_opts={"fmt": "ok", "markersize": 4},
@@ -143,7 +144,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 plt.set_loglevel("error")
-config = Config(args.config)
+config = pepper.Config(args.config)
 mc_colors = {}
 if args.labels:
     with open(args.labels) as f:
