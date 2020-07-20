@@ -101,7 +101,6 @@ class DYprocessor(pepper.Processor):
             selector.set_column(partial(self.met_bin, lower, upper), _bin,
                                 no_callback=True)
         selector.set_column(partial(self.btag_cut, False), "At least 1 btag")
-        
 
         mll = selector.final["mll"]
         m_min = self.config["z_boson_window_start"]
@@ -261,7 +260,7 @@ class SFEquations():
         return out_dict
 
 
-def rebin_MET(nums, rebin_dict):
+def rebin_met(nums, rebin_dict):
     entries = ["LO_DY_numbers", "NLO_DY_numbers", "LO_DY_errs", "NLO_DY_errs"]
     regions = ["in_0b_", "out_0b_", "in_1b_"]
     data_MC_chs = ["Nee_", "Nem_", "Nmm_", "Zee_", "Zmm_"]
@@ -269,8 +268,8 @@ def rebin_MET(nums, rebin_dict):
         for entry in entries:
             for ch in data_MC_chs:
                 for reg in regions:
-                    nums[entry][ch+reg+new_bin] = \
-                        sum([nums[entry][ch+reg+old_bin] for old_bin in old_bins])
+                    nums[entry][ch+reg+new_bin] = sum(
+                        [nums[entry][ch+reg+old_bin] for old_bin in old_bins])
 
 
 parser = ArgumentParser(description="Select events from nanoAODs")
@@ -444,17 +443,17 @@ nums = {"LO_DY_numbers": output["LO_DY_numbers"],
         "NLO_SFs": {},
         "NLO_SF_errs": {}}
 
-rebin_MET(nums, {"100_to_inf": ["100_to_150", "150_to_inf"]})
+rebin_met(nums, {"100_to_inf": ["100_to_150", "150_to_inf"]})
 sf_eq = SFEquations(["0_to_40", "40_to_70", "70_to_100", "100_to_inf"])
 nums["LO_SFs"].update(sf_eq.evaluate(nums["LO_DY_numbers"]))
 nums["NLO_SFs"].update(sf_eq.evaluate(nums["NLO_DY_numbers"]))
 sf_eq.calculate_errs()
 nums["LO_SF_errs"].update(sf_eq.evaluate_errs(nums["LO_DY_numbers"],
-                                         nums["LO_DY_errs"]))
+                                              nums["LO_DY_errs"]))
 nums["NLO_SF_errs"].update(sf_eq.evaluate_errs(nums["NLO_DY_numbers"],
-                                          nums["NLO_DY_errs"]))
+                                               nums["NLO_DY_errs"]))
 
-rebin_MET(nums, {"Inclusive": MET_bins})
+rebin_met(nums, {"Inclusive": MET_bins})
 sfs_inclusive = SFEquations(["Inclusive"])
 nums["LO_SFs"].update(sfs_inclusive.evaluate(nums["LO_DY_numbers"]))
 nums["NLO_SFs"].update(sfs_inclusive.evaluate(nums["NLO_DY_numbers"]))
@@ -462,7 +461,7 @@ sfs_inclusive.calculate_errs()
 nums["LO_SF_errs"].update(sfs_inclusive.evaluate_errs(nums["LO_DY_numbers"],
                                                       nums["LO_DY_errs"]))
 nums["NLO_SF_errs"].update(sfs_inclusive.evaluate_errs(nums["NLO_DY_numbers"],
-                                          nums["NLO_DY_errs"]))
+                                                       nums["NLO_DY_errs"]))
 
 with open("DY_sfs.json", "w") as f:
     json.dump(nums, f, indent=4)
