@@ -60,12 +60,13 @@ store = config["store"]
 
 datasets = {}
 if args.file is None:
-    datasets = config["exp_datasets"]
-    duplicate = set(datasets.keys()) & set(config["mc_datasets"])
-    if len(duplicate) > 0:
-        print("Got duplicate dataset names: {}".format(", ".join(duplicate)))
-        exit(1)
-    datasets.update(config["mc_datasets"])
+    datasets = (set(config["exp_datasets"].keys())
+                | set(config["mc_datasets"].keys()))
+    if args.dataset is not None:
+        datasets = set(args.dataset)
+    if not config["compute_systematics"]:
+        datasets -= set(config["dataset_for_systematics"].keys())
+    datasets = config.get_datasets(datasets, "mc" if args.mc else "any")
 else:
     datasets = {}
     for customfile in args.file:
@@ -73,25 +74,12 @@ else:
             datasets[customfile[0]].append(customfile[1])
         else:
             datasets[customfile[0]] = [customfile[1]]
-for dataset in set(datasets.keys()):
-    if ((args.mc and dataset not in config["mc_datasets"])
-            or (args.dataset is not None and dataset not in args.dataset)
-            or (not config["compute_systematics"]
-                and dataset in config["dataset_for_systematics"])):
-        del datasets[dataset]
 
-
-requested_datasets = datasets.keys()
-datasets, paths2dsname = pepper.datasets.expand_datasetdict(datasets, store)
 if args.file is None:
-    missing_datasets = requested_datasets - datasets.keys()
-    if len(missing_datasets) > 0:
-        print("Could not find files for: " + ", ".join(missing_datasets))
-        exit(1)
-    num_files = len(paths2dsname)
+    num_files = sum(len(dsfiles) for dsfiles in datasets.values())
     num_mc_files = sum(len(datasets[dsname])
                        for dsname in config["mc_datasets"].keys()
-                       if dsname in requested_datasets)
+                       if dsname in datasets)
 
     print("Got a total of {} files of which {} are MC".format(num_files,
                                                               num_mc_files))

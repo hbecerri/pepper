@@ -10,6 +10,7 @@ from coffea.lookup_tools.extractor import file_converters
 import logging
 import warnings
 
+import pepper
 from pepper import btagging, HistDefinition
 
 
@@ -304,3 +305,27 @@ class Config(object):
 
     def __setitem__(self, key, value):
         self._cache[key] = value
+
+    def get_datasets(self, dsnames=None, dstype="any"):
+        if dstype not in ("any", "mc", "data"):
+            raise ValueError("dstype must be either 'any', 'mc' or 'data'")
+        datasets = self["exp_datasets"]
+        duplicate = set(datasets.keys()) & set(self["mc_datasets"])
+        if len(duplicate) > 0:
+            raise ConfigError("Got duplicate dataset names: {}".format(
+                ", ".join(duplicate)))
+        datasets.update(self["mc_datasets"])
+        for dataset in set(datasets.keys()):
+            if ((dstype == "mc" and dataset not in self["mc_datasets"])
+                    or (dstype == "data"
+                        and dataset not in self["expdatasets"])
+                    or (dsnames is not None and dataset not in dsnames)):
+                del datasets[dataset]
+        requested_datasets = datasets.keys()
+        datasets, paths2dsname =\
+            pepper.datasets.expand_datasetdict(datasets, self["store"])
+        missing_datasets = requested_datasets - datasets.keys()
+        if len(missing_datasets) > 0:
+            raise ConfigError("Could not find files for: "
+                              + ", ".join(missing_datasets))
+        return datasets
