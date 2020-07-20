@@ -24,7 +24,6 @@ class MyProcessor(pepper.Processor):
         super().__init__(config, None)
 
         self.lumimask = self.config["lumimask"]
-        self.mc_lumifactors = config["mc_lumifactors"]
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
 
@@ -52,12 +51,6 @@ class MyProcessor(pepper.Processor):
 
         # Only accept events that have oppositly changed leptons
         selector.add_cut(self.opposite_sign_lepton_pair, "OC leptons")
-
-    def scale_to_luminosity(self, selector, dsname):
-        num_events = selector.num_selected
-        lumifactors = self.mc_lumifactors
-        factor = np.full(num_events, lumifactors[dsname])
-        selector.modify_weight("lumi_factor", factor)
 
     def good_lumimask(self, is_mc, data):
         run = np.array(data["run"])
