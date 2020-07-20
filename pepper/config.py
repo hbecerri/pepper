@@ -111,9 +111,25 @@ class ConfigError(RuntimeError):
 
 
 class Config(object):
-    def __init__(self, path):
-        with open(path) as f:
-            self._config = json.load(f)
+    def __init__(self, path_or_file, textparser=json.load):
+        """Initialize the configuration.
+
+        Arguments:
+        path_or_file -- Either a path to the file containing the configuration
+                        or a file-like object of it
+        textparser -- Callable to be used to parse the text contained in
+                      path_or_file
+        """
+        if isinstance(path_or_file, str):
+            with open(path_or_file) as f:
+                self._config = textparser(f)
+                path = path_or_file
+        else:
+            self._config = textparser(f)
+            if hasattr(f, "name"):
+                path = f.name
+            else:
+                path = "unknown"
         self._cache = {}
         self._config["configdir"] = os.path.dirname(os.path.realpath(path))
 
