@@ -410,7 +410,7 @@
     "num_atleast_btagged": 1,
     "ee/mm_min_met": 40,
 
-    "reco_algorithm": "Betchart",
+    "reco_algorithm": "sonnenschein",
     "reco_info_file": "$DATADIR/kinreco.root",
     "reco_w_mass": "mw",
     "reco_t_mass": 172.5,
