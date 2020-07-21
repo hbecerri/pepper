@@ -102,6 +102,10 @@ class ProcessorTTbarLL(pepper.Processor):
             raise pepper.config.ConfigError(
                 "Need reco_info_file for kinematic reconstruction")
         self.mc_lumifactors = config["mc_lumifactors"]
+        if "DY_SFs" in self.config:
+            self.DY_SFs = self.config["DY_SFs"]
+        else:
+            self.DY_SFs = None
 
     @staticmethod
     def _check_config_integrity(config):
@@ -189,12 +193,12 @@ class ProcessorTTbarLL(pepper.Processor):
             for variarg in self.get_jetmet_variation_args():
                 selector_copy = selector.copy()
                 filler.sys_overwrite = variarg.name
-                self.process_selection_jet_part(selector_copy, is_mc, variarg)
+                self.process_selection_jet_part(selector_copy, is_mc, variarg, dsname)
             filler.sys_overwrite = None
 
         # Do normal, no-variation run
         self.process_selection_jet_part(
-            selector, is_mc, self.get_jetmet_nominal_arg())
+            selector, is_mc, self.get_jetmet_nominal_arg(), dsname)
         logger.debug("Selection done")
 
     def get_jetmet_variation_args(self):
@@ -220,7 +224,7 @@ class ProcessorTTbarLL(pepper.Processor):
         else:
             return VariationArg(None, jer=None)
 
-    def process_selection_jet_part(self, selector, is_mc, variation):
+    def process_selection_jet_part(self, selector, is_mc, variation, dsname):
         logger.debug(f"Running jet_part with variation {variation.name}")
         if is_mc:
             selector.set_multiple_columns(partial(
@@ -228,6 +232,9 @@ class ProcessorTTbarLL(pepper.Processor):
         selector.set_column(self.build_jet_column, "Jet")
         selector.set_column(partial(self.build_met_column, variation.junc,
                                     variation=variation.met), "MET")
+        if dsname.startswith("DY"):
+            if self.DY_SFs is not None:
+                self.apply_DY_SFs(selector)
         selector.add_cut(self.has_jets, "#Jets >= %d"
                          % self.config["num_jets_atleast"])
         if (self.config["hem_cut_if_ele"] or self.config["hem_cut_if_muon"]
@@ -272,6 +279,32 @@ class ProcessorTTbarLL(pepper.Processor):
         pt = selector.masked["gent_lc"].pt
         sf = self.topptweighter(pt[:, 0], pt[:, 1])
         selector.modify_weight("Top pt reweighting", sf)
+
+    def met_bin(self, lower, upper, data):
+        ret_arr = np.full(data.size, False)
+        MET = data["MET"].pt.flatten()
+        if upper is None:
+            ret_arr[data["MET"].counts > 0] = (MET > lower)
+        else:
+            ret_arr[data["MET"].counts > 0] = ((MET > lower) & (MET < upper))
+        return ret_arr
+
+    def apply_DY_SFs(self, selector):
+        if self.config["DY_SF_bins"] == "Inclusive":
+            MET_bins = {"Inclusive": np.full(selector.masked.size, True)}
+        elif isinstance(self.config["DY_SF_bins"], dict):
+            MET_bins = {key: self.met_bin(l, u, selector.masked)
+                        for key, (l, u) in self.config["DY_SF_bins"].items()}
+        else:
+            raise ConfigError("DY_SF_bins must either be 'Inclusive' or a "
+                              "dict defining the binning")
+        chs = ["is_ee", "is_em", "is_mm"]
+        sf = np.ones(selector.masked.size)
+        for ch in chs:
+            for MET_bin, mask in MET_bins.items():
+                sf[selector.masked[ch] & mask] = \
+                    self.DY_SFs[ch+MET_bin]
+        selector.modify_weight("DY scale factors", sf)
 
     def add_generator_uncertainies(self, dsname, selector):
         # Matrix-element renormalization and factorization scale
@@ -940,8 +973,8 @@ class ProcessorTTbarLL(pepper.Processor):
         b0, b1 = pepper.misc.pairswhere(btags.counts > 1,
                                         btags.distincts(),
                                         btags.cross(jetsnob))
-        bs = pepper.misc.concatenate(b0, b1, axis=1)
-        bbars = pepper.misc.concatenate(b1, b0, axis=1)
+        bs = pepper.misc.concatenate([b0, b1], axis=1)
+        bbars = pepper.misc.concatenate([b1, b0], axis=1)
         alb = bs.cross(antilep)
         lbbar = bbars.cross(lep)
         hist_mlb = uproot.open(self.reco_info_filepath)["mlb"]

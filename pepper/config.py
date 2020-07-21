@@ -273,7 +273,7 @@ class Config(object):
         elif key == "crosssection_uncertainty":
             uncerts = self._get_maybe_external(key)
             if not isinstance(uncerts, dict):
-                raise ConfigError("crosssection_uncertainty must eiter be "
+                raise ConfigError("crosssection_uncertainty must either be "
                                   "dict or a path to JSON file containing a "
                                   "dict")
             self._cache[key] = uncerts
@@ -281,13 +281,30 @@ class Config(object):
         elif key == "hists":
             hists = self._get_maybe_external(key)
             if not isinstance(hists, dict):
-                raise ConfigError(f"{key} must eiter be "
-                                  "list or a path to JSON file containing a "
+                raise ConfigError(f"{key} must either be "
+                                  "dict or a path to JSON file containing a "
                                   "dict")
             hists = {k: HistDefinition(c) for k, c in hists.items()}
             self._cache[key] = hists
             return hists
-        elif key in ("kinreco_info_file", "store", "lumimask",
+        elif key in ("DY_SFs", "DY_SF_errs"):
+            if isinstance(self._config[key], list):
+                data = self._config[key][0]
+                data = self._replace_special_vars(data)
+                with open(data) as f:
+                    data = json.load(f)
+                for i in range(1, len(self._config[key])):
+                    data = data[self._config[key][i]]
+            else:
+                data = self._config[key]
+            if not isinstance(data, dict):
+                raise ConfigError(f"{key} must either be a "
+                                  "dict or a list, where the first index is a "
+                                  "path to a json, and any subsequent indices "
+                                  "are keys to the dict")
+            self._cache[key] = data
+            return data
+        elif key in ("reco_info_file", "store", "lumimask",
                      "mc_lumifactors"):
             self._cache[key] = self._get_path(key)
             return self._cache[key]
