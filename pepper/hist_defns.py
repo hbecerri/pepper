@@ -215,7 +215,6 @@ class HistDefinition():
                     else:
                         start = leading - 1
                         end = start + 1
-                    print(start, end)
                     if isinstance(data, np.ndarray):
                         data = awkward.JaggedArray.fromregular(data)
                     elif not isinstance(data, awkward.JaggedArray):
