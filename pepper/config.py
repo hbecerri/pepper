@@ -326,12 +326,14 @@ class Config(object):
     def get_datasets(self, dsnames=None, dstype="any"):
         if dstype not in ("any", "mc", "data"):
             raise ValueError("dstype must be either 'any', 'mc' or 'data'")
-        datasets = self["exp_datasets"]
+        datasets = {s: v for s, v in self["exp_datasets"].items()
+                    if v is not None}
         duplicate = set(datasets.keys()) & set(self["mc_datasets"])
         if len(duplicate) > 0:
             raise ConfigError("Got duplicate dataset names: {}".format(
                 ", ".join(duplicate)))
-        datasets.update(self["mc_datasets"])
+        datasets.update({s: v for s, v in self["mc_datasets"].items()
+                         if v is not None})
         for dataset in set(datasets.keys()):
             if ((dstype == "mc" and dataset not in self["mc_datasets"])
                     or (dstype == "data"
