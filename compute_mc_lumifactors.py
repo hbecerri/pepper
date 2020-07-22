@@ -40,6 +40,7 @@ args = parser.parse_args()
 
 config = pepper.Config(args.config)
 store, datasets = config[["store", "mc_datasets"]]
+datasets = {k: v for k, v in datasets.items() if v is not None}
 datasets = pepper.datasets.expand_datasetdict(datasets, store)[0]
 if "dataset_for_systematics" in config:
     dsforsys = config["dataset_for_systematics"]
