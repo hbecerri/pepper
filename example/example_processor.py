@@ -15,7 +15,7 @@ import os
 import logging
 
 
-# All processors should inherid from pepper.Processor
+# All processors should inherit from pepper.Processor
 class MyProcessor(pepper.Processor):
     def __init__(self, config):
         # Initialize the class, maybe overwrite some config variables and
@@ -28,7 +28,7 @@ class MyProcessor(pepper.Processor):
         self.trigger_order = config["dataset_trigger_order"]
 
     def process_selection(self, selector, dsname, is_mc, filler):
-        # Implement the selection steps: add cuts, definine objects and/or
+        # Implement the selection steps: add cuts, define objects and/or
         # compute event weights
 
         # Add a cut only allowing events according to the golden JSON
@@ -49,7 +49,7 @@ class MyProcessor(pepper.Processor):
         # Only accept events that have to leptons
         selector.add_cut(self.lepton_pair, "Exactly 2 leptons")
 
-        # Only accept events that have oppositly changed leptons
+        # Only accept events that have oppositely changed leptons
         selector.add_cut(self.opposite_sign_lepton_pair, "OC leptons")
 
     def good_lumimask(self, is_mc, data):
@@ -75,7 +75,7 @@ class MyProcessor(pepper.Processor):
         keys = ["pt", "eta", "phi", "mass", "pdgId"]
         lep_dict = {}
         # Here we collect the observables we need for electrons and muons.
-        # We are not intereseted in taus so skip them.
+        # We are not interested in taus so skip them.
         for key in keys:
             electron_data = data["Electron_" + key][good_electron]
             muon_data = data["Muon_" + key][good_muon]

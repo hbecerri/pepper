@@ -1,10 +1,9 @@
 {
-"1st_lep_pt":
-    {
+    "1st_lep_pt": {
         "bins": [
             {
                 "name": "pt",
-                "label": "Lepton $p_{{\\mathrm{{T}}}}$ (GeV)",
+                "label": "Lepton $p_{\\mathrm{T}}$ (GeV)",
                 "n_or_arr": 100,
                 "lo": 0,
                 "hi": 400
@@ -13,210 +12,95 @@
         "fill": {
             "pt": [
                 "Lepton",
-                {"attribute": "pt",
-                 "leading": 1}
+                "pt",
+                {"leading": 1}
             ]
         }
     },
-"2nd_lep_pt":
-    {
+    "2nd_jet_eta": {
         "bins": [
             {
-                "name": "pt",
-                "label": "Lepton $p_{{\\mathrm{{T}}}}$ (GeV)",
-                "n_or_arr": 100,
+                "name": "eta",
+                "label": "Jet $\\eta$",
+                "n_or_arr": 52,
+                "lo": -2.6,
+                "hi": 2.6
+            }
+        ],
+        "fill": {
+            "eta": [
+                "Jet",
+                "eta",
+                {"leading": 2}
+            ]
+        }
+    },
+    "njet": {
+        "bins": [
+            {
+                "name": "njet",
+                "label": "Number of jets",
+                "n_or_arr": 9,
                 "lo": 0,
-                "hi": 400
+                "hi": 9
             }
         ],
         "fill": {
-            "pt": [
-                "Lepton",
-                {"attribute": "pt",
-                 "leading": 2}
-            ]
-        }
-    },
-"1st_lep_eta":
-    {
-        "bins": [
-            {
-                "name": "eta",
-                "label": "Lepton $p_{{\\mathrm{{T}}}}$ (GeV)",
-                "n_or_arr": 100,
-                "lo": -2.5,
-                "hi": 2.5
-            }
-        ],
-        "fill": {
-            "eta": [
-                "Lepton",
-                {"attribute": "eta",
-                 "leading": 1}
-            ]
-        }
-    },
-"2nd_lep_eta":
-    {
-        "bins": [
-            {
-                "name": "eta",
-                "label": "Lepton $p_{{\\mathrm{{T}}}}$ (GeV)",
-                "n_or_arr": 100,
-                "lo": -2.5,
-                "hi": 2.5
-            }
-        ],
-        "fill": {
-            "eta": [
-                "Lepton",
-                {"attribute": "eta",
-                 "leading": 2}
-            ]
-        }
-    },
-"1st_jet_pt":
-    {
-        "bins": [
-            {
-                "name": "pt",
-                "label": "Jet $p_{{\\mathrm{{T}}}}$ (GeV)",
-                "n_or_arr": 100,
-                "lo": 0,
-                "hi": 400
-            }
-        ],
-        "fill": {
-            "pt": [
+            "njet": [
                 "Jet",
-                {"attribute": "pt",
-                 "leading": 1}
+                "counts"
             ]
         }
     },
-"2nd_jet_pt":
-    {
-        "bins": [
-            {
-                "name": "pt",
-                "label": "Jet $p_{{\\mathrm{{T}}}}$ (GeV)",
-                "n_or_arr": 100,
-                "lo": 0,
-                "hi": 400
-            }
-        ],
-        "fill": {
-            "pt": [
-                "Jet",
-                {"attribute": "pt",
-                 "leading": 2}
-            ]
-        }
-    },
-"1st_jet_eta":
-    {
-        "bins": [
-            {
-                "name": "eta",
-                "label": "Jet $p_{{\\mathrm{{T}}}}$ (GeV)",
-                "n_or_arr": 100,
-                "lo": -2.5,
-                "hi": 2.5
-            }
-        ],
-        "fill": {
-            "eta": [
-                "Jet",
-                {"attribute": "eta",
-                 "leading": 1}
-            ]
-        }
-    },
-"2nd_jet_eta":
-    {
-        "bins": [
-            {
-                "name": "eta",
-                "label": "Jet $p_{{\\mathrm{{T}}}}$ (GeV)",
-                "n_or_arr": 100,
-                "lo": -2.5,
-                "hi": 2.5
-                
-            }
-        ],
-        "fill": {
-            "eta": [
-                "Jet",
-                {"attribute": "eta",
-                 "leading": 2}
-            ]
-        }
-    },
-"Mll":
-    {
+    "Mll": {
         "bins": [
             {
                 "name": "Mll",
-                "label": "$M^{{ll}}$ (GeV)",
+                "label": "$M_{\\mathrm{ll}}$ (GeV)",
                 "n_or_arr": 100,
                 "lo": 0,
                 "hi": 400
             }
         ],
-        "fill":{
+        "fill": {
             "Mll": [
                 "mll"
             ]
         }
     },
-"dilep_pt":
-    {
+    "METpt": {
         "bins": [
             {
-                "name": "dilep_pt",
-                "label": "$p_{{\\mathrm{{T}}}}^{{ll}}$ (GeV)",
-                "n_or_arr": 100,
+                "name": "pt",
+                "label": "MET $p_{\\mathrm{T}}$ (GeV)",
+                "n_or_arr": 40,
                 "lo": 0,
-                "hi": 400
+                "hi": 200
             }
         ],
-        "fill":{
-            "dilep_pt": [
-                "dilep_pt"
+        "fill": {
+            "pt": [
+                "MET",
+                "pt"
             ]
         }
     },
-"MET":
-    {
+    "deltaphi": {
         "bins": [
             {
-                "name": "MET",
-                "label": "MET (GeV)",
-                "n_or_arr": 100,
+                "name": "deltaphi",
+                "label": "Leading leptons $|\\Delta \\varphi|$",
+                "n_or_arr": 33,
                 "lo": 0,
-                "hi": 400
+                "hi": 3.3
             }
         ],
-        "fill":{
-            "MET": [
-                "MET_pt"
-            ]
-        }
-    },
-"jet_mult":
-    {
-        "bins": [
-            {
-                "name": "jet_mult",
-                "label": "jet_mult",
-                "n_or_arr": 6,
-                "lo": 2,
-                "hi": 7
-            }
-        ],
-        "fill":{
-            "jet_mult": [
-                "Jet", "counts"
+        "fill": {
+            "deltaphi": [
+                "Lepton",
+                "phi",
+                {"function": "leaddiff"},
+                {"function": "abs"}
             ]
         }
     }
