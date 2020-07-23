@@ -103,5 +103,58 @@
                 {"function": "abs"}
             ]
         }
+    },
+    "btageff": {
+        "bins": [
+            {
+                "name": "flav",
+                "label": "Flavor",
+                "n_or_arr": [0, 4, 5, 6]
+            },
+            {
+                "name": "pt",
+                "label": "$p_{\\mathrm{T}}$",
+                "n_or_arr": [20,  40,  60,  90, 150, 210, 990]
+            },
+            {
+                "name": "abseta",
+                "label": "$\\left|\\eta\\right|$",
+                "n_or_arr": [0, 0.75, 1.5, 2.25, 3]
+            }
+        ],
+        "cats": [
+            {
+                "name": "btagged",
+                "label": "Is b-tagged"
+            }
+        ],
+        "fill": {
+            "flav": [
+                "Jet",
+                "hadronFlavour"
+            ],
+            "pt": [
+                "Jet",
+                "pt"
+            ],
+            "abseta": [
+                "Jet",
+                "eta",
+                {"function": "abs"}
+            ]
+        },
+        "cat_fills": {
+            "btagged": {
+                "yes": [
+                    "Jet",
+                    "btagged"
+                ],
+                "no": [
+                    "Jet",
+                    "btagged",
+                    {"function": "not"}
+                ]
+            }
+        }
     }
 }

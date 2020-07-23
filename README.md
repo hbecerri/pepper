@@ -19,7 +19,6 @@ The features of the framework are implemented as a Python package, which is insi
 ## Running
 The main directory contains numerous scripts that can be evoked:
 
- - `compute_btag_efficiencies.py`: Generate histograms needed for b-tagging scale factors
  - `compute_kinreco_hists.py`: Generate histograms needed for top-quark kinematic reconstruction
  - `compute_mc_lumifactors.py`: Compute <img align="top" src="https://latex.codecogs.com/gif.latex?{\cal L}\sigma/\sum w_{\mathrm{gen}}" />, the factors needed to scale MC to data.
  - `compute_scalefactors_data-driven.py`: Generate scale factors using the R in/out method (data-driven Drell-Yan reweighting)
