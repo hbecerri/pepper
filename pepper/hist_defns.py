@@ -115,13 +115,17 @@ class HistDefinition():
         prepared = {}
         for key, data in fill_vals.items():
             if data is not None:
-                data = data[mask]
                 if key in jagged:
                     if counts_mask is not None:
-                        data = data[counts_mask]
+                        data = data[counts_mask & mask]
+                    else:
+                        data = data[mask]
                     data = data.flatten()
                 elif key in flat and counts is not None:
-                    data = np.repeat(data, counts[mask])
+                    if isinstance(mask, awkward.JaggedArray):
+                        data = data.repeat(counts)[mask.flatten()]
+                    else:
+                        data = data[mask].repeat(counts[mask])
             prepared[key] = data
         return prepared
 
