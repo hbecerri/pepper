@@ -413,6 +413,6 @@ cd -
     parsl_config = parsl.config.Config(
         executors=[parsl_executor],
         # Set retries to a large number to retry infinitely
-        retries=100000,
+        retries=3,
     )
     return parsl_config

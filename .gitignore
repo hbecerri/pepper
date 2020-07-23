@@ -5,9 +5,9 @@ __pycache__
 *.hdf5
 data
 selected_columns
-.buildconfig
+*.buildconfig
 out_hists
-.coffea
+*.coffea
 ttDM_config
 nohup.out
 *.pyc
