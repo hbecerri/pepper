@@ -2,7 +2,6 @@ import json
 import coffea
 import awkward
 import numpy as np
-from copy import copy
 
 
 def create_hist_dict(config_json):
@@ -73,15 +72,30 @@ class HistDefinition():
         self.ylabel = "Counts"
         self.dataset_axis = coffea.hist.Cat("dataset", "Dataset name")
         self.channel_axis = coffea.hist.Cat("channel", "Channel")
-        self.axes = [coffea.hist.Bin(**kwargs) for kwargs in config["bins"]]
-        if "cats" in config:
-            self.cats = [coffea.hist.Cat(**kwargs)
-                         for kwargs in config["cats"]]
-            self.cat_fill_methods = config["cat_fills"]
+        if "bins" in config:
+            bins = [coffea.hist.Bin(**kwargs) for kwargs in config["bins"]]
         else:
-            self.cats = []
-            self.cat_fill_methods = {}
-        self.fill_methods = config["fill"]
+            bins = []
+        if "cats" in config:
+            cats = [coffea.hist.Cat(**kwargs) for kwargs in config["cats"]]
+        else:
+            cats = []
+        self.axes = bins + cats
+        self.bin_fills = {}
+        self.cat_fills = {}
+        for axisname, method in config["fill"].items():
+            if axisname in bins:
+                self.bin_fills[axisname] = method
+            elif axisname in cats:
+                self.cat_fills[axisname] = method
+            else:
+                raise HistDefinitionError(
+                    f"Fill provided for non-existing axis: {axisname}")
+        missing_fills = (set(a.name for a in self.axes)
+                         - set(config["fill"].keys()))
+        if len(missing_fills) != 0:
+            raise HistDefinitionError(
+                "Missing fills for axes: " + ", ".join(missing_fills))
 
     @staticmethod
     def _prepare_fills(fill_vals, mask=None):
@@ -131,22 +145,21 @@ class HistDefinition():
 
     def __call__(self, data, channels, dsname, is_mc, weight):
         fill_vals = {name: self.pick_data(method, data)
-                     for name, method in self.fill_methods.items()}
+                     for name, method in self.bin_fills.items()}
         cat_masks = {name: {cat: self.pick_data(method, data)
                             for cat, method in val.items()}
-                     for name, val in self.cat_fill_methods.items()}
+                     for name, val in self.cat_fills.items()}
         if weight is not None:
             fill_vals["weight"] = weight
         cat_present = {name: (val if any(mask is not None
                                          for mask in val.values())
                               else {"All": np.full(data.size, True)})
                        for name, val in cat_masks.items()}
-        cat_axes = copy(self.cats)
+        axes = self.axes.copy()
         if channels is not None and len(channels) > 0:
-            cat_axes.append(self.channel_axis)
+            axes.append(self.channel_axis)
             cat_present["channel"] = {ch: data[ch] for ch in channels}
-        hist = coffea.hist.Hist(self.ylabel, self.dataset_axis,
-                                *cat_axes, *self.axes)
+        hist = coffea.hist.Hist(self.ylabel, self.dataset_axis, *axes)
         if len(cat_present) == 0:
             prepared = self._prepare_fills(fill_vals)
 

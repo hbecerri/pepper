@@ -141,9 +141,7 @@
                 "Jet",
                 "eta",
                 {"function": "abs"}
-            ]
-        },
-        "cat_fills": {
+            ],
             "btagged": {
                 "yes": [
                     "Jet",
