@@ -393,15 +393,17 @@ cd -
                   "~/.local/bin/process_worker_pool.py "
                   "{debug} "
                   "{max_workers} "
+                  "-a {addresses} "
                   "-p {prefetch_capacity} "
                   "-c {cores_per_worker} "
                   "-m {mem_per_worker} "
                   "--poll {poll_period} "
-                  "--task_url={task_url} "
-                  "--result_url={result_url} "
+                  "--task_port={task_port} "
+                  "--result_port={result_port} "
                   "--logdir={logdir} "
                   "--block_id={{block_id}} "
                   "--hb_period={heartbeat_period} "
+                  "{address_probe_timeout_string} "
                   "--hb_threshold={heartbeat_threshold} ")
     parsl_executor = parsl.executors.HighThroughputExecutor(
         label="HTCondor",
@@ -413,6 +415,6 @@ cd -
     parsl_config = parsl.config.Config(
         executors=[parsl_executor],
         # Set retries to a large number to retry infinitely
-        retries=3,
+        retries=100000,
     )
     return parsl_config
