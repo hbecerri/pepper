@@ -339,13 +339,15 @@ def hist_counts(hist):
     return next(iter(values.values()))
 
 
-def get_parsl_config(num_jobs, runtime=3*60*60, hostname=None, *,
+def get_parsl_config(num_jobs, runtime=3*60*60, retries=None, hostname=None, *,
                      condor_submit=None, condor_init=None):
     """Get a parsl config for a host.
 
     Arguments:
     num_jobs -- Number of jobs/processes to run in parallel
     runtime -- Requested runtime in seconds. If None, do not request a runtime
+    retries -- The number of times to retry a failed task. If None, the task is
+               retried until it stops failing
     hostname -- hostname of the machine to submit from. If None, use current
     condor_submit -- String that gets appended to the Condor submit file
     condor_init -- Overwrite default environment setup on Condor node. This
@@ -353,6 +355,9 @@ def get_parsl_config(num_jobs, runtime=3*60*60, hostname=None, *,
     """
     if hostname is None:
         hostname = parsl.addresses.address_by_hostname()
+    if retries is None:
+        # Actually parsl doesn't support infinite retries so set it very high
+        retries = 1000000
     scriptdir = os.path.realpath(sys.path[0])
     if "PYTHONPATH" in os.environ:
         pythonpath = os.environ["PYTHONPATH"]
@@ -415,6 +420,6 @@ cd -
     parsl_config = parsl.config.Config(
         executors=[parsl_executor],
         # Set retries to a large number to retry infinitely
-        retries=100000,
+        retries=retries,
     )
     return parsl_config

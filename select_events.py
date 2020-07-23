@@ -37,6 +37,10 @@ parser.add_argument(
     "simultaneous jobs are submitted. The number can be changed by supplying "
     "it to this option.")
 parser.add_argument(
+    "-r", "--retries", type=int, help="Number of times to retry if there is "
+    "exception in an HTCondor job. If not given, retry infinitely."
+)
+parser.add_argument(
     "--chunksize", type=int, default=500000, help="Number of events to "
     "process at once. A smaller value means less memory usage. Defaults to "
     "5*10^5")
@@ -131,7 +135,8 @@ if args.condor is not None:
             condor_submit=parsl_config["condor_config"],
             condor_init=parsl_config["condor_init"])
     else:
-        parsl_config = pepper.misc.get_parsl_config(args.condor)
+        parsl_config = pepper.misc.get_parsl_config(
+            args.condor, retries=args.retries)
     parsl.load(parsl_config)
     executor_args = {}
 else:
