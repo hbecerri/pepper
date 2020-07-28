@@ -152,7 +152,7 @@ class ProcessorTTbarLL(pepper.Processor):
 
     def process_selection(self, selector, dsname, is_mc, filler):
         if dsname.startswith("TTTo"):
-            selector.set_column(self.gentop, "gent_lc")
+            selector.set_column(self.gentop, "gent_lc", lazy=True)
             if self.topptweighter is not None:
                 self.do_top_pt_reweighting(selector)
         if self.config["compute_systematics"] and is_mc:
@@ -178,7 +178,7 @@ class ProcessorTTbarLL(pepper.Processor):
         filler.channels = ("is_ee", "is_em", "is_mm")
         selector.set_multiple_columns(self.channel_masks)
         selector.set_column(self.mll, "mll")
-        selector.set_column(self.dilep_pt, "dilep_pt")
+        selector.set_column(self.dilep_pt, "dilep_pt", lazy=True)
 
         selector.freeze_selection()
 
@@ -261,7 +261,7 @@ class ProcessorTTbarLL(pepper.Processor):
             selector.add_cut(self.passing_reco, "Reco")
             selector.set_column(self.build_nu_column, "reconu", all_cuts=True)
             selector.set_column(self.calculate_dark_pt, "dark_pt",
-                                all_cuts=True)
+                                all_cuts=True, lazy=True)
 
     def gentop(self, data):
         part = pepper.misc.jcafromjagged(

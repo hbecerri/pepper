@@ -1,3 +1,4 @@
+from functools import partial
 import numpy as np
 import awkward
 import copy
@@ -215,31 +216,9 @@ class Selector():
         if updown is not None:
             self.set_systematic(name, updown[0], updown[1], mask)
 
-    def set_column(self, column, column_name, all_cuts=False,
-                   no_callback=False):
-        """Sets a column of the table
-
-        Arguments:
-        column -- Column data or a function that returns it.
-                  The function that will be called with a table of the
-                  currently selected events. Does not get called if
-                  `num_selected` is 0 already.
-                  The column data must be a numpy array or an
-                  awkward.JaggedArray with a size of `num_selected`.
-        column_name -- The name of the column to set
-        all_cuts -- The column function will be called only on events passing
-                    all cuts (including after freezing). The function must
-                    return a JaggedArray in this case.
-        no_callback -- Do not call on_update after the cut is added
-        """
-        if not isinstance(column_name, str):
-            raise ValueError("column_name needs to be string")
-        logger.info(f"Adding column '{column_name}'")
+    def _process_column(self, column, all_cuts, data):
         if callable(column):
-            if all_cuts:
-                data = column(self.final)
-            else:
-                data = column(self.masked)
+            data = column(data)
         else:
             data = column
 
@@ -247,7 +226,7 @@ class Selector():
         if isinstance(data, awkward.ChunkedArray):
             data = awkward.concatenate(data.chunks)
 
-        # Move data into the table with appropriate padding (important!)
+        # Move data into the table with appropriate padding
         if isinstance(data, np.ndarray):
             if all_cuts:
                 raise ValueError("Got numpy array but all_cuts was specified")
@@ -262,7 +241,42 @@ class Selector():
             unmasked_data = cls.fromcounts(counts, data.flatten())
         else:
             raise TypeError("Unsupported column type {}".format(type(data)))
-        self.table[column_name] = unmasked_data
+        return unmasked_data
+
+    def set_column(self, column, column_name, all_cuts=False,
+                   no_callback=False, lazy=False):
+        """Sets a column of the table
+
+        Arguments:
+        column -- Column data or a callable that returns it.
+                  The callable that will be called with a table of the
+                  currently selected events. Does not get called if
+                  `num_selected` is 0 already.
+                  The column data must be a numpy array or an
+                  awkward.JaggedArray with a size of `num_selected`.
+        column_name -- The name of the column to set
+        all_cuts -- The column callable will be called only on events passing
+                    all cuts (including after freezing). The callable must
+                    return a JaggedArray in this case.
+        no_callback -- Do not call on_update after the cut is added
+        lazy -- If True, column must be a callable, this object's table
+                must be a LazyTable and the callable is called only once the
+                column is actually requested by a __getitem__ call.
+        """
+        if not isinstance(column_name, str):
+            raise ValueError("column_name needs to be string")
+        if all_cuts:
+            input_data = self.final
+        else:
+            input_data = self.masked
+        if lazy:
+            logger.info(f"Adding column '{column_name}' lazily")
+            self.table.set_lazily(column_name, partial(
+                self._process_column, column, all_cuts, input_data))
+        else:
+            logger.info(f"Adding column '{column_name}'")
+            self.table[column_name] = self._process_column(
+                column, all_cuts, input_data)
 
         if not no_callback:
             cut_name = self._cuts.names[-1]

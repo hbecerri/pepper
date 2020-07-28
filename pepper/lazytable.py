@@ -14,6 +14,7 @@ class LazyTable(MutableMapping):
         self._loaded = {}
         self._loaded_lazily = set()
         self._overwritten = {}
+        self._overwritten_lazily = set()
         self._tree = tree
         self._available = {k.decode() for k in self._tree.keys()}
         self._branchargs = {"flatten": flatten}
@@ -129,6 +130,9 @@ class LazyTable(MutableMapping):
                                  "of intger or boolean type")
             ret = self._mergeslice(idx)
         elif key in self._overwritten:
+            if key in self._overwritten_lazily:
+                self._overwritten[key] = self._overwritten[key]()
+                self._overwritten_lazily.remove(key)
             ret = self._maybeslice(self._overwritten[key])
         elif key in self._loaded:
             if key in self._loaded_lazily:
@@ -173,6 +177,7 @@ class LazyTable(MutableMapping):
             raise KeyError(key)
         if key in self._overwritten:
             del self._overwritten[key]
+        self._overwritten_lazily.discard(key)
         if key in self.loaded:
             del self._loaded[key]
         self._loaded_lazily.discard(key)
@@ -193,6 +198,7 @@ class LazyTable(MutableMapping):
         newinstance = cls.__new__(cls)
         newinstance.__dict__.update(self.__dict__)
         newinstance._overwritten = self._overwritten.copy()
+        newinstance._overwritten_lazily = self._overwritten_lazily.copy()
         return newinstance
 
     @property
@@ -214,3 +220,9 @@ class LazyTable(MutableMapping):
     @property
     def entrystop(self):
         return self._branchargs["entrystop"]
+
+    def set_lazily(self, key, value):
+        if self._slice is not None:
+            raise RuntimeError("Can not set a column when sliced")
+        self[key] = value
+        self._overwritten_lazily.add(key)
