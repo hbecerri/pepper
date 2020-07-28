@@ -159,16 +159,16 @@ class Processor(coffea.processor.ProcessorABC):
 
     def process(self, df):
         starttime = time()
+        data = LazyTable.from_lazydf(df)
         dsname = df["dataset"]
         filename = df["filename"]
-        entrystart = df._branchargs["entrystart"]
-        entrystop = df._branchargs["entrystop"]
+        entrystart = data.entrystart
+        entrystop = data.entrystop
         logger.debug(f"Started processing {filename} from event "
                      f"{entrystart} to {entrystop - 1} for dataset {dsname}")
         if dsname in self.rps_datasets:
             return self.process_rps(
                 df, dsname, filename, entrystart, entrystop)
-        data = LazyTable.from_lazydf(df)
         is_mc = (dsname in self.config["mc_datasets"].keys())
 
         filler = self.setup_outputfiller(data, dsname, is_mc)
