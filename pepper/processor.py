@@ -168,7 +168,7 @@ class Processor(coffea.processor.ProcessorABC):
         if dsname in self.rps_datasets:
             return self.process_rps(
                 df, dsname, filename, entrystart, entrystop)
-        data = LazyTable(df)
+        data = LazyTable.from_lazydf(df)
         is_mc = (dsname in self.config["mc_datasets"].keys())
 
         filler = self.setup_outputfiller(data, dsname, is_mc)
