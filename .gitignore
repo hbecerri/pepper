@@ -1,14 +1,24 @@
+#Logs:
 runinfo
 stafford.cc
 log.txt
+nohup.out
+
+#pycache:
 __pycache__
+*.pyc
+
+#Output columns/histograms:
 *.hdf5
-data
 selected_columns
-*.buildconfig
+hists
 out_hists
 *.coffea
+
+#Private config directories:
 ttDM_config
-nohup.out
-*.pyc
-hists
+
+#Input data directory (which is it's own git repo):
+data
+
+*.buildconfig
