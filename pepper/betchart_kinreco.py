@@ -269,13 +269,13 @@ def _run_kinreco(lep, alep, b, bbar, met_x, met_y,
             v_ = [S.dot(sol) for sol in v]
 
             if not v and leastsq:
-                es = [ss.E_perp for ss in solutionSets]
+                es = [ss.mat_e_perp for ss in solutionSets]
                 met = np.array([metX, metY, 1])
                 ts, _ = leastsq(partial(test_func, es, met), [0., 0.],
                                 ftol=5e-5, epsfcn=0.01)
                 v, v_ = [[i] for i in nus(ts, es)]
 
-            K, K_ = [ss.E.dot(np.linalg.inv(ss.E_perp)) for ss in solutionSets]
+            K, K_ = [ss.mat_e.dot(np.linalg.inv(ss.mat_e_perp)) for ss in solutionSets]
             for sol_i, s in enumerate(v):
                 for i in [0, 1, 2]:
                     nu[i, 4 * eventi + sol_i] = K.dot(s)[i]
@@ -285,7 +285,6 @@ def _run_kinreco(lep, alep, b, bbar, met_x, met_y,
             nsols[eventi] = len(v)
         else:
             fails += 1
-    print(fails, " / ", len(nsols))
     return nu, nubar, nsols
 
 
@@ -318,7 +317,6 @@ def betchart(lep, antilep, b, antib, met, mw=80.385, mt=172.5):
     vpy = JaggedArray(starts, stops, v[1]).flatten()
     vpz = JaggedArray(starts, stops, v[2]).flatten()
     v = Jca.candidatesfromcounts(nsols, px=vpx, py=vpy, pz=vpz, mass=0)
-    print(v.p4)
     vbpx = JaggedArray(starts, stops, vb[0]).flatten()
     vbpy = JaggedArray(starts, stops, vb[1]).flatten()
     vbpz = JaggedArray(starts, stops, vb[2]).flatten()

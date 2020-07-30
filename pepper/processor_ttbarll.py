@@ -1036,8 +1036,7 @@ class ProcessorTTbarLL(pepper.Processor):
             top = awkward.concatenate([top, antitop], axis=1)
             return Jca.candidatesfromcounts(top.counts, p4=top.flatten())
         elif reco_alg == "betchart":
-            top, antitop = betchart(
-                lep, antilep, b, antib, met, MW=mw, Mt=mt)
+            top, antitop = betchart(lep, antilep, b, antib, met)
             return awkward.concatenate([top, antitop], axis=1)
         else:
             raise ValueError(f"Invalid value for reco algorithm: {reco_alg}")
