@@ -168,7 +168,7 @@ class Processor(coffea.processor.ProcessorABC):
                      f"{entrystart} to {entrystop - 1} for dataset {dsname}")
         if dsname in self.rps_datasets:
             return self.process_rps(
-                df, dsname, filename, entrystart, entrystop)
+                data, dsname, filename, entrystart, entrystop)
         is_mc = (dsname in self.config["mc_datasets"].keys())
 
         filler = self.setup_outputfiller(data, dsname, is_mc)
@@ -184,10 +184,9 @@ class Processor(coffea.processor.ProcessorABC):
         logger.debug(f"Processing finished. Took {timetaken:.3f} s.")
         return filler.output
 
-    def process_rps(self, df, dsname, filename, entrystart, entrystop):
+    def process_rps(self, data, dsname, filename, entrystart, entrystop):
         logger.debug("This is a randomised parameter signal sample- processing"
                      " each scan point separately")
-        data = LazyTable(df)
         is_mc = (dsname in self.config["mc_datasets"].keys())
         filler = self.setup_outputfiller(data, dsname, is_mc)
         scanpoints = [key for key in data.columns
