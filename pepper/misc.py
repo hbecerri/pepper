@@ -19,8 +19,10 @@ def concatenate(arrays, axis=0):
         else:
             arraytype = type(array)
     concated = awkward.concatenate(arrays, axis=axis)
-    mixin = awkward.Methods.maybemixin(arraytype, awkward.JaggedArray)
-    return mixin.fromcounts(concated.counts, concated.flatten())
+    if issubclass(arraytype, awkward.JaggedArray):
+        mixin = awkward.Methods.maybemixin(arraytype, awkward.JaggedArray)
+        concated = mixin.fromcounts(concated.counts, concated.flatten())
+    return concated
 
 
 def pairswhere(condition, x, y):
