@@ -9,6 +9,8 @@ import awkward
 import numpy as np
 import parsl
 import parsl.addresses
+from functools import wraps
+import inspect
 
 
 def concatenate(arrays, axis=0):
@@ -425,3 +427,55 @@ cd -
         retries=retries,
     )
     return parsl_config
+
+
+def chunked_calls(array_param, chunksize, returns_multiple=False):
+    """A decorator that will split a function call into multiple calls on
+    smaller chunks of data. Only arguments that have the attribute shape and
+    have the same size in their first dimension as the value of the parameter
+    named by array_param will get chunked.
+    The return values of each call will be concatenated.
+
+    Arguments:
+    array_param -- Parameter that will defninitely be a chunkable argument
+    chunksize -- Maximum chunk size to call the function on
+    returns_multiple -- Needs to be set to true if the function returns more
+                        than one variable, e.g. as a tuple or list
+    """
+    def decorator(func):
+        sig = inspect.signature(func)
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            kwargs = sig.bind(*args, **kwargs).arguments
+            rows = kwargs[array_param].shape[0]
+            array_parameters = {array_param}
+            for param, arg in kwargs.items():
+                if hasattr(arg, "shape") and arg.shape[0] == rows:
+                    array_parameters.add(param)
+            starts = np.arange(0, rows, chunksize)
+            stops = np.r_[starts[1:], rows]
+            ret_chunks = []
+            for start, stop in zip(starts, stops):
+                chunked_kwargs = kwargs.copy()
+                for param in array_parameters:
+                    chunked_kwargs[param] = kwargs[param][start:stop]
+                ret_chunk = func(**chunked_kwargs)
+                if ret_chunk is None:
+                    return None
+                ret_chunks.append(ret_chunk)
+            if len(ret_chunks) == 1:
+                concated = ret_chunks[0]
+            elif returns_multiple:
+                # Have to transpose ret_chunks
+                ret_chunks_t = [[] for _ in range(len(ret_chunks[0]))]
+                for ret_chunk in ret_chunks:
+                    for ret_split, chunk_val in zip(ret_chunk, ret_chunks_t):
+                        chunk_val.append(ret_split)
+                concated = tuple(concatenate(v) for v in ret_chunks_t)
+            else:
+                concated = concatenate(ret_chunks)
+            return concated
+
+        return wrapper
+    return decorator

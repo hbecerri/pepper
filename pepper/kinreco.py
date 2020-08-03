@@ -4,7 +4,7 @@ import coffea
 from coffea.analysis_objects import JaggedCandidateArray
 import awkward
 
-from pepper.misc import jaggeddepth
+from pepper.misc import jaggeddepth, chunked_calls
 
 
 def _maybe_sample(s, size):
@@ -113,6 +113,7 @@ def _lorvecfromnumpy(x, y, z, t):
     return uproot_methods.TLorentzVectorArray.from_cartesian(x, y, z, t)
 
 
+@chunked_calls("lep", 10000, True)
 def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
                  mat=172.5, num_smear=None, energyfl=None, energyfj=None,
                  alphal=None, alphaj=None, hist_mlb=None):
