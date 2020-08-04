@@ -100,8 +100,6 @@ class HistDefinition():
     @staticmethod
     def _prepare_fills(fill_vals, mask=None):
         # Check size, flatten jaggedness, pad flat arrays if needed, apply mask
-        if mask is None:
-            mask = slice(None)
         counts = None
         counts_mask = None
         size = None
@@ -130,16 +128,20 @@ class HistDefinition():
         for key, data in fill_vals.items():
             if data is not None:
                 if key in jagged:
-                    if counts_mask is not None:
+                    if counts_mask is not None and mask is not None:
                         data = data[counts_mask & mask]
-                    else:
+                    elif mask is not None:
                         data = data[mask]
+                    elif counts_mask is not None:
+                        data = data[counts_mask]
                     data = data.flatten()
                 elif key in flat and counts is not None:
                     if isinstance(mask, awkward.JaggedArray):
                         data = data.repeat(counts)[mask.flatten()]
-                    else:
+                    elif mask is not None:
                         data = data[mask].repeat(counts[mask])
+                    else:
+                        data = data.repeat(counts)
             prepared[key] = data
         return prepared
 
