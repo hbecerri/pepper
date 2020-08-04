@@ -4,6 +4,19 @@ from copy import copy
 from collections.abc import MutableMapping
 
 
+class LazyTableLoadLaterColumn():
+    def __init__(self, load_func):
+        self.load_func = load_func
+        self.is_loaded = False
+        self.value = None
+
+    def get(self):
+        if not self.is_loaded:
+            self.value = self.load_func()
+            self.is_loaded = True
+        return self.value
+
+
 class LazyTable(MutableMapping):
 
     # load lazily if a basket is loaded with less than 75% probability
@@ -131,9 +144,9 @@ class LazyTable(MutableMapping):
             ret = self._mergeslice(idx)
         elif key in self._overwritten:
             if key in self._overwritten_lazily:
-                self._overwritten[key] = self._overwritten[key]()
-                self._overwritten_lazily.remove(key)
-            ret = self._maybeslice(self._overwritten[key])
+                ret = self._maybeslice(self._overwritten[key].get())
+            else:
+                ret = self._maybeslice(self._overwritten[key])
         elif key in self._loaded:
             if key in self._loaded_lazily:
                 chunked = self._loaded[key]
@@ -224,5 +237,5 @@ class LazyTable(MutableMapping):
     def set_lazily(self, key, value):
         if self._slice is not None:
             raise RuntimeError("Can not set a column when sliced")
-        self[key] = value
+        self[key] = LazyTableLoadLaterColumn(value)
         self._overwritten_lazily.add(key)
