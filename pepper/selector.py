@@ -216,9 +216,13 @@ class Selector():
         if updown is not None:
             self.set_systematic(name, updown[0], updown[1], mask)
 
-    def _process_column(self, column, all_cuts, data):
+    def _process_column(self, column, all_cuts, table):
         if callable(column):
-            data = column(data)
+            if all_cuts:
+                input_data = table[self._final_sel]
+            else:
+                input_data = table[self._cur_sel]
+            data = column(input_data)
         else:
             data = column
 
@@ -265,18 +269,17 @@ class Selector():
         """
         if not isinstance(column_name, str):
             raise ValueError("column_name needs to be string")
-        if all_cuts:
-            input_data = self.final
-        else:
-            input_data = self.masked
         if lazy:
             logger.info(f"Adding column '{column_name}' lazily")
+            # When the column is actually loaded later on, the table's content
+            # might have changed. The column's values should be the same as if
+            # it was loaded right now. Thus give the current table as argument
             self.table.set_lazily(column_name, partial(
-                self._process_column, column, all_cuts, input_data))
+                self._process_column, column, all_cuts, self.table))
         else:
             logger.info(f"Adding column '{column_name}'")
             self.table[column_name] = self._process_column(
-                column, all_cuts, input_data)
+                column, all_cuts, self.table)
 
         if not no_callback:
             cut_name = self._cuts.names[-1]
