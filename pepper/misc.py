@@ -449,6 +449,9 @@ def chunked_calls(array_param, chunksize, returns_multiple=False):
         def wrapper(*args, **kwargs):
             kwargs = sig.bind(*args, **kwargs).arguments
             rows = kwargs[array_param].shape[0]
+            if rows <= chunksize:
+                # Nothing to chunk, just return whatever func returns
+                return func(**kwargs)
             array_parameters = {array_param}
             for param, arg in kwargs.items():
                 if hasattr(arg, "shape") and arg.shape[0] == rows:
