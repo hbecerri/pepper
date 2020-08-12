@@ -11,6 +11,7 @@ import parsl
 import parsl.addresses
 from functools import wraps
 import inspect
+import gc
 
 
 def concatenate(arrays, axis=0):
@@ -467,6 +468,8 @@ def chunked_calls(array_param, chunksize, returns_multiple=False):
                 if ret_chunk is None:
                     return None
                 ret_chunks.append(ret_chunk)
+                # Force clean upof memory to keep usage low
+                gc.collect()
             if len(ret_chunks) == 1:
                 concated = ret_chunks[0]
             elif returns_multiple:
