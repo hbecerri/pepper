@@ -211,7 +211,14 @@ class ProcessorTTbarLL(pepper.Processor):
         ret.append(VariationArg("UncMET_up", met="up"))
         ret.append(VariationArg("UncMET_down", met="down"))
         if self._junc is not None:
-            for source in self._junc.levels:
+            if self.config["junc_sources_to_use"] is not None:
+                levels = self.config["junc_sources_to_use"]
+            else:
+                levels = self._junc.levels
+            for source in levels:
+                if source not in self._junc.levels:
+                    raise pepper.config.ConfigError(
+                        f"Source not in jet uncertainties: {source}")
                 if source == "jes":
                     name = "Junc_"
                 else:
