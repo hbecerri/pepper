@@ -335,12 +335,14 @@ class Selector():
     def copy(self):
         """Create a copy of the Selector instance, containing shallow copies
         of most of its constituents.
-        This is indended to be used if one wants to fork the selection to, for
+        This is intended to be used if one wants to fork the selection to, for
         example, repeat particular steps with different settings.
         Already read or set columns are being handled memory-efficiently,
         meaning a call to copy won't double the memory usage for present
         columns."""
-        s = self.__class__(copy.copy(self.table))
+        s = self.__class__.__new__(self.__class__)
+        s.__dict__.update(self.__dict__)
+        s.table = copy.copy(self.table)
         s._cuts = copy.deepcopy(self._cuts)
         s._current_cuts = copy.copy(self._current_cuts)
         s._frozen = self._frozen
