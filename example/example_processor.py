@@ -144,7 +144,7 @@ datasets = {
 
 if args.condor:
     executor = coffea.processor.parsl_executor
-    parsl_config = pepper.misc.get_parsl_config(num_jobs=10)
+    parsl_config = pepper.misc.get_parsl_config(num_jobs=10, retries=1)
     parsl.load(parsl_config)
 else:
     executor = coffea.processor.iterative_executor
