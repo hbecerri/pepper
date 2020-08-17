@@ -211,7 +211,7 @@ class ProcessorTTbarLL(pepper.Processor):
         ret.append(VariationArg("UncMET_up", met="up"))
         ret.append(VariationArg("UncMET_down", met="down"))
         if self._junc is not None:
-            if self.config["junc_sources_to_use"] is not None:
+            if "junc_sources_to_use" in self.config:
                 levels = self.config["junc_sources_to_use"]
             else:
                 levels = self._junc.levels
