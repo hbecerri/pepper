@@ -17,7 +17,10 @@ def update_counts(f, counts, process_name, geskey, lhesskey, lhepdfskey):
     has_lhe = f["Runs"][lhesskey].array()[0].size != 0
     if has_lhe:
         lhe_scale_sumw = f["Runs"][lhesskey].array()[0]
-        lhe_scale_sumw /= lhe_scale_sumw[4]
+        # Workaround for a bug NanoAODv6 and earlier.
+        # This only works if NanoAOD bug #537 is not present at the same time
+        if len(lhe_scale_sumw) == 9:
+            lhe_scale_sumw /= lhe_scale_sumw[4]
         lhe_scale_sumw *= gen_event_sumw
         lhe_pdf_sumw = f["Runs"][lhepdfskey].array()[0] * gen_event_sumw
 

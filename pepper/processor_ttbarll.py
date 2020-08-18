@@ -332,12 +332,21 @@ class ProcessorTTbarLL(pepper.Processor):
         data = selector.masked
         if dsname + "_LHEScaleSumw" in self.config["mc_lumifactors"]:
             norm = self.config["mc_lumifactors"][dsname + "_LHEScaleSumw"]
-            selector.set_systematic("MEren",
-                                    data["LHEScaleWeight"][:, 7] * norm[7],
-                                    data["LHEScaleWeight"][:, 1] * norm[1])
-            selector.set_systematic("MEfac",
-                                    data["LHEScaleWeight"][:, 5] * norm[5],
-                                    data["LHEScaleWeight"][:, 3] * norm[3])
+            # Workaround for https://github.com/cms-nanoAOD/cmssw/issues/537
+            if len(norm) == 44:
+                selector.set_systematic(
+                    "MEren", data["LHEScaleWeight"][:, 34] * norm[34],
+                    data["LHEScaleWeight"][:, 5] * norm[5])
+                selector.set_systematic(
+                    "MEfac", data["LHEScaleWeight"][:, 24] * norm[24],
+                    data["LHEScaleWeight"][:, 15] * norm[15])
+            else:
+                selector.set_systematic(
+                    "MEren", data["LHEScaleWeight"][:, 7] * norm[7],
+                    data["LHEScaleWeight"][:, 1] * norm[1])
+                selector.set_systematic(
+                    "MEfac", data["LHEScaleWeight"][:, 5] * norm[5],
+                    data["LHEScaleWeight"][:, 3] * norm[3])
         else:
             selector.set_systematic(
                 "MEren", np.ones(data.size), np.ones(data.size))
