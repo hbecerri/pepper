@@ -1,6 +1,6 @@
 # Coffea still has not implemented plotting systematic uncertainties
-# As a really cheap workaround file simply copies the plot1d and plotratio
-# functions from Coffea and adds a few lines for systematics
+# As a really cheap workaround, this file simply copies the plot1d and
+# plotratio functions from Coffea and adds a few lines for systematics
 
 import numbers
 import numpy as np
