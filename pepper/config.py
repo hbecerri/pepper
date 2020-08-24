@@ -336,7 +336,19 @@ class Config(object):
         if key in self._config:
             self._deleted.add(key)
 
-    def get_datasets(self, dsnames=None, dstype="any"):
+    def get_datasets(self, include=None, exclude=None, dstype="any"):
+        """Helper method to access mc_datasets and exp_datasets more easily.
+
+        Arguments:
+        include -- List of dataset names to restrict the result to
+        exclude -- List of dataset names to exclude from the result
+        dstype -- Either 'any', 'mc' or 'data'. 'mc' restrcits the result to be
+                  from mc_datasets, while 'data' restricts to exp_datasets.
+                  'any' does not impose restrictions.
+
+        Returns a dict mapping dataset names to lists of full paths to the
+        dataset's files.
+        """
         if dstype not in ("any", "mc", "data"):
             raise ValueError("dstype must be either 'any', 'mc' or 'data'")
         datasets = {s: v for s, v in self["exp_datasets"].items()
@@ -351,7 +363,8 @@ class Config(object):
             if ((dstype == "mc" and dataset not in self["mc_datasets"])
                     or (dstype == "data"
                         and dataset not in self["expdatasets"])
-                    or (dsnames is not None and dataset not in dsnames)):
+                    or (include is not None and dataset not in include)
+                    or (exclude is not None and dataset in exclude)):
                 del datasets[dataset]
         requested_datasets = datasets.keys()
         datasets, paths2dsname =\
