@@ -132,6 +132,7 @@ class Config(object):
             else:
                 path = "unknown"
         self._cache = {}
+        self._deleted = set()
         self._config["configdir"] = os.path.dirname(os.path.realpath(path))
 
         logger.debug("Configuration read")
@@ -196,6 +197,8 @@ class Config(object):
         return data
 
     def _get(self, key):
+        if key in self._deleted:
+            raise KeyError(key)
         if key in self._cache:
             return self._cache[key]
 
@@ -318,10 +321,20 @@ class Config(object):
             return self._get(key)
 
     def __contains__(self, key):
-        return key in self._config
+        return ((key not in self._deleted and key in self._config)
+                or key in self._cache)
 
     def __setitem__(self, key, value):
         self._cache[key] = value
+        self._deleted.discard(key)
+
+    def __delitem__(self, key):
+        if key not in self or key in self._deleted:
+            raise KeyError(key)
+        if key in self._cache:
+            del self._cache[key]
+        if key in self._config:
+            self._deleted.add(key)
 
     def get_datasets(self, dsnames=None, dstype="any"):
         if dstype not in ("any", "mc", "data"):
