@@ -199,7 +199,7 @@ class HistDefinition():
                 except AttributeError:
                     try:
                         data = data[sel]
-                    except (KeyError, ValueError):
+                    except KeyError:
                         break
                 if callable(data):
                     data = data()
