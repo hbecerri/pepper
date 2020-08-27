@@ -275,7 +275,8 @@ def _run_kinreco(lep, alep, b, bbar, met_x, met_y,
                                 ftol=5e-5, epsfcn=0.01)
                 v, v_ = [[i] for i in nus(ts, es)]
 
-            K, K_ = [ss.mat_e.dot(np.linalg.inv(ss.mat_e_perp)) for ss in solutionSets]
+            K, K_ = [ss.mat_e.dot(np.linalg.inv(ss.mat_e_perp))
+                     for ss in solutionSets]
             for sol_i, s in enumerate(v):
                 for i in [0, 1, 2]:
                     nu[i, 4 * eventi + sol_i] = K.dot(s)[i]
