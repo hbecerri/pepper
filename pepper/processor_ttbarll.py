@@ -211,7 +211,14 @@ class ProcessorTTbarLL(pepper.Processor):
         ret.append(VariationArg("UncMET_up", met="up"))
         ret.append(VariationArg("UncMET_down", met="down"))
         if self._junc is not None:
-            for source in self._junc.levels:
+            if "junc_sources_to_use" in self.config:
+                levels = self.config["junc_sources_to_use"]
+            else:
+                levels = self._junc.levels
+            for source in levels:
+                if source not in self._junc.levels:
+                    raise pepper.config.ConfigError(
+                        f"Source not in jet uncertainties: {source}")
                 if source == "jes":
                     name = "Junc_"
                 else:
@@ -325,12 +332,21 @@ class ProcessorTTbarLL(pepper.Processor):
         data = selector.masked
         if dsname + "_LHEScaleSumw" in self.config["mc_lumifactors"]:
             norm = self.config["mc_lumifactors"][dsname + "_LHEScaleSumw"]
-            selector.set_systematic("MEren",
-                                    data["LHEScaleWeight"][:, 7] * norm[7],
-                                    data["LHEScaleWeight"][:, 1] * norm[1])
-            selector.set_systematic("MEfac",
-                                    data["LHEScaleWeight"][:, 5] * norm[5],
-                                    data["LHEScaleWeight"][:, 3] * norm[3])
+            # Workaround for https://github.com/cms-nanoAOD/cmssw/issues/537
+            if len(norm) == 44:
+                selector.set_systematic(
+                    "MEren", data["LHEScaleWeight"][:, 34] * norm[34],
+                    data["LHEScaleWeight"][:, 5] * norm[5])
+                selector.set_systematic(
+                    "MEfac", data["LHEScaleWeight"][:, 24] * norm[24],
+                    data["LHEScaleWeight"][:, 15] * norm[15])
+            else:
+                selector.set_systematic(
+                    "MEren", data["LHEScaleWeight"][:, 7] * norm[7],
+                    data["LHEScaleWeight"][:, 1] * norm[1])
+                selector.set_systematic(
+                    "MEfac", data["LHEScaleWeight"][:, 5] * norm[5],
+                    data["LHEScaleWeight"][:, 3] * norm[3])
         else:
             selector.set_systematic(
                 "MEren", np.ones(data.size), np.ones(data.size))

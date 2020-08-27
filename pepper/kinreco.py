@@ -4,7 +4,7 @@ import coffea
 from coffea.analysis_objects import JaggedCandidateArray
 import awkward
 
-from pepper.misc import jaggeddepth
+from pepper.misc import jaggeddepth, chunked_calls
 
 
 def _maybe_sample(s, size):
@@ -113,6 +113,7 @@ def _lorvecfromnumpy(x, y, z, t):
     return uproot_methods.TLorentzVectorArray.from_cartesian(x, y, z, t)
 
 
+@chunked_calls("lep", 10000, True)
 def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
                  mat=172.5, num_smear=None, energyfl=None, energyfj=None,
                  alphal=None, alphaj=None, hist_mlb=None):
@@ -186,6 +187,7 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     abp = np.sqrt(abx**2 + aby**2 + abz**2)
     abE = np.where(abE < abp, abp, abE)
     mab = np.sqrt(abE**2 - abp**2)
+    del lp, alp, bp, abp
 
     if hist_mlb is not None:
         mlab = np.sqrt((lE + abE)**2 - (lx + abx)**2
@@ -205,6 +207,7 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     a1 = ((bE + alE) * (mwp ** 2 - mal ** 2)
           - alE * (mt ** 2 - mb ** 2 - mal ** 2) + 2 * bE * alE ** 2
           - 2 * alE * (bx * alx + by * aly + bz * alz))
+    del mt, mb
     a2 = 2 * (bE * alx - alE * bx)
     a3 = 2 * (bE * aly - alE * by)
     a4 = 2 * (bE * alz - alE * bz)
@@ -212,6 +215,7 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     b1 = ((abE + lE) * (mwm ** 2 - ml ** 2)
           - lE * (mat ** 2 - mab ** 2 - ml ** 2) + 2 * abE * lE ** 2
           - 2 * lE * (abx * lx + aby * ly + abz * lz))
+    del mat, mab
     b2 = 2 * (abE * lx - lE * abx)
     b3 = 2 * (abE * ly - lE * aby)
     b4 = 2 * (abE * lz - lE * abz)
@@ -230,6 +234,7 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
            - 8 * alx * alz * a1 / a4)
     c22 = ((mwp ** 2 - mal ** 2) ** 2 - 4 * (alE ** 2 - alz ** 2)
            * (a1 / a4) ** 2 - 4 * mwp ** 2 * alz * a1 / a4)
+    del mal
 
     d00 = (- 4 * (lE ** 2 - ly ** 2) - 4 * (lE ** 2 - lz ** 2)
            * (b3 / b4) ** 2 - 8 * ly * lz * b3 / b4)
@@ -245,6 +250,7 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
             - 8 * lx * lz * b1 / b4)
     d22p = ((mwm ** 2 - ml ** 2) ** 2 - 4 * (lE ** 2 - lz ** 2)
             * (b1 / b4) ** 2 - 4 * mwm ** 2 * lz * b1 / b4)
+    del ml
 
     d11 = - d11p - 2 * METy * d00 - METx * d10
     d21 = - d21p - 2 * METx * d20 - METy * d10
@@ -289,8 +295,10 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     h = np.stack([h0, h1, h2, h3, h4], axis=-1)
 
     roots = _roots_vectorized(h)
+    del h0, h1, h2, h3, h4, h
     vpx = roots.real
     is_real = abs(roots.imag) < 10 ** -6
+    del roots
 
     c0 = c00[..., None]
     c1 = c10[..., None] * vpx + c11[..., None]

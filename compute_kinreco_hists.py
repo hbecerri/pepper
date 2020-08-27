@@ -184,13 +184,12 @@ parser = ArgumentParser(
     description="Create histograms needed for kinematic reconstruction")
 parser.add_argument("config", help="Path to a configuration file")
 parser.add_argument(
-    "-o", "--output", help="Name of the output file. Default to kinreco.root",
+    "-o", "--output", help="Name of the output file. Defaults to kinreco.root",
     default="kinreco.root")
 parser.add_argument(
     "-c", "--condor", type=int, const=10, nargs="?", metavar="simul_jobs",
     help="Split and submit to HTCondor. By default 10 condor jobs are "
-    "submitted. The number can be changed by supplying it to this option"
-)
+    "submitted. The number can be changed by supplying it to this option")
 parser.add_argument(
     "--chunksize", type=int, default=500000, help="Number of events to "
     "process at once. Defaults to 5*10^5")

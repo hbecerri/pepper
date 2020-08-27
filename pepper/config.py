@@ -132,6 +132,7 @@ class Config(object):
             else:
                 path = "unknown"
         self._cache = {}
+        self._deleted = set()
         self._config["configdir"] = os.path.dirname(os.path.realpath(path))
 
         logger.debug("Configuration read")
@@ -196,6 +197,8 @@ class Config(object):
         return data
 
     def _get(self, key):
+        if key in self._deleted:
+            raise KeyError(key)
         if key in self._cache:
             return self._cache[key]
 
@@ -318,12 +321,34 @@ class Config(object):
             return self._get(key)
 
     def __contains__(self, key):
-        return key in self._config
+        return ((key not in self._deleted and key in self._config)
+                or key in self._cache)
 
     def __setitem__(self, key, value):
         self._cache[key] = value
+        self._deleted.discard(key)
 
-    def get_datasets(self, dsnames=None, dstype="any"):
+    def __delitem__(self, key):
+        if key not in self or key in self._deleted:
+            raise KeyError(key)
+        if key in self._cache:
+            del self._cache[key]
+        if key in self._config:
+            self._deleted.add(key)
+
+    def get_datasets(self, include=None, exclude=None, dstype="any"):
+        """Helper method to access mc_datasets and exp_datasets more easily.
+
+        Arguments:
+        include -- List of dataset names to restrict the result to
+        exclude -- List of dataset names to exclude from the result
+        dstype -- Either 'any', 'mc' or 'data'. 'mc' restrcits the result to be
+                  from mc_datasets, while 'data' restricts to exp_datasets.
+                  'any' does not impose restrictions.
+
+        Returns a dict mapping dataset names to lists of full paths to the
+        dataset's files.
+        """
         if dstype not in ("any", "mc", "data"):
             raise ValueError("dstype must be either 'any', 'mc' or 'data'")
         datasets = {s: v for s, v in self["exp_datasets"].items()
@@ -338,7 +363,8 @@ class Config(object):
             if ((dstype == "mc" and dataset not in self["mc_datasets"])
                     or (dstype == "data"
                         and dataset not in self["expdatasets"])
-                    or (dsnames is not None and dataset not in dsnames)):
+                    or (include is not None and dataset not in include)
+                    or (exclude is not None and dataset in exclude)):
                 del datasets[dataset]
         requested_datasets = datasets.keys()
         datasets, paths2dsname =\

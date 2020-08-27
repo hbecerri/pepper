@@ -12,9 +12,10 @@ import pepper
 
 
 parser = ArgumentParser(
-    description="Select events from nanoAODs. This will save cutflows, "
-    "histograms and, if wished, per-event data. Histograms are saved in a "
-    "Coffea format and are ready to be plotted by plot_control.py")
+    description="Select events from nanoAODs using the TTbarLL processor."
+    "This will save cutflows, histograms and, if wished, per-event data. "
+    "Histograms are saved in a Coffea format and are ready to be plotted by "
+    "plot_control.py")
 parser.add_argument("config", help="JSON configuration file")
 parser.add_argument(
     "--eventdir", help="Event destination output directory. If not "
@@ -138,12 +139,12 @@ if args.condor is not None:
         parsl_config = pepper.misc.get_parsl_config(
             args.condor, retries=args.retries)
     parsl.load(parsl_config)
-    executor_args = {}
+    executor_args = {"align_clusters": True}
 else:
     if args.parsl_config is not None:
         print("Ignoring parsl_config because condor is not specified")
     executor = coffea.processor.iterative_executor
-    executor_args = {}
+    executor_args = {"align_clusters": True}
 
 output = coffea.processor.run_uproot_job(
     datasets, "Events", processor, executor, executor_args,

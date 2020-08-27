@@ -19,11 +19,20 @@ def dataset_to_paths(dataset, store, ext=".root"):
 
     Returns a list of paths as strings
     """
-    t, cv, tier = dataset.split("/")[1:]
-    campaign, version = cv.split("-", 1)
-    isMc = "SIM" in tier
-    pat = "{}/{}/{}/{}/{}/{}/*/*{}".format(
-        store, "mc" if isMc else "data", campaign, t, tier, version, ext)
+    primary, processed, tier = dataset.split("/")[1:]
+    if tier == "USER":
+        username, tag = processed.split("-", 1)
+        tag, counter = tag.rsplit("-", 1)
+        pat = "{}/user/{}/{}/{}/*/*/*{}".format(
+            store, username, primary, tag, ext)
+    elif tier.startswith("NANOAOD"):
+        campaign, version = processed.split("-", 1)
+        datatype = "mc" if tier.endswith("SIM") else "data"
+        pat = "{}/{}/{}/{}/{}/{}/*/*{}".format(
+            store, datatype, campaign, primary, tier, version, ext)
+    else:
+        raise ValueError("Unknown tier in dataset, must be NANOAOD, "
+                         f"NANOAODSIM or USER: {dataset}")
     return [os.path.normpath(p) for p in glob(pat)]
 
 
@@ -41,12 +50,12 @@ def read_paths(source, store, ext=".root"):
     Returns a list of paths as strings
     """
     paths = []
-    is_dsname = (source.count("/") == 3
-                 and (source.endswith("NANOAOD")
-                      or source.endswith("NANOAODSIM")))
     if source.endswith(ext):
         paths = glob(source)
-    elif is_dsname:
+    elif (source.count("/") == 3
+            and (source.endswith("NANOAOD")
+                 or source.endswith("NANOAODSIM")
+                 or source.endswith("USER"))):
         paths.extend(dataset_to_paths(source, store, ext))
     else:
         with open(source) as f:
