@@ -142,6 +142,8 @@ class HistDefinition():
                         data = data[mask].repeat(counts[mask])
                     else:
                         data = data.repeat(counts)
+                elif mask is not None:
+                    data = data[mask]
             prepared[key] = data
         return prepared
 
