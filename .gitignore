@@ -1,7 +1,5 @@
 #Logs:
 runinfo
-stafford.cc
-log.txt
 nohup.out
 
 #pycache:
@@ -10,13 +8,8 @@ __pycache__
 
 #Output columns/histograms:
 *.hdf5
-selected_columns
 hists
-out_hists
 *.coffea
-
-#Private config directories:
-ttDM_config
 
 #Input data directory (which is it's own git repo):
 data
