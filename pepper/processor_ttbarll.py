@@ -54,6 +54,11 @@ class ProcessorTTbarLL(pepper.Processor):
         else:
             logger.warning("No lumimask specified")
             self.lumimask = None
+        if "pileup_reweighting" in self.config:
+            self.puweighter = self.config["pileup_reweighting"]
+        else:
+            logger.warning("No pilup rewegithing specified")
+            self.puweighter = None
         if ("electron_sf" in self.config
                 and len(self.config["electron_sf"]) > 0):
             self.electron_sf = self.config["electron_sf"]
@@ -162,7 +167,7 @@ class ProcessorTTbarLL(pepper.Processor):
 
         if self.config["blinding_denom"] is not None:
             selector.add_cut(partial(self.blinding, is_mc), "Blinding")
-        selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
+        selector.add_cut(partial(self.good_lumimask, is_mc, dsname), "Lumi")
 
         pos_triggers, neg_triggers = pepper.misc.get_trigger_paths_for(
             dsname, is_mc, self.trigger_paths, self.trigger_order)
@@ -392,13 +397,23 @@ class ProcessorTTbarLL(pepper.Processor):
                     {"Blinding_sf":
                      np.full(data.size, 1/self.config["blinding_denom"])})
 
-    def good_lumimask(self, is_mc, data):
+    def good_lumimask(self, is_mc, dsname, data):
         if is_mc:
             # Lumimask only present in data, all events pass in MC
-            # Compute lumi variation here
+            # Compute pileup reweighting and lumi variation here
             allpass = np.full(data.size, True)
+            ntrueint = data["Pileup_nTrueInt"]
+            weight = {}
+            if self.puweighter is not None:
+                central = self.puweighter(dsname, ntrueint)
+                if self.config["compute_systematics"]:
+                    weight["pileup"] = (
+                        central,
+                        self.puweighter(dsname, ntrueint, "up") / central,
+                        self.puweighter(dsname, ntrueint, "down") / central)
+                else:
+                    weight["pileup"] = central
             if self.config["compute_systematics"]:
-                weight = {}
                 if (self.config["year"] == "2018"
                         or self.config["year"] == "2016"):
                     weight["lumi"] = (None,

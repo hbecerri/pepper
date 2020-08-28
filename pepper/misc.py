@@ -4,6 +4,7 @@ from glob import glob
 import h5py
 import uproot
 from collections import defaultdict
+import coffea
 from coffea.analysis_objects import JaggedCandidateArray as Jca
 import awkward
 import numpy as np
@@ -260,6 +261,40 @@ def export_with_sparse(hist):
     for key in hist.values().keys():
         ret[key] = export(hist[key].project(*hist.dense_axes()))
     return ret
+
+
+def rootimport(uproothist, enconding="utf-8"):
+    """The inverse of export. Takes an uproot histogram and converts it to a
+    coffea histogram. `encoding` is the coding with which the labels of the
+    uproot histogram are decoded."""
+    axes = []
+    edges = uproothist.edges
+    if not isinstance(edges, tuple):
+        edges = (edges,)
+    axes = []
+    attrs = ("_fXaxis", "_fYaxis", "_fZaxis")
+    for i, (attr, edges_per_axis) in enumerate(zip(attrs, edges)):
+        uprootaxis = getattr(uproothist, attr)
+        title = uprootaxis._fTitle
+        if isinstance(title, bytes):
+            title = title.decode(enconding)
+        name = uprootaxis._fName
+        if isinstance(name, bytes):
+            name = name.decode(enconding)
+        axis = coffea.hist.Bin(name, title, edges_per_axis)
+        axes.append(axis)
+    title = uproothist.title
+    if isinstance(title, bytes):
+        title = title.decode(enconding)
+    hist = coffea.hist.Hist(title, *axes)
+    ndim = len(edges)
+    # Add NaN bins
+    values = np.pad(uproothist.allvalues, ((0, 1),) * ndim).astype(float)
+    sumw2 = np.pad(uproothist.allvariances, ((0, 1),) * ndim).astype(float)
+
+    hist._sumw = {tuple(): values}
+    hist._sumw2 = {tuple(): sumw2}
+    return hist
 
 
 def hist_divide(num, denom):

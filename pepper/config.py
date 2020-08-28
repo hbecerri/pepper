@@ -34,7 +34,13 @@ class ScaleFactors(object):
 
     @classmethod
     def from_hist(cls, hist, dimlabels):
-        factors, (edges,) = hist.allnumpy()
+        factors, edges = hist.allnumpy()
+        if isinstance(edges, list):
+            # In 2D and 3D case, edges are placed in a len 1 list
+            edges = edges[0]
+        if not isinstance(edges, tuple):
+            # In 1D case, edges aren't wrapped in a tuple
+            edges = (edges,)
         sigmas = np.sqrt(hist.allvariances)
         factors_up = factors + sigmas
         factors_down = factors - sigmas
@@ -91,6 +97,45 @@ def get_evaluator(filename, fileform, filetype=None):
             extractor.add_weight_set(key[0], key[1], value)
     extractor.finalize()
     return extractor.make_evaluator()
+
+
+class PileupWeighter:
+    def __init__(self, rootfile):
+        self.central = {}
+        self.up = {}
+        self.down = {}
+
+        self.upsuffix = "_up"
+        self.downsuffix = "_down"
+        for key, hist in rootfile.items():
+            key = key.decode().rsplit(";", 1)[0]
+            sf = ScaleFactors.from_hist(hist, ["ntrueint"])
+            if key.endswith(self.upsuffix):
+                self.up[key[:-len(self.upsuffix)]] = sf
+            elif key.endswith(self.downsuffix):
+                self.down[key[:-len(self.downsuffix)]] = sf
+            else:
+                self.central[key] = sf
+        if (self.central.keys() != self.up.keys()
+                or self.central.keys() != self.down.keys()):
+            raise ValueError(
+                "Missing up/down or central weights for some datasets")
+
+    def __call__(self, dsname, ntrueint, variation="central"):
+        # If all_datasets is present, use that instead of per-dataset weights
+        if "all_datasets" in self.central:
+            key = "all_datasets"
+        else:
+            key = dsname
+        if variation == "up":
+            return self.up[key](ntrueint=ntrueint)
+        elif variation == "down":
+            return self.down[key](ntrueint=ntrueint)
+        elif variation == "central":
+            return self.central[key](ntrueint=ntrueint)
+        else:
+            raise ValueError("variation must be either 'up', 'down' or "
+                             f"'central', not {variation}")
 
 
 class TopPtWeigter():
@@ -217,6 +262,12 @@ class Config(object):
                 raise ConfigError(
                     "top_pt_reweighting must be of shape [scale, a, b]")
             self._cache[key] = TopPtWeigter(*opts)
+            return self._cache[key]
+        elif key == "pileup_reweighting":
+            path = self._config["pileup_reweighting"]
+            path = self._replace_special_vars(path)
+            with uproot.open(path) as f:
+                self._cache[key] = PileupWeighter(f)
             return self._cache[key]
         elif key == "electron_sf":
             self._cache["electron_sf"] = self._get_scalefactors("electron_sf",
