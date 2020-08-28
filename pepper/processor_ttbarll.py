@@ -983,9 +983,13 @@ class ProcessorTTbarLL(pepper.Processor):
         for i, weighter in enumerate(self.btagweighters):
             central = weighter(wp, flav, eta, pt, discr, "central")
             if self.config["compute_systematics"]:
-                up = weighter(wp, flav, eta, pt, discr, "up")
-                down = weighter(wp, flav, eta, pt, discr, "down")
+                light_up = weighter(wp, flav, eta, pt, discr, "light up")
+                light_down = weighter(wp, flav, eta, pt, discr, "light down")
+                up = weighter(wp, flav, eta, pt, discr, "heavy up")
+                down = weighter(wp, flav, eta, pt, discr, "heavy down")
                 weight[f"btagsf{i}"] = (central, up / central, down / central)
+                weight[f"btagsf{i}light"] = (
+                    None, light_up / central, light_down / central)
             else:
                 weight[f"btagsf{i}"] = central
         return weight

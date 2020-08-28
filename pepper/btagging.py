@@ -69,6 +69,19 @@ class BTagWeighter(object):
                                  "'medium' or 'tight'")
         elif not isinstance(wp, int):
             raise TypeError("Expected int or str for wp, got {}".format(wp))
+        possible_variations = (
+            "central", "light up", "light down", "heavy up", "heavy down")
+        if variation not in possible_variations:
+            raise ValueError(
+                "variation must be one of: " + ", ".join(possible_variations))
+        light_vari = "central"
+        heavy_vari = "central"
+        if variation != "central":
+            vari_type, direction = variation.split(" ")
+            if vari_type == "light":
+                light_vari = direction
+            else:
+                heavy_vari = direction
 
         counts = pt.counts
         jf = jf.flatten()
@@ -77,11 +90,9 @@ class BTagWeighter(object):
         discr = discr.flatten()
 
         sf = np.ones_like(eta)
-        # Workaround: Call sf function three times, see
-        # https://github.com/CoffeaTeam/coffea/issues/205
-        sf[jf == 0] = self._sf_func(wp, variation, 2)(eta, pt, discr)[jf == 0]
-        sf[jf == 4] = self._sf_func(wp, variation, 1)(eta, pt, discr)[jf == 4]
-        sf[jf == 5] = self._sf_func(wp, variation, 0)(eta, pt, discr)[jf == 5]
+        sf[jf == 0] = self._sf_func(wp, light_vari, 2)(eta, pt, discr)[jf == 0]
+        sf[jf == 4] = self._sf_func(wp, heavy_vari, 1)(eta, pt, discr)[jf == 4]
+        sf[jf == 5] = self._sf_func(wp, heavy_vari, 0)(eta, pt, discr)[jf == 5]
         sf = awkward.JaggedArray.fromcounts(counts, sf)
 
         eff = self.eff_evaluator["efficiency"](jf, pt, abs(eta))
