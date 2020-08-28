@@ -66,13 +66,12 @@ store = config["store"]
 
 datasets = {}
 if args.file is None:
-    datasets = (set(config["exp_datasets"].keys())
-                | set(config["mc_datasets"].keys()))
-    if args.dataset is not None:
-        datasets = set(args.dataset)
     if not config["compute_systematics"]:
-        datasets -= set(config["dataset_for_systematics"].keys())
-    datasets = config.get_datasets(datasets, "mc" if args.mc else "any")
+        exclude = config["dataset_for_systematics"].keys()
+    else:
+        exclude = None
+    datasets = config.get_datasets(
+        args.dataset, exclude, "mc" if args.mc else "any")
 else:
     datasets = {}
     for customfile in args.file:
