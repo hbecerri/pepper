@@ -430,7 +430,7 @@ cd -
     provider = parsl.providers.CondorProvider(
         init_blocks=min(5, num_jobs),
         max_blocks=num_jobs,
-        parallelism=0.5,
+        parallelism=1,
         scheduler_options=condor_config,
         worker_init=condor_init
     )
