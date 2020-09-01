@@ -31,7 +31,7 @@ else:
             return cls.__bases__[0].__new__(cls, name, junc, jer, met)
 
 
-class DYprocessor(pepper.Processor):
+class DYprocessor(pepper.ProcessorTTbarLL):
 
     @property
     def accumulator(self):
@@ -55,7 +55,7 @@ class DYprocessor(pepper.Processor):
         if is_mc:
             self.add_crosssection_scale(selector, dsname)
 
-        selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
+        selector.add_cut(partial(self.good_lumimask, is_mc, dsname), "Lumi")
 
         pos_triggers, neg_triggers = pepper.misc.get_trigger_paths_for(
             dsname, is_mc, self.trigger_paths, self.trigger_order)
@@ -85,6 +85,7 @@ class DYprocessor(pepper.Processor):
 
         selector.set_column(self.build_jet_column, "Jet")
         selector.set_column(partial(self.build_met_column,
+                                    VariationArg(None).junc,
                                     variation=VariationArg(None).met), "MET")
         selector.add_cut(self.has_jets, "#Jets >= %d"
                          % self.config["num_jets_atleast"])
