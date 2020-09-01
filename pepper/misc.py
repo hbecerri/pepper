@@ -259,7 +259,10 @@ def export(hist):
 def export_with_sparse(hist):
     ret = {}
     for key in hist.values().keys():
-        ret[key] = export(hist[key].project(*hist.dense_axes()))
+        hist_integrated = hist
+        for sparse_axis, keypart in zip(hist.sparse_axes(), key):
+            hist_integrated = hist_integrated.integrate(sparse_axis, keypart)
+        ret[key] = export(hist_integrated)
     return ret
 
 
