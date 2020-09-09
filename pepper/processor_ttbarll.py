@@ -407,10 +407,12 @@ class ProcessorTTbarLL(pepper.Processor):
             if self.puweighter is not None:
                 central = self.puweighter(dsname, ntrueint)
                 if self.config["compute_systematics"]:
+                    # If central is zero, let up and down factors also be zero
+                    central_nonzero = np.where(central == 0, np.inf, central)
+                    up = self.puweighter(dsname, ntrueint, "up")
+                    down = self.puweighter(dsname, ntrueint, "down")
                     weight["pileup"] = (
-                        central,
-                        self.puweighter(dsname, ntrueint, "up") / central,
-                        self.puweighter(dsname, ntrueint, "down") / central)
+                        central, up / central_nonzero, down / central_nonzero)
                 else:
                     weight["pileup"] = central
             if self.config["compute_systematics"]:
