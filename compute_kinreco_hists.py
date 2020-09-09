@@ -16,7 +16,9 @@ from pepper.datasets import expand_datasetdict
 
 class Processor(pepper.ProcessorTTbarLL):
     def __init__(self, config):
-        config["do_ttbar_reconstruction"] = False
+        config["reco_algorithm"] = None
+        if "reco_info_file" in config:
+            del config["reco_info_file"]
         config["blinding_denom"] = None
         super().__init__(config, None)
 
