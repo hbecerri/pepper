@@ -57,7 +57,7 @@ class ProcessorTTbarLL(pepper.Processor):
         if "pileup_reweighting" in self.config:
             self.puweighter = self.config["pileup_reweighting"]
         else:
-            logger.warning("No pilup rewegithing specified")
+            logger.warning("No pileup reweigthing specified")
             self.puweighter = None
         if ("electron_sf" in self.config
                 and len(self.config["electron_sf"]) > 0):
@@ -204,6 +204,13 @@ class ProcessorTTbarLL(pepper.Processor):
                 filler.sys_overwrite = variarg.name
                 self.process_selection_jet_part(selector_copy, is_mc,
                                                 variarg, dsname)
+                if self.destdir is not None:
+                    logger.debug(f"Saving per event info for variation"
+                                 f" {variarg.name}")
+                    df = selector_copy.masked
+                    self._save_per_event_info(
+                        dsname + "_" + variarg.name, selector_copy,
+                        (df.filename, df.entrystart, df.entrystop), False)
             filler.sys_overwrite = None
 
         # Do normal, no-variation run

@@ -23,7 +23,7 @@ class LazyTable(MutableMapping):
     LAZYPROB = 0.75
 
     def __init__(self, tree, entrystart=None, entrystop=None, flatten=False,
-                 slic=None):
+                 slic=None, filename=None):
         self._loaded = {}
         self._loaded_lazily = set()
         self._overwritten = {}
@@ -39,12 +39,14 @@ class LazyTable(MutableMapping):
         self._branchargs["entrystop"] = entrystop
         self._slice = slic
         self._available = {k.decode() for k in self._tree.keys()}
+        self.filename = filename
 
     @classmethod
     def from_lazydf(cls, df):
-        return cls(
-            df._tree, df._branchargs["entrystart"],
-            df._branchargs["entrystop"], flatten=df._branchargs["flatten"])
+        return cls(df._tree, df._branchargs["entrystart"],
+                   df._branchargs["entrystop"],
+                   flatten=df._branchargs["flatten"],
+                   filename=df["filename"])
 
     def _mergeslice(self, slic):
         new = copy(self)

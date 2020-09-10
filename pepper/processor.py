@@ -144,7 +144,8 @@ class Processor(coffea.processor.ProcessorABC):
                 columns[key] = item
         return awkward.Table(columns)
 
-    def _save_per_event_info(self, dsname, selector, identifier):
+    def _save_per_event_info(
+            self, dsname, selector, identifier, save_full_sys=True):
         with self._open_output(dsname) as f:
             outf = awkward.hdf5(f)
             out_dict = {"dsname": dsname, "identifier": identifier}
@@ -152,7 +153,7 @@ class Processor(coffea.processor.ProcessorABC):
             cutnames, cutflags = selector.get_cuts()
             out_dict["cutnames"] = cutnames
             out_dict["cutflags"] = cutflags
-            if self.config["compute_systematics"]:
+            if self.config["compute_systematics"] and save_full_sys:
                 out_dict["systematics"] = selector.masked_systematics
             else:
                 out_dict["weight"] = selector.weight
