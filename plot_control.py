@@ -205,6 +205,10 @@ for histfilename in histfiles:
     proc_axis = coffea.hist.Cat("proc", "Process", "placement")
 
     data_dsnames = list(config["exp_datasets"].keys())
+    # Skip if this is an MC-only histogram
+    if all(name not in [i.name for i in hist.identifiers(dsaxis)]
+           for name in data_dsnames):
+        continue
     data_hist = hist.group(dsaxis, proc_axis, {"Data": (data_dsnames,)})
 
     mc_dsnames = config["mc_datasets"].keys()
