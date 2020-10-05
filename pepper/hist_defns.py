@@ -83,6 +83,10 @@ class HistDefinition():
         self.axes = bins + cats
         self.bin_fills = {}
         self.cat_fills = {}
+        if "weight" in config:
+            self.weight = config["weight"]
+        else:
+            self.weight = None
         for axisname, method in config["fill"].items():
             if axisname in bins:
                 self.bin_fills[axisname] = method
@@ -153,7 +157,9 @@ class HistDefinition():
         cat_masks = {name: {cat: self.pick_data(method, data)
                             for cat, method in val.items()}
                      for name, val in self.cat_fills.items()}
-        if weight is not None:
+        if self.weight is not None:
+            fill_vals["weight"] = self.pick_data(self.weight, data)
+        elif weight is not None:
             fill_vals["weight"] = weight
         cat_present = {name: (val if any(mask is not None
                                          for mask in val.values())
