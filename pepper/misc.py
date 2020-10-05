@@ -382,13 +382,14 @@ def hist_counts(hist):
     return next(iter(values.values()))
 
 
-def get_parsl_config(num_jobs, runtime=3*60*60, retries=None, hostname=None, *,
-                     condor_submit=None, condor_init=None):
+def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
+                     hostname=None, *, condor_submit=None, condor_init=None):
     """Get a parsl config for a host.
 
     Arguments:
     num_jobs -- Number of jobs/processes to run in parallel
     runtime -- Requested runtime in seconds. If None, do not request a runtime
+    memory -- Request memory in MB. If None, do not request memory
     retries -- The number of times to retry a failed task. If None, the task is
                retried until it stops failing
     hostname -- hostname of the machine to submit from. If None, use current
@@ -415,6 +416,8 @@ def get_parsl_config(num_jobs, runtime=3*60*60, retries=None, hostname=None, *,
         else:
             raise NotImplementedError(
                     f"runtime on unknown host {hostname}")
+    if memory is not None:
+        condor_config += f"RequestMemory = {memory}\n"
     if condor_submit is not None:
         condor_config += condor_submit
     if condor_init is None:
