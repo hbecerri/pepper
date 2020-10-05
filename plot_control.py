@@ -112,7 +112,8 @@ def plot(data_hist, pred_hist, sys, namebase, colors={}, log=False,
     fig.subplots_adjust(hspace=0)
     if cmsyear is not None:
         ax1 = hep.cms.label(
-            ax=ax1, data=True, paper=False, year=cmsyear, lumi=LUMIS[cmsyear])
+            ax=ax1, llabel="Work in progress", year=cmsyear,
+            lumi=LUMIS[cmsyear])
     if log:
         ax1.autoscale(axis="y")
         ax1.set_yscale("log")
