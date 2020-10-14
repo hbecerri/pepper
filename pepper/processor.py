@@ -176,7 +176,7 @@ class Processor(coffea.processor.ProcessorABC):
                 data, dsname, filename, entrystart, entrystop)
         is_mc = (dsname in self.config["mc_datasets"].keys())
 
-        filler = self.setup_outputfiller(data, dsname, is_mc)
+        filler = self.setup_outputfiller(dsname, is_mc)
         selector = self.setup_selection(data, dsname, is_mc, filler)
         self.process_selection(selector, dsname, is_mc, filler)
 
@@ -193,32 +193,30 @@ class Processor(coffea.processor.ProcessorABC):
         logger.debug("This is a randomised parameter signal sample- processing"
                      " each scan point separately")
         is_mc = (dsname in self.config["mc_datasets"].keys())
-        filler = self.setup_outputfiller(data, dsname, is_mc)
         scanpoints = [key for key in data.columns
                       if key.startswith("GenModel_")]
+        output = self.accumulator.identity()
         for sp in scanpoints:
             logger.debug(f"Processing scan point {sp}")
-            if sp.startswith("GenModel__"):
-                dsname = sp[10:]
-            else:
-                dsname = sp[9:]
-            filler.update_ds(dsname, dsname, None)
+            dsname = sp[9:]
+            filler = self.setup_outputfiller(dsname, is_mc)
             selector = self.setup_selection(copy(data), dsname, is_mc, filler)
             selector.add_cut(partial(self.pick_scan_point, sp),
                              "Select scan point", no_callback=True)
             self.process_selection(selector, dsname, is_mc, filler)
+            output += filler.output
             if self.destdir is not None:
                 logger.debug("Saving per event info")
                 self._save_per_event_info(
                     dsname, selector, (filename, entrystart, entrystop))
 
         logger.debug("Processing finished")
-        return filler.output
+        return output
 
     def pick_scan_point(self, sp, data):
         return data[sp]
 
-    def setup_outputfiller(self, data, dsname, is_mc):
+    def setup_outputfiller(self, dsname, is_mc):
         output = self.accumulator.identity()
         sys_enabled = self.config["compute_systematics"]
 

@@ -40,14 +40,6 @@ class OutputFiller():
         else:
             self.copy_nominal = copy_nominal
 
-    def update_ds(self, dsname, dsname_in_hist, channels):
-        self.dsname = dsname
-        self.dsname_in_hist = dsname_in_hist
-        if channels is None:
-            self.channels = tuple()
-        else:
-            self.channels = channels
-
     def fill_cutflows(self, data, systematics, cut):
         accumulator = self.output["cutflows"]
         if systematics is not None:
