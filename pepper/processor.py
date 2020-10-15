@@ -153,11 +153,12 @@ class Processor(coffea.processor.ProcessorABC):
             cutnames, cutflags = selector.get_cuts()
             out_dict["cutnames"] = cutnames
             out_dict["cutflags"] = cutflags
-            if self.config["compute_systematics"] and save_full_sys:
+            if (self.config["compute_systematics"] and save_full_sys
+                    and selector.masked_systematics is not None):
                 out_dict["systematics"] = \
                     selector.masked_systematics.deepcopy()
             else:
-                out_dict["weight"] = selector.weight.deepcopy()
+                out_dict["weight"] = selector.weight
 
             for key in out_dict.keys():
                 outf[key] = out_dict[key]
