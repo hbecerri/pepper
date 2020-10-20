@@ -101,6 +101,7 @@ class ProcessorTTbarLL(pepper.Processor):
 
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
+        self.reco_random_seed = np.random.SeedSequence()
         if "reco_info_file" in self.config:
             self.reco_info_filepath = self.config["reco_info_file"]
         elif self.config["reco_algorithm"] is not None:
@@ -1076,7 +1077,8 @@ class ProcessorTTbarLL(pepper.Processor):
             top, antitop = sonnenschein(
                 lep, antilep, b, antib, met, mwp=mw, mwm=mw, mt=mt, mat=mt,
                 energyfl=energyfl, energyfj=energyfj, alphal=alphal,
-                alphaj=alphaj, hist_mlb=mlb, num_smear=num_smear)
+                alphaj=alphaj, hist_mlb=mlb, num_smear=num_smear,
+                seed=self.reco_random_seed)
             top = awkward.concatenate([top, antitop], axis=1)
             return Jca.candidatesfromcounts(top.counts, p4=top.flatten())
         elif reco_alg == "betchart":

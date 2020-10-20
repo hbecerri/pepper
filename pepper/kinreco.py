@@ -7,19 +7,19 @@ import awkward
 from pepper.misc import jaggeddepth, chunked_calls
 
 
-def _maybe_sample(s, size):
+def _maybe_sample(s, size, rng):
     if isinstance(s, coffea.hist.Hist):
         if s.dim() != 1 or s.dense_dim() != 1:
-            raise ValueError("mass histogram has invalid dimensions")
+            raise ValueError("histogram has invalid dimensions")
         values = s.values()[()]
         centers = s.axes()[0].centers()
         p = values / values.sum()
-        s = np.random.choice(centers, size, p=p)
+        s = rng.choice(centers, size, p=p)
     elif isinstance(s, uproot_methods.classes.TH1.Methods):
         values, edges = s.numpy()
         centers = (edges[1:] + edges[:-1]) / 2
         p = values / values.sum()
-        s = np.random.choice(centers, size, p=p)
+        s = rng.choice(centers, size, p=p)
     elif isinstance(s, (int, float)):
         s = np.full(size, s)
     elif isinstance(s, np.ndarray):
@@ -27,8 +27,8 @@ def _maybe_sample(s, size):
     return s
 
 
-def _random_orthogonal(vec):
-    random = np.random.rand(*vec.shape)
+def _random_orthogonal(vec, rng):
+    random = rng.random(vec.shape)
     rnorm = random / np.linalg.norm(random, axis=-1, keepdims=True)
     vnorm = vec / np.linalg.norm(vec, keepdims=True)
     u = rnorm - (rnorm * vnorm).sum(axis=-1, keepdims=True) * vnorm
@@ -58,7 +58,7 @@ def _rotate_axis(vec, axis, angle):
     return np.stack([x, y, z], axis=-1)
 
 
-def _smear(fourvec, energyf, alpha, num):
+def _smear(fourvec, energyf, alpha, num, rng):
     num_events = fourvec.size
     e = fourvec.E[:, None]
     p3 = np.stack([fourvec.x, fourvec.y, fourvec.z], axis=-1)[:, None, :]
@@ -70,13 +70,13 @@ def _smear(fourvec, energyf, alpha, num):
     p3 = np.broadcast_to(p3, (num_events, num, 3))
     m = np.broadcast_to(m, (num_events, num))
     if energyf is not None and num is not None:
-        e = e * _maybe_sample(energyf, (num_events, num))
+        e = e * _maybe_sample(energyf, (num_events, num), rng)
         # Cap energy to something bit above the mass
         e[e < m] = 1.01 * m[e < m]
     if alpha is not None and num is not None:
         # Rotate around a random orthogonal axis by alpha
-        r = _random_orthogonal(p3)
-        p3 = _rotate_axis(p3, r, _maybe_sample(alpha, (num_events, num)))
+        r = _random_orthogonal(p3, rng)
+        p3 = _rotate_axis(p3, r, _maybe_sample(alpha, (num_events, num), rng))
     # Keep mass constant
     p3 = p3 * np.sqrt((e**2 - m**2) / (p3**2).sum(axis=-1))[..., None]
 
@@ -116,7 +116,7 @@ def _lorvecfromnumpy(x, y, z, t):
 @chunked_calls("lep", 10000, True)
 def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
                  mat=172.5, num_smear=None, energyfl=None, energyfj=None,
-                 alphal=None, alphaj=None, hist_mlb=None):
+                 alphal=None, alphaj=None, hist_mlb=None, seed=None):
     """Full kinematic reconstruction for dileptonic ttbar using Sonnenschein's
     method https://arxiv.org/pdf/hep-ph/0603011.pdf
     Arguments:
@@ -141,7 +141,11 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     alphaj -- Same as alphal for bottom quarks
     hist_mlb -- Histogram of the lepton-bottom-quark-mass distribution. Is
                 needed, if num_smear is not None
+    seed -- Seed in the random number generator. If None, a random seed will be
+            used. For defailts see the parameter of numpy.random.default_rng().
     """
+
+    rng = np.random.default_rng(seed)
 
     if jaggeddepth(lep) > 1:
         # Get rid of jagged dimension, as we have one particle per row and
@@ -158,10 +162,10 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
 
     # Use 2d numpy arrays. Use first axis for events, second for smearing
     num_events = lep.size
-    lE, lx, ly, lz = _smear(lep, energyfl, alphal, num_smear)
-    alE, alx, aly, alz = _smear(antilep, energyfl, alphal, num_smear)
-    bE, bx, by, bz = _smear(b, energyfj, alphaj, num_smear)
-    abE, abx, aby, abz = _smear(antib, energyfj, alphaj, num_smear)
+    lE, lx, ly, lz = _smear(lep, energyfl, alphal, num_smear, rng)
+    alE, alx, aly, alz = _smear(antilep, energyfl, alphal, num_smear, rng)
+    bE, bx, by, bz = _smear(b, energyfj, alphaj, num_smear, rng)
+    abE, abx, aby, abz = _smear(antib, energyfj, alphaj, num_smear, rng)
     # Even if num_smear is None, we have a smear axis. Update num_smear
     num_smear = max(lE.shape[1], bE.shape[1])
     # Unpack MET compontents and also propagate smearing to it
@@ -170,10 +174,10 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     METy = (met.y[:, None] - ly + lep.y[:, None] - aly + antilep.y[:, None]
                            - by + b.y[:, None] - aby + antib.y[:, None])
 
-    mwp = _maybe_sample(mwp, (num_events, 1))
-    mwm = _maybe_sample(mwm, (num_events, 1))
-    mat = _maybe_sample(mat, (num_events, 1))
-    mt = _maybe_sample(mt, (num_events, 1))
+    mwp = _maybe_sample(mwp, (num_events, 1), rng)
+    mwm = _maybe_sample(mwm, (num_events, 1), rng)
+    mat = _maybe_sample(mat, (num_events, 1), rng)
+    mt = _maybe_sample(mt, (num_events, 1), rng)
     # Compute masses, make sure they are real
     lp = np.sqrt(lx**2 + ly**2 + lz**2)
     lE = np.where(lE < lp, lp, lE)
