@@ -223,6 +223,10 @@ class ProcessorTTbarLL(pepper.Processor):
         ret = []
         ret.append(VariationArg("UncMET_up", met="up"))
         ret.append(VariationArg("UncMET_down", met="down"))
+        if self._jer is not None and self._jersf is not None:
+            jer = "central"
+        else:
+            jer = None
         if self._junc is not None:
             if "junc_sources_to_use" in self.config:
                 levels = self.config["junc_sources_to_use"]
@@ -236,8 +240,10 @@ class ProcessorTTbarLL(pepper.Processor):
                     name = "Junc_"
                 else:
                     name = f"Junc{source}_"
-                ret.append(VariationArg(name + "up", junc=("up", source)))
-                ret.append(VariationArg(name + "down", junc=("down", source)))
+                ret.append(VariationArg(
+                    name + "up", junc=("up", source), jer=jer))
+                ret.append(VariationArg(
+                    name + "down", junc=("down", source), jer=jer))
         if self._jer is not None and self._jersf is not None:
             ret.append(VariationArg("Jer_up", jer="up"))
             ret.append(VariationArg("Jer_down", jer="down"))
