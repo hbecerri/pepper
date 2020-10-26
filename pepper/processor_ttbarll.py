@@ -108,14 +108,11 @@ class ProcessorTTbarLL(pepper.Processor):
             raise pepper.config.ConfigError(
                 "Need reco_info_file for kinematic reconstruction")
         self.mc_lumifactors = config["mc_lumifactors"]
-        if "DY_SFs" in self.config:
-            self.DY_SFs = self.config["DY_SFs"]
+        if "drellyan_sf" in self.config:
+            self.drellyan_sf = self.config["drellyan_sf"]
         else:
-            self.DY_SFs = None
-        if "DY_SF_errs" in self.config:
-            self.DY_SF_errs = self.config["DY_SF_errs"]
-        else:
-            self.DY_SF_errs = None
+            logger.warning("No Drell-Yan scale factor specified")
+            self.drellyan_sf = None
 
     @staticmethod
     def _check_config_integrity(config):
@@ -263,9 +260,8 @@ class ProcessorTTbarLL(pepper.Processor):
         selector.set_column(self.build_jet_column, "Jet")
         selector.set_column(partial(self.build_met_column, variation.junc,
                                     variation=variation.met), "MET")
-        if dsname.startswith("DY"):
-            if self.DY_SFs is not None:
-                self.apply_dy_sfs(selector)
+        if dsname.startswith("DY") and self.drellyan_sf is not None:
+            self.apply_dy_sfs(selector)
         selector.add_cut(self.has_jets, "#Jets >= %d"
                          % self.config["num_jets_atleast"])
         if (self.config["hem_cut_if_ele"] or self.config["hem_cut_if_muon"]
@@ -311,38 +307,16 @@ class ProcessorTTbarLL(pepper.Processor):
         sf = self.topptweighter(pt[:, 0], pt[:, 1])
         selector.modify_weight("Top pt reweighting", sf)
 
-    def met_bin(self, lower, upper, data):
-        ret_arr = np.full(data.size, False)
-        MET = data["MET"].pt.flatten()
-        if upper is None:
-            ret_arr[data["MET"].counts > 0] = (MET > lower)
-        else:
-            ret_arr[data["MET"].counts > 0] = ((MET > lower) & (MET < upper))
-        return ret_arr
-
     def apply_dy_sfs(self, selector):
-        if self.config["DY_SF_bins"] == "Inclusive":
-            MET_bins = {"Inclusive": np.full(selector.masked.size, True)}
-        elif isinstance(self.config["DY_SF_bins"], dict):
-            MET_bins = {key: self.met_bin(l, u, selector.masked)
-                        for key, (l, u) in self.config["DY_SF_bins"].items()}
-        else:
-            raise ValueError("DY_SF_bins must either be 'Inclusive' or a "
-                             "dict defining the binning")
-        chs = ["is_ee", "is_em", "is_mm"]
-        sf = np.ones(selector.masked.size)
-        errs = np.zeros(selector.masked.size)
-        for ch in chs:
-            for MET_bin, mask in MET_bins.items():
-                sf[selector.masked[ch] & mask] = \
-                    self.DY_SFs[ch+MET_bin]
-                if (self.config["compute_systematics"]
-                        & (self.DY_SF_errs is not None)):
-                    errs[selector.masked[ch] & mask] = \
-                        self.DY_SF_errs[ch+MET_bin]
-        selector.modify_weight("DY scale factors", sf)
-        if self.config["compute_systematics"] & (self.DY_SF_errs is not None):
-            selector.set_systematic("DY SF err", sf + errs, sf - errs)
+        data = selector.masked
+        channel = np.where(data["is_ee"], 0, np.where(data["is_em"], 1, 2))
+        met = data["MET"].pt.flatten()
+        central = self.drellyan_sf(channel=channel, met=met)
+        selector.modify_weight("DY scale factors", central)
+        if self.config["compute_systematics"]:
+            up = self.drellyan_sf(channel=channel, met=met, variation="up")
+            down = self.drellyan_sf(channel=channel, met=met, variation="down")
+            selector.set_systematic("DYsf", up, down)
 
     def add_generator_uncertainies(self, dsname, selector):
         # Matrix-element renormalization and factorization scale

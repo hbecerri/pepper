@@ -33,7 +33,7 @@ class ScaleFactors(object):
             factors[tuple([slice(None)] * i + [slice(-1, None)])] = 1
 
     @classmethod
-    def from_hist(cls, hist, dimlabels):
+    def from_hist(cls, hist, dimlabels=None):
         factors, edges = hist.allnumpy()
         if isinstance(edges, list):
             # In 2D and 3D case, edges are placed in a len 1 list
@@ -41,6 +41,10 @@ class ScaleFactors(object):
         if not isinstance(edges, tuple):
             # In 1D case, edges aren't wrapped in a tuple
             edges = (edges,)
+        if dimlabels is None:
+            dimlabels = []
+            for attr in ("_fXaxis", "_fYaxis", "_fZaxis")[:len(edges)]:
+                dimlabels.append(getattr(hist, attr)._fName)
         sigmas = np.sqrt(hist.allvariances)
         factors_up = factors + sigmas
         factors_down = factors - sigmas
@@ -341,23 +345,24 @@ class Config(object):
             hists = {k: HistDefinition(c) for k, c in hists.items()}
             self._cache[key] = hists
             return hists
-        elif key in ("DY_SFs", "DY_SF_errs"):
+        elif key == "drellyan_sf":
             if isinstance(self._config[key], list):
-                data = self._config[key][0]
-                data = self._replace_special_vars(data)
-                with open(data) as f:
-                    data = json.load(f)
-                for i in range(1, len(self._config[key])):
-                    data = data[self._config[key][i]]
+                path, histname = self._config[key]
+                path = self._replace_special_vars(path)
+                with uproot.open(path) as f:
+                    hist = f[histname]
+                dy_sf = ScaleFactors.from_hist(hist)
             else:
-                data = self._config[key]
-            if not isinstance(data, dict):
-                raise ConfigError(f"{key} must either be a "
-                                  "dict or a list, where the first index is a "
-                                  "path to a json, and any subsequent indices "
-                                  "are keys to the dict")
-            self._cache[key] = data
-            return data
+                path = self._replace_special_vars(self._config[key])
+                with open(path) as f:
+                    data = json.load(f)
+                dy_sf = ScaleFactors(
+                    bins=data["bins"],
+                    factors=np.array(data["factors"]),
+                    factors_up=np.array(data["factors_up"]),
+                    factors_down=np.array(data["factors_down"]))
+            self._cache[key] = dy_sf
+            return dy_sf
         elif key in ("reco_info_file", "store", "lumimask",
                      "mc_lumifactors"):
             self._cache[key] = self._get_path(key)
