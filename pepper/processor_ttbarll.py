@@ -260,8 +260,8 @@ class ProcessorTTbarLL(pepper.Processor):
         selector.set_column(self.build_jet_column, "Jet")
         selector.set_column(partial(self.build_met_column, variation.junc,
                                     variation=variation.met), "MET")
-        if dsname.startswith("DY") and self.drellyan_sf is not None:
-            self.apply_dy_sfs(selector)
+        if self.drellyan_sf is not None and is_mc:
+            self.apply_dy_sfs(dsname, selector)
         selector.add_cut(self.has_jets, "#Jets >= %d"
                          % self.config["num_jets_atleast"])
         if (self.config["hem_cut_if_ele"] or self.config["hem_cut_if_muon"]
@@ -306,17 +306,6 @@ class ProcessorTTbarLL(pepper.Processor):
         pt = selector.masked["gent_lc"].pt
         sf = self.topptweighter(pt[:, 0], pt[:, 1])
         selector.modify_weight("Top pt reweighting", sf)
-
-    def apply_dy_sfs(self, selector):
-        data = selector.masked
-        channel = np.where(data["is_ee"], 0, np.where(data["is_em"], 1, 2))
-        met = data["MET"].pt.flatten()
-        central = self.drellyan_sf(channel=channel, met=met)
-        selector.modify_weight("DY scale factors", central)
-        if self.config["compute_systematics"]:
-            up = self.drellyan_sf(channel=channel, met=met, variation="up")
-            down = self.drellyan_sf(channel=channel, met=met, variation="down")
-            selector.set_systematic("DYsf", up, down)
 
     def add_generator_uncertainies(self, dsname, selector):
         # Matrix-element renormalization and factorization scale
@@ -882,6 +871,22 @@ class ProcessorTTbarLL(pepper.Processor):
                                                      np.arctan2(newy, newx),
                                                      np.zeros(data.size))
         return Jca.candidatesfromoffsets(np.arange(data.size + 1), p4=met)
+
+    def apply_dy_sfs(self, dsname, selector):
+        if dsname.startswith("DY"):
+            data = selector.masked
+            channel = np.where(data["is_ee"], 0, np.where(data["is_em"], 1, 2))
+            met = data["MET"].pt.flatten()
+            central = self.drellyan_sf(channel=channel, met=met)
+            selector.modify_weight("DY scale factors", central)
+            if self.config["compute_systematics"]:
+                up = self.drellyan_sf(channel=channel, met=met, variation="up")
+                down = self.drellyan_sf(
+                    channel=channel, met=met, variation="down")
+                selector.set_systematic("DYsf", up / central, down / central)
+        elif self.config["compute_systematics"]:
+            ones = np.ones(selector.num_selected)
+            selector.set_systematic("DYsf", ones, ones)
 
     def in_hem1516(self, phi, eta):
         return ((-3.0 < eta) & (eta < -1.3) & (-1.57 < phi) & (phi < -0.87))
