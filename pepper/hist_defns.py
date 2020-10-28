@@ -210,7 +210,16 @@ class HistDefinition():
                     data = getattr(data, sel)
                 except AttributeError:
                     try:
-                        data = data[sel]
+                        if ((isinstance(data, awkward.Table)
+                                or (isinstance(data, awkward.JaggedArray)
+                                    and isinstance(
+                                        data.content, awkward.Table)))
+                                and sel not in data.columns):
+                            # Workaround for awkward.Table raising a
+                            # ValueError instead of a KeyError
+                            raise KeyError
+                        else:
+                            data = data[sel]
                     except KeyError:
                         break
                 if callable(data):
