@@ -560,8 +560,14 @@ class ProcessorTTbarLL(pepper.Processor):
         ge = self.electron_cuts(data, good_lep=True)
         gm = self.muon_cuts(data, good_lep=True)
         for key in keys:
-            arr = awkward.concatenate([data["Electron_" + key][ge],
-                                      data["Muon_" + key][gm]], axis=1)
+            ele = data["Electron_" + key]
+            muon = data["Muon_" + key]
+            # Workaround for awkward issue #239
+            if ele.counts.sum() == 0:
+                ele = awkward.JaggedArray.fromcounts(ele.counts, [])
+            if muon.counts.sum() == 0:
+                muon = awkward.JaggedArray.fromcounts(muon.counts, [])
+            arr = awkward.concatenate([ele[ge], muon[gm]], axis=1)
             offsets = arr.offsets
             lep_dict[key] = arr.flatten()  # Could use concatenate here
         # Add supercluster eta, which only is given for electrons
