@@ -55,7 +55,8 @@ class BTagWeighter(object):
         return None
 
     def __call__(
-            self, wp, jf, eta, pt, discr, variation="central"):
+            self, wp, jf, eta, pt, discr, variation="central",
+            efficiency="central"):
         if isinstance(wp, str):
             wp = wp.lower()
             if wp == "loose":
@@ -95,7 +96,7 @@ class BTagWeighter(object):
         sf[jf == 5] = self._sf_func(wp, heavy_vari, 0)(eta, pt, discr)[jf == 5]
         sf = awkward.JaggedArray.fromcounts(counts, sf)
 
-        eff = self.eff_evaluator["efficiency"](jf, pt, abs(eta))
+        eff = self.eff_evaluator[efficiency](jf, pt, abs(eta))
         eff = awkward.JaggedArray.fromcounts(counts, eff)
         sfeff = sf * eff
 
@@ -107,3 +108,7 @@ class BTagWeighter(object):
 
         # TODO: What if one runs into numerical problems here?
         return p_data / p_mc
+
+    @property
+    def available_efficiencies(self):
+        return set(self.eff_evaluator.keys())
