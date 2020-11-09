@@ -132,9 +132,8 @@ class HistDefinition():
         for key, data in fill_vals.items():
             if data is not None:
                 if key in jagged:
-                    if data.size == 1 and data[0].size == 0:
-                        # Workaround for awkward bug where masking an empty
-                        # starts-stops array can raise an IndexError
+                    if data.counts.sum() == 0:
+                        # Workaround for awkward issue #239
                         pass
                     elif counts_mask is not None and mask is not None:
                         data = data[counts_mask & mask]
