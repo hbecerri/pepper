@@ -8,6 +8,8 @@ Requires Python3 and the Python packages `coffea`, `parsl` and `h5py`
 
 > pip3 install --user coffea parsl h5py
 
+Unfortunately the naf nodes seem to have a problem with the LLVM bindings, so it is necessary to activate a CMSSW release before doing this install; the recommended release is CMSSW_10_2_4_patch1.
+
 The features of the framework are implemented as a Python package, which is inside the `pepper` directory. To use it, you can add the path to where you downloaded the repository to the `PYTHONPATH` variable
 
 > git clone \<repository url\> pepper
