@@ -1,3 +1,4 @@
+import os
 import sys
 from functools import partial
 from collections import namedtuple
@@ -101,7 +102,7 @@ class ProcessorTTbarLL(pepper.Processor):
 
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
-        self.reco_random_seed = np.random.SeedSequence()
+        self.reco_random_seed = self._load_reco_seed()
         if "reco_info_file" in self.config:
             self.reco_info_filepath = self.config["reco_info_file"]
         elif self.config["reco_algorithm"] is not None:
@@ -152,6 +153,19 @@ class ProcessorTTbarLL(pepper.Processor):
                         "crosssection_uncertainty")
 
         # TODO: Check other config variables if necessary
+
+    def _load_reco_seed(self):
+        if ("reco_seed_file" in self.config
+                and os.path.exists(self.config["reco_seed_file"])):
+            with open(self.config["reco_seed_file"]) as f:
+                entropy = int(f.read())
+                reco_random_seed = np.random.SeedSequence(entropy)
+        else:
+            reco_random_seed = np.random.SeedSequence()
+            if "reco_seed_file" in self.config:
+                with open(self.config["reco_seed_file"], "w") as f:
+                    f.write(str(reco_random_seed.entropy))
+        return reco_random_seed
 
     def process_selection(self, selector, dsname, is_mc, filler):
         if dsname.startswith("TTTo"):

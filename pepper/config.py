@@ -364,7 +364,7 @@ class Config(object):
             self._cache[key] = dy_sf
             return dy_sf
         elif key in ("reco_info_file", "store", "lumimask",
-                     "mc_lumifactors"):
+                     "mc_lumifactors", "reco_seed_file"):
             self._cache[key] = self._get_path(key)
             return self._cache[key]
 
