@@ -119,6 +119,10 @@ class ProcessorTTbarLL(pepper.Processor):
     def _check_config_integrity(config):
         cls = ProcessorTTbarLL
         super(cls, cls)._check_config_integrity(config)
+
+        # Skip if no systematics, as currently only checking syst configs
+        if not config["compute_systematics"]:
+            return
         inv_datasets_for_systematics = {}
         dataset_for_systematics = config["dataset_for_systematics"]
         for sysds, (replaceds, variation) in dataset_for_systematics.items():
