@@ -32,7 +32,7 @@
     	[
 	    "$DATADIR/scale_factors/DeepJet_102XSF_WP_V1.csv",
 	    "$DATADIR/scale_factors/deepjet_medium_efficiency.root"
-	]
+    	]
     ],
     "jet_correction": [
         "$DATADIR/scale_factors/Autumn18_V19_MC_L1FastJet_AK4PFchs.txt",

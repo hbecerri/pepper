@@ -1,6 +1,5 @@
 from pepper.accumulator import PackedSelectionAccumulator
 from pepper.accumulator import ArrayAccumulator
-from pepper.btagging import BTagWeighter
 from pepper.hist_defns import HistDefinition
 from pepper import datasets
 from pepper.lazytable import LazyTable
@@ -11,13 +10,14 @@ from pepper.selector import Selector
 from pepper.kinreco import sonnenschein
 from pepper.betchart_kinreco import betchart
 from pepper.config import Config
+from pepper.config_ttbarll import ConfigTTbarLL
 from pepper.processor import Processor
 from pepper.processor_ttbarll import ProcessorTTbarLL
+from pepper import scale_factors
 
 __all__ = [
     "PackedSelectionAccumulator",
     "ArrayAccumulator",
-    "BTagWeighter",
     "HistDefinition",
     "datasets",
     "LazyTable",
@@ -28,6 +28,8 @@ __all__ = [
     "sonnenschein",
     "betchart",
     "Config",
+    "ConfigTTbarLL",
     "Processor",
     "ProcessorTTbarLL",
+    "scale_factors"
 ]

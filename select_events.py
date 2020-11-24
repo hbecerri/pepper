@@ -60,7 +60,7 @@ logger.addHandler(logging.StreamHandler())
 if args.debug:
     logger.setLevel(logging.DEBUG)
 
-config = pepper.Config(args.config)
+config = pepper.ConfigTTbarLL(args.config)
 store = config["store"]
 
 

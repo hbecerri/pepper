@@ -809,7 +809,7 @@ class ProcessorTTbarLL(pepper.Processor):
             raise pepper.config.ConfigError(
                 "Invalid tagger name: {}".format(tagger))
         year = self.config["year"]
-        wptuple = pepper.btagging.BTAG_WP_CUTS[tagger][year]
+        wptuple = pepper.scale_factors.BTAG_WP_CUTS[tagger][year]
         if not hasattr(wptuple, wp):
             raise pepper.config.ConfigError(
                 "Invalid working point \"{}\" for {} in year {}".format(
