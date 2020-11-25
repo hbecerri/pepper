@@ -213,7 +213,7 @@ class ProcessorTTbarLL(pepper.Processor):
 
         # Do normal, no-variation run
         self.process_selection_jet_part(
-            selector, is_mc, self.get_jetmet_nominal_arg(), dsname)
+            selector, is_mc, self.get_jetmet_nominal_arg(), dsname, filler)
         logger.debug("Selection done")
 
     def get_jetmet_variation_args(self):
@@ -252,7 +252,7 @@ class ProcessorTTbarLL(pepper.Processor):
         else:
             return VariationArg(None, jer=None)
 
-    def process_selection_jet_part(self, selector, is_mc, variation, dsname):
+    def process_selection_jet_part(self, selector, is_mc, variation, dsname, filler):
         logger.debug(f"Running jet_part with variation {variation.name}")
         if is_mc:
             selector.set_multiple_columns(partial(
@@ -260,6 +260,7 @@ class ProcessorTTbarLL(pepper.Processor):
         selector.set_column(self.build_jet_column, "Jet")
         selector.set_column(partial(self.build_met_column, variation.junc,
                                     variation=variation.met), "MET")
+        selector.set_multiple_columns(partial(self.drellyan_sf_columns, filler))
         if self.drellyan_sf is not None and is_mc:
             self.apply_dy_sfs(dsname, selector)
         selector.add_cut(self.has_jets, "#Jets >= %d"
@@ -894,6 +895,10 @@ class ProcessorTTbarLL(pepper.Processor):
             ones = np.ones(selector.num_selected)
             selector.set_systematic("DYsf", ones, ones)
 
+    def drellyan_sf_columns(self, data, filler):
+        #Dummy function, overwritten when computing DY SFs
+        return {}
+
     def in_hem1516(self, phi, eta):
         return ((-3.0 < eta) & (eta < -1.3) & (-1.57 < phi) & (phi < -0.87))
 
@@ -1021,6 +1026,9 @@ class ProcessorTTbarLL(pepper.Processor):
         b0, b1 = pepper.misc.pairswhere(btags.counts > 1,
                                         btags.distincts(),
                                         btags.cross(jetsnob))
+        b0, b1 = pepper.misc.pairswhere(btags.counts == 0,
+                                        jetsnob.distincts(),
+                                        b0.cross(b1))
         bs = pepper.misc.concatenate([b0, b1], axis=1)
         bbars = pepper.misc.concatenate([b1, b0], axis=1)
         alb = bs.cross(antilep)
