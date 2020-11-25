@@ -1,167 +1,22 @@
 #!/usr/bin/env python3
 
-import numpy as np
-import awkward
-import uproot
 import json
 import os
-import coffea
-from coffea.lookup_tools.extractor import file_converters
 import logging
-import warnings
+import collections
 
 import pepper
-from pepper import btagging, HistDefinition
 
 
 logger = logging.getLogger(__name__)
-
-
-class ScaleFactors(object):
-    def __init__(self, factors, factors_up, factors_down, bins):
-        if "variation" in bins:
-            raise ValueError("'variation' must not be in bins")
-        self._factors = factors
-        self._factors_up = factors_up
-        self._factors_down = factors_down
-        self._bins = bins
-
-    @staticmethod
-    def _setoverflow(factors, value):
-        for i in range(factors.ndim):
-            factors[tuple([slice(None)] * i + [slice(0, 1)])] = 1
-            factors[tuple([slice(None)] * i + [slice(-1, None)])] = 1
-
-    @classmethod
-    def from_hist(cls, hist, dimlabels=None):
-        factors, edges = hist.allnumpy()
-        if isinstance(edges, list):
-            # In 2D and 3D case, edges are placed in a len 1 list
-            edges = edges[0]
-        if not isinstance(edges, tuple):
-            # In 1D case, edges aren't wrapped in a tuple
-            edges = (edges,)
-        if dimlabels is None:
-            dimlabels = []
-            for attr in ("_fXaxis", "_fYaxis", "_fZaxis")[:len(edges)]:
-                dimlabels.append(getattr(hist, attr)._fName)
-        sigmas = np.sqrt(hist.allvariances)
-        factors_up = factors + sigmas
-        factors_down = factors - sigmas
-        if len(edges) != len(dimlabels):
-            raise ValueError("Got {} dimenions but {} labels"
-                             .format(len(edges), len(dimlabels)))
-        # Set overflow bins to 1 so that events outside the histogram
-        # get scaled by 1
-        cls._setoverflow(factors, 1)
-        if factors_up is not None:
-            cls._setoverflow(factors_up, 1)
-        if factors_down is not None:
-            cls._setoverflow(factors_down, 1)
-        bins = dict(zip(dimlabels, edges))
-        return cls(factors, factors_up, factors_down, bins)
-
-    def __call__(self, variation="central", **kwargs):
-        if variation not in ("central", "up", "down"):
-            raise ValueError("variation must be one of 'central', 'up', "
-                             "'down'")
-        factors = self._factors
-        if variation == "up":
-            factors = self._factors_up
-        elif variation == "down":
-            factors = self._factors_down
-
-        binIdxs = []
-        counts = None
-        for key, bins_for_key in self._bins.items():
-            try:
-                val = kwargs[key]
-            except KeyError:
-                raise ValueError("Scale factor depends on \"{}\" but no such "
-                                 "argument was not provided"
-                                 .format(key))
-            if isinstance(val, awkward.JaggedArray):
-                counts = val.counts
-                val = val.flatten()
-            binIdxs.append(np.digitize(val, bins_for_key) - 1)
-        ret = factors[tuple(binIdxs)]
-        if counts is not None:
-            ret = awkward.JaggedArray.fromcounts(counts, ret)
-        return ret
-
-
-def get_evaluator(filename, fileform, filetype=None):
-    if filetype is None:
-        filetype = "default"
-    converter = file_converters[fileform][filetype]
-    extractor = coffea.lookup_tools.extractor()
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning)
-        for key, value in converter(filename).items():
-            extractor.add_weight_set(key[0], key[1], value)
-    extractor.finalize()
-    return extractor.make_evaluator()
-
-
-class PileupWeighter:
-    def __init__(self, rootfile):
-        self.central = {}
-        self.up = {}
-        self.down = {}
-
-        self.upsuffix = "_up"
-        self.downsuffix = "_down"
-        for key, hist in rootfile.items():
-            key = key.decode().rsplit(";", 1)[0]
-            sf = ScaleFactors.from_hist(hist, ["ntrueint"])
-            if key.endswith(self.upsuffix):
-                self.up[key[:-len(self.upsuffix)]] = sf
-            elif key.endswith(self.downsuffix):
-                self.down[key[:-len(self.downsuffix)]] = sf
-            else:
-                self.central[key] = sf
-        if (self.central.keys() != self.up.keys()
-                or self.central.keys() != self.down.keys()):
-            raise ValueError(
-                "Missing up/down or central weights for some datasets")
-
-    def __call__(self, dsname, ntrueint, variation="central"):
-        # If all_datasets is present, use that instead of per-dataset weights
-        if "all_datasets" in self.central:
-            key = "all_datasets"
-        else:
-            key = dsname
-        if variation == "up":
-            return self.up[key](ntrueint=ntrueint)
-        elif variation == "down":
-            return self.down[key](ntrueint=ntrueint)
-        elif variation == "central":
-            return self.central[key](ntrueint=ntrueint)
-        else:
-            raise ValueError("variation must be either 'up', 'down' or "
-                             f"'central', not {variation}")
-
-
-class TopPtWeigter():
-    # Top pt reweighting according to
-    # https://twiki.cern.ch/twiki/bin/viewauth/CMS/TopPtReweighting
-    def __init__(self, scale, a, b):
-        self.scale = scale
-        self.a = a
-        self.b = b
-
-    def __call__(self, toppt, antitoppt):
-        sf = np.exp(self.a + self.b * toppt)
-        antisf = np.exp(self.a + self.b * antitoppt)
-        return np.sqrt(sf ** 2 * antisf ** 2) * self.scale
 
 
 class ConfigError(RuntimeError):
     pass
 
 
-class Config(object):
-    def __init__(self, path_or_file, textparser=json.load):
+class Config(collections.MutableMapping):
+    def __init__(self, path_or_file, textparser=json.load, cwd="."):
         """Initialize the configuration.
 
         Arguments:
@@ -169,6 +24,9 @@ class Config(object):
                         or a file-like object of it
         textparser -- Callable to be used to parse the text contained in
                       path_or_file
+        cwd -- A path to use as the working directory for relative paths in the
+               config. The actual working directory of the process might change
+               e.g. after submitting to HTCondor
         """
         if isinstance(path_or_file, str):
             with open(path_or_file) as f:
@@ -176,13 +34,18 @@ class Config(object):
                 path = path_or_file
         else:
             self._config = textparser(f)
-            if hasattr(f, "name"):
+            try:
                 path = f.name
-            else:
-                path = "unknown"
+            except AttributeError:
+                path = None
         self._cache = {}
-        self._deleted = set()
-        self._config["configdir"] = os.path.dirname(os.path.realpath(path))
+        self._overwritten = set()
+        if path is not None:
+            self._config["configdir"] = os.path.dirname(os.path.realpath(path))
+        else:
+            self._config["configdir"] = None
+        self._textparser = textparser
+        self._cwd = cwd
 
         logger.debug("Configuration read")
         if "datadir" in self._config:
@@ -192,40 +55,21 @@ class Config(object):
         if "store" in self._config:
             logger.debug(f"store: {self._config['store']}")
 
-    def _get_scalefactors(self, key, dimlabels):
-        sfs = []
-        for sfpath in self._config[key]:
-            if not isinstance(sfpath, list) or len(sfpath) < 2:
-                raise ConfigError("scale factors needs to be list of"
-                                  " at least 2-element-lists in form of"
-                                  " [rootfile, histname, uncert1, uncert2]")
-            fpath = self._replace_special_vars(sfpath[0])
-            rootf = uproot.open(fpath)
-            hist = rootf[sfpath[1]]
-            if len(sfpath) > 2:
-                sumw2 = np.zeros(len(hist._fSumw2))
-                for path in sfpath[2:]:
-                    hist_err = rootf[path]
-                    sumw2 += hist_err.allvariances.T.flatten() ** 2
-                hist._fSumw2 = sumw2
-            sf = ScaleFactors.from_hist(hist, dimlabels)
-            sfs.append(sf)
-        return sfs
-
-    def _replace_special_vars(self, s):
-        SPECIAL_VARS = {
+        self.special_vars = {
             "$DATADIR": "datadir",
             "$CONFDIR": "configdir",
             "$STOREDIR": "store",
         }
+        self.behaviors = {}
 
+    def _replace_special_vars(self, s):
         if isinstance(s, dict):
             return {self._replace_special_vars(key):
                     self._replace_special_vars(val) for key, val in s.items()}
         elif isinstance(s, list):
             return [self._replace_special_vars(item) for item in s]
         elif isinstance(s, str):
-            for name, configvar in SPECIAL_VARS.items():
+            for name, configvar in self.special_vars.items():
                 if name in s:
                     if configvar not in self._config:
                         raise ConfigError(
@@ -234,139 +78,31 @@ class Config(object):
                     s = s.replace(name, self._config[configvar])
         return s
 
-    def _get_path(self, key):
-        return os.path.realpath(self._replace_special_vars(self._config[key]))
+    def _get_path(self, value):
+        value = self._replace_special_vars(value)
+        if not os.path.isabs(value):
+            value = os.path.join(self._cwd, value)
+        return os.path.realpath(value)
 
-    def _get_maybe_external(self, key):
-        data = self._config[key]
-        if isinstance(data, str):
-            data = self._replace_special_vars(data)
-            with open(data) as f:
-                data = json.load(f)
-        return data
+    def _get_maybe_external(self, value):
+        if isinstance(value, str):
+            with open(self._get_path(value)) as f:
+                value = self._textparser(f)
+        return value
 
     def _get(self, key):
-        if key in self._deleted:
-            raise KeyError(key)
+        if key in self._overwritten:
+            return self._config[key]
         if key in self._cache:
             return self._cache[key]
 
         if key not in self._config:
-            raise ConfigError("\"{}\" not specified in config".format(key))
+            raise KeyError(key)
 
-        if key == "year":
-            self._cache["year"] = str(self._config[key])
-            if self._cache["year"] not in ("2016", "2017", "2018"):
-                raise ConfigError(
-                    "Invalid year {}".format(self._cache["year"]))
-            return self._cache["year"]
-        elif key == "top_pt_reweighting":
-            opts = self._config["top_pt_reweighting"]
-            if not isinstance(opts, list) or len(opts) != 3:
-                raise ConfigError(
-                    "top_pt_reweighting must be of shape [scale, a, b]")
-            self._cache[key] = TopPtWeigter(*opts)
-            return self._cache[key]
-        elif key == "pileup_reweighting":
-            path = self._config["pileup_reweighting"]
-            path = self._replace_special_vars(path)
-            with uproot.open(path) as f:
-                self._cache[key] = PileupWeighter(f)
-            return self._cache[key]
-        elif key == "electron_sf":
-            self._cache["electron_sf"] = self._get_scalefactors("electron_sf",
-                                                                ["eta", "pt"])
-            return self._cache["electron_sf"]
-        elif key == "muon_sf":
-            self._cache["muon_sf"] = self._get_scalefactors("muon_sf",
-                                                            ["pt", "abseta"])
-            return self._cache["muon_sf"]
-        elif key == "btag_sf":
-            weighters = []
-            tagger = self["btag"].split(":")[0]
-            year = self["year"]
-            for weighter_paths in self._config[key]:
-                paths = [self._replace_special_vars(path)
-                         for path in weighter_paths]
-                btagweighter = btagging.BTagWeighter(paths[0],
-                                                     paths[1],
-                                                     tagger,
-                                                     year)
-                weighters.append(btagweighter)
-            self._cache[key] = weighters
-            return weighters
-        elif key == "jet_correction":
-            evaluators = {}
-            for path in self._config[key]:
-                path = self._replace_special_vars(path)
-                evaluators.update(get_evaluator(path, "txt", "jec"))
-            fjc = coffea.jetmet_tools.FactorizedJetCorrector(**evaluators)
-            self._cache[key] = fjc
-            return fjc
-        elif key == "jet_uncertainty":
-            path = self._replace_special_vars(self._config[key])
-            evaluator = get_evaluator(path, "txt", "junc")
-            junc = coffea.jetmet_tools.JetCorrectionUncertainty(**evaluator)
-            self._cache[key] = junc
-            return junc
-        elif key == "jet_resolution":
-            path = self._replace_special_vars(self._config[key])
-            evaluator = get_evaluator(path, "txt", "jr")
-            jer = coffea.jetmet_tools.JetResolution(**evaluator)
-            self._cache[key] = jer
-            return jer
-        elif key == "jet_ressf":
-            path = self._replace_special_vars(self._config[key])
-            evaluator = get_evaluator(path, "txt", "jersf")
-            jersf = coffea.jetmet_tools.JetResolutionScaleFactor(**evaluator)
-            self._cache[key] = jersf
-            return jersf
-        elif key == "mc_lumifactors":
-            factors = self._get_maybe_external(key)
-            if not isinstance(factors, dict):
-                raise ConfigError("mc_lumifactors must eiter be dict or a path"
-                                  " to JSON file containing a dict")
-            self._cache[key] = factors
-            return factors
-        elif key == "crosssection_uncertainty":
-            uncerts = self._get_maybe_external(key)
-            if not isinstance(uncerts, dict):
-                raise ConfigError("crosssection_uncertainty must either be "
-                                  "dict or a path to JSON file containing a "
-                                  "dict")
-            self._cache[key] = uncerts
-            return uncerts
-        elif key == "hists":
-            hists = self._get_maybe_external(key)
-            if not isinstance(hists, dict):
-                raise ConfigError(f"{key} must either be "
-                                  "dict or a path to JSON file containing a "
-                                  "dict")
-            hists = {k: HistDefinition(c) for k, c in hists.items()}
-            self._cache[key] = hists
-            return hists
-        elif key == "drellyan_sf":
-            if isinstance(self._config[key], list):
-                path, histname = self._config[key]
-                path = self._replace_special_vars(path)
-                with uproot.open(path) as f:
-                    hist = f[histname]
-                dy_sf = ScaleFactors.from_hist(hist)
-            else:
-                path = self._replace_special_vars(self._config[key])
-                with open(path) as f:
-                    data = json.load(f)
-                dy_sf = ScaleFactors(
-                    bins=data["bins"],
-                    factors=np.array(data["factors"]),
-                    factors_up=np.array(data["factors_up"]),
-                    factors_down=np.array(data["factors_down"]))
-            self._cache[key] = dy_sf
-            return dy_sf
-        elif key in ("reco_info_file", "store", "lumimask",
-                     "mc_lumifactors"):
-            self._cache[key] = self._get_path(key)
-            return self._cache[key]
+        if key in self.behaviors:
+            value = self.behaviors[key](self._config[key])
+            self._cache[key] = value
+            return value
 
         return self._replace_special_vars(self._config[key])
 
@@ -377,20 +113,33 @@ class Config(object):
             return self._get(key)
 
     def __contains__(self, key):
-        return ((key not in self._deleted and key in self._config)
-                or key in self._cache)
+        return key in self._config
 
     def __setitem__(self, key, value):
-        self._cache[key] = value
-        self._deleted.discard(key)
+        self._config[key] = value
+        self._overwritten.add(key)
 
     def __delitem__(self, key):
-        if key not in self or key in self._deleted:
-            raise KeyError(key)
         if key in self._cache:
             del self._cache[key]
         if key in self._config:
-            self._deleted.add(key)
+            del self._config[key]
+        else:
+            raise KeyError(key)
+        self._overwritten.discard(key)
+
+    def __iter__(self):
+        for key in self._config:
+            yield key
+
+    def __len__(self):
+        return len(self._config)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Do not pickle the cache
+        state["_cache"] = {}
+        return state
 
     def get_datasets(self, include=None, exclude=None, dstype="any"):
         """Helper method to access mc_datasets and exp_datasets more easily.

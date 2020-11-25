@@ -168,7 +168,7 @@ class Selector():
         for weightname, factors in weight.items():
             if isinstance(factors, tuple):
                 factor = factors[0]
-                updown = (factors[1], factors[2])
+                updown = factors[1:]
             else:
                 factor = factors
                 updown = None
@@ -190,17 +190,59 @@ class Selector():
             padded[self._cur_sel] = data
         return padded
 
-    def set_systematic(self, name, up, down, mask=None):
-        """Set the systematic up/down variation for a systematic given by
-        `name`. `mask` is an array of bools and indicates, which events the
-        systematic applies to. If `None`, the systematic applies to all events.
-        `up` and `down` must be given relative to the central value.
+    def set_systematic(self, name, *values, mask=None, scheme=None):
+        """Set the systematic up/down variation for a systematic. These will be
+        found in the systematics table.
+
+        Arguments:
+        name -- Name of the systematic to set.
+        values -- Tuple of arrays. Each array gives the ratio of a systematic
+                  variation and the central value
+        mask -- An array of bools which indicates to which events the
+                systematic applies to.
+                If `None`, the systematic applies to currently selected events.
+        scheme -- One of 'updown', 'numeric', 'single' or None. Determines the
+                  column (of the systematics table) the values will appear in.
+                  'updown': Requires `values` to have length 2. Column will
+                  be `name` + _up and _down.
+                  'numeric' column will be `name` + _i where i is determined by
+                  enumerating `values`
+                  'single': Requires `values` to have length 1. Column will be
+                  `name`
+                  None: scheme will be decided based on `values` length, where
+                  numeric will be used for lengths > 2.
         """
         if name == "weight":
             raise ValueError("The name of a systematic can't be 'weight'")
-        self.systematics[name + "_up"] = self._pad_npcolumndata(up, 1., mask)
-        self.systematics[name + "_down"] = self._pad_npcolumndata(
-            down, 1., mask)
+        if scheme is None:
+            if len(values) == 1:
+                scheme = "single"
+            elif len(values) == 2:
+                scheme = "updown"
+            else:
+                scheme = "numeric"
+        if scheme == "updown":
+            if len(values) != 2:
+                raise ValueError("updown scheme requires only two systematic "
+                                 f"values but got {len(values)}")
+            up, down = values
+            self.systematics[name + "_up"] = self._pad_npcolumndata(
+                up, 1., mask)
+            self.systematics[name + "_down"] = self._pad_npcolumndata(
+                down, 1., mask)
+        elif scheme == "numeric":
+            for i, value in enumerate(values):
+                self.systematics[f"{name}_{i}"] = self._pad_npcolumndata(
+                    value, 1., mask)
+        elif scheme == "single":
+            if len(values) != 1:
+                raise ValueError("single scheme requires only one systematic "
+                                 f"values but got {len(values)}")
+            self.systematics[name] = self._pad_npcolumndata(
+                values[0], 1., mask)
+        else:
+            raise ValueError("scheme needs to be either 'updown', 'numeric' or"
+                             f" 'single', got {scheme}")
 
     def modify_weight(self, name, factor=None, updown=None, mask=None):
         """Modify the event weight. The weight will be multiplied by `factor`.
@@ -214,7 +256,10 @@ class Selector():
             factor = self._pad_npcolumndata(factor, 1, mask)
             self.systematics["weight"] = self.systematics["weight"] * factor
         if updown is not None:
-            self.set_systematic(name, updown[0], updown[1], mask)
+            if not isinstance(updown, tuple):
+                # Check for type to make sure we are not unpacking a huge array
+                raise ValueError("updown needs to be tuple")
+            self.set_systematic(name, *updown, mask=mask)
 
     def _process_column(self, column, all_cuts, table):
         if callable(column):

@@ -1,3 +1,4 @@
+import os
 import sys
 from functools import partial
 from collections import namedtuple
@@ -101,7 +102,7 @@ class ProcessorTTbarLL(pepper.Processor):
 
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
-        self.reco_random_seed = np.random.SeedSequence()
+        self.reco_random_seed = self._load_reco_seed()
         if "reco_info_file" in self.config:
             self.reco_info_filepath = self.config["reco_info_file"]
         elif self.config["reco_algorithm"] is not None:
@@ -118,6 +119,10 @@ class ProcessorTTbarLL(pepper.Processor):
     def _check_config_integrity(config):
         cls = ProcessorTTbarLL
         super(cls, cls)._check_config_integrity(config)
+
+        # Skip if no systematics, as currently only checking syst configs
+        if not config["compute_systematics"]:
+            return
         inv_datasets_for_systematics = {}
         dataset_for_systematics = config["dataset_for_systematics"]
         for sysds, (replaceds, variation) in dataset_for_systematics.items():
@@ -152,6 +157,19 @@ class ProcessorTTbarLL(pepper.Processor):
                         "crosssection_uncertainty")
 
         # TODO: Check other config variables if necessary
+
+    def _load_reco_seed(self):
+        if ("reco_seed_file" in self.config
+                and os.path.exists(self.config["reco_seed_file"])):
+            with open(self.config["reco_seed_file"]) as f:
+                entropy = int(f.read())
+                reco_random_seed = np.random.SeedSequence(entropy)
+        else:
+            reco_random_seed = np.random.SeedSequence()
+            if "reco_seed_file" in self.config:
+                with open(self.config["reco_seed_file"], "w") as f:
+                    f.write(str(reco_random_seed.entropy))
+        return reco_random_seed
 
     def process_selection(self, selector, dsname, is_mc, filler):
         if dsname.startswith("TTTo"):
@@ -269,6 +287,8 @@ class ProcessorTTbarLL(pepper.Processor):
                 or self.config["hem_cut_if_jet"]):
             selector.add_cut(self.hem_cut, "HEM cut")
         selector.add_cut(self.jet_pt_requirement, "Jet pt req")
+        if is_mc and self.config["compute_systematics"]:
+            self.scale_systematics_for_btag(selector, variation, dsname)
         selector.add_cut(partial(self.btag_cut, is_mc), "At least %d btag"
                          % self.config["num_atleast_btagged"])
         selector.add_cut(self.met_requirement, "MET > %d GeV"
@@ -790,7 +810,7 @@ class ProcessorTTbarLL(pepper.Processor):
             raise pepper.config.ConfigError(
                 "Invalid tagger name: {}".format(tagger))
         year = self.config["year"]
-        wptuple = pepper.btagging.BTAG_WP_CUTS[tagger][year]
+        wptuple = pepper.scale_factors.BTAG_WP_CUTS[tagger][year]
         if not hasattr(wptuple, wp):
             raise pepper.config.ConfigError(
                 "Invalid working point \"{}\" for {} in year {}".format(
@@ -978,7 +998,7 @@ class ProcessorTTbarLL(pepper.Processor):
             n[mask] += (pt_min < data["Jet"].pt[mask, i]).astype(int)
         return n >= self.config["jet_pt_num_satisfied"]
 
-    def compute_weight_btag(self, data):
+    def compute_weight_btag(self, data, efficiency="central", never_sys=False):
         jets = data["Jet"]
         wp = self.config["btag"].split(":", 1)[1]
         flav = jets["hadronFlavour"]
@@ -987,18 +1007,51 @@ class ProcessorTTbarLL(pepper.Processor):
         discr = jets["btag"]
         weight = {}
         for i, weighter in enumerate(self.btagweighters):
-            central = weighter(wp, flav, eta, pt, discr, "central")
-            if self.config["compute_systematics"]:
-                light_up = weighter(wp, flav, eta, pt, discr, "light up")
-                light_down = weighter(wp, flav, eta, pt, discr, "light down")
-                up = weighter(wp, flav, eta, pt, discr, "heavy up")
-                down = weighter(wp, flav, eta, pt, discr, "heavy down")
+            central = weighter(wp, flav, eta, pt, discr, "central", efficiency)
+            if not never_sys and self.config["compute_systematics"]:
+                light_up = weighter(
+                    wp, flav, eta, pt, discr, "light up", efficiency)
+                light_down = weighter(
+                    wp, flav, eta, pt, discr, "light down", efficiency)
+                up = weighter(
+                    wp, flav, eta, pt, discr, "heavy up", efficiency)
+                down = weighter(
+                    wp, flav, eta, pt, discr, "heavy down", efficiency)
                 weight[f"btagsf{i}"] = (central, up / central, down / central)
                 weight[f"btagsf{i}light"] = (
                     None, light_up / central, light_down / central)
             else:
                 weight[f"btagsf{i}"] = central
         return weight
+
+    def scale_systematics_for_btag(self, selector, variation, dsname):
+        """Modifies factors in the systematic table to account for differences
+        in b-tag efficiencies. This is only done for variations the efficiency
+        ROOT file contains a histogram with the name of the variation."""
+        available = set.intersection(
+            *(w.available_efficiencies for w in self.btagweighters))
+        data = selector.masked
+        systematics = selector.masked_systematics
+        central = np.prod(list(self.compute_weight_btag(
+            data, never_sys=True).values()), axis=0)
+        if variation == self.get_jetmet_nominal_arg():
+            if dsname in self.config["dataset_for_systematics"]:
+                name = self.config["dataset_for_systematics"][dsname][1]
+                systematics = awkward.Table({name: systematics["weight"]})
+            for name in systematics.columns:
+                if name == "weight":
+                    continue
+                if name not in available:
+                    continue
+                sys = systematics[name]
+                varied_sf = np.prod(list(self.compute_weight_btag(
+                    data, name, True).values()), axis=0)
+                selector.set_systematic(name, sys / central * varied_sf)
+        elif variation.name in available:
+            varied_sf = np.prod(list(self.compute_weight_btag(
+                data, variation.name, True).values()), axis=0)
+            selector.modify_weight("Btag eff variation dependence",
+                                   1 / central * varied_sf)
 
     def btag_cut(self, is_mc, data):
         num_btagged = data["Jet"]["btagged"].sum()
