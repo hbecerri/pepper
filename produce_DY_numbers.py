@@ -28,7 +28,69 @@ else:
             return cls.__bases__[0].__new__(cls, name, junc, jer, met)
 
 
+class DYOutputFiller(pepper.OutputFiller):
+    def fill_cutflows(self, data, systematics, cut):
+        accumulator = self.output["cutflows"]
+        if systematics is not None:
+            weight = systematics["weight"].flatten()
+        else:
+            weight = np.ones(data.size)
+        logger.info("Filling cutflow. Current event count: " + str(weight.sum()))
+        self.fill_accumulator(accumulator, cut, data, weights)
+        accumulator = self.output["cutflow_errs"]
+        if systematics is not None:
+            weight = (systematics["weight"].flatten())**2
+        else:
+            weight = np.ones(data.size)
+        self.fill_accumulator(accumulator, cut, data, weights)
+
+    def fill_accumulator(self, accumulator, cut, data, weights):
+        if "all" not in accumulator:
+            accumulator["all"] = coffea.processor.defaultdict_accumulator(
+                partial(coffea.processor.defaultdict_accumulator, int))
+        if cut not in accumulator["all"][self.dsname]:
+            accumulator["all"][self.dsname][cut] = weight.sum()
+        for ch in self.channels:
+            if ch not in accumulator:
+                accumulator[ch] = coffea.processor.defaultdict_accumulator(
+                    partial(coffea.processor.defaultdict_accumulator, int))
+            if cut not in accumulator[ch][self.dsname]:
+                accumulator[ch][self.dsname][cut] = weight[data[ch]].sum()
+
+
 class DYprocessor(pepper.ProcessorTTbarLL):
+    @property
+    def accumulator(self):
+        self._accumulator = coffea.processor.dict_accumulator({
+            "hists": coffea.processor.dict_accumulator(),
+            "cutflows": coffea.processor.dict_accumulator(),
+            "cutflow_errs": coffea.processor.dict_accumulator()
+        })
+        return self._accumulator
+
+    def setup_outputfiller(self, dsname, is_mc):
+        output = self.accumulator.identity()
+        sys_enabled = self.config["compute_systematics"]
+
+        if dsname in self.config["dataset_for_systematics"]:
+            dsname_in_hist = self.config["dataset_for_systematics"][dsname][0]
+            sys_overwrite = self.config["dataset_for_systematics"][dsname][1]
+        else:
+            dsname_in_hist = dsname
+            sys_overwrite = None
+
+        if "cuts_to_plot" in self.config:
+            cuts_to_plot=self.config["cuts_to_plot"]
+        else:
+            cuts_to_plot=None
+
+        filler = DYOutputFiller(
+            output, self.hists, is_mc, dsname, dsname_in_hist, sys_enabled,
+            sys_overwrite=sys_overwrite, copy_nominal=self.copy_nominal,
+            cuts_to_plot=cuts_to_plot)
+
+        return filler
+
 
     def z_window(self, data):
         # Don't apply Z window cut, as we'll add columns inside and
@@ -250,8 +312,9 @@ if args.test:
                    list(hists_injson.values())], f, indent=4)
 
     # Save cutflows
-    coffea.util.save(output["cutflows"],
+    coffea.util.save({"cutflow": output["cutflows"], "errs": output["cutflow_errs"]},
                      os.path.join(args.histdir, "cutflows.coffea"))
 else:
-    coffea.util.save(output["cutflows"], "DY_SF_cutflows.coffea")
+    coffea.util.save({"cutflow": output["cutflows"], "errs": output["cutflow_errs"]},
+                     "DY_SF_cutflows.coffea")
 print("Done!")
