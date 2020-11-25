@@ -228,9 +228,15 @@ class Processor(coffea.processor.ProcessorABC):
             dsname_in_hist = dsname
             sys_overwrite = None
 
+        if "cuts_to_plot" in self.config:
+            cuts_to_plot=self.config["cuts_to_plot"]
+        else:
+            cuts_to_plot=None
+
         filler = OutputFiller(
             output, self.hists, is_mc, dsname, dsname_in_hist, sys_enabled,
-            sys_overwrite=sys_overwrite, copy_nominal=self.copy_nominal)
+            sys_overwrite=sys_overwrite, copy_nominal=self.copy_nominal,
+            cuts_to_plot=cuts_to_plot)
 
         return filler
 

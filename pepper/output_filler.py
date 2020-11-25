@@ -20,7 +20,7 @@ class DummyOutputFiller():
 class OutputFiller():
     def __init__(self, output, hist_dict, is_mc, dsname, dsname_in_hist,
                  sys_enabled, sys_overwrite=None, channels=None,
-                 copy_nominal=None):
+                 copy_nominal=None, cuts_to_plot=None):
         self.output = output
         if hist_dict is None:
             self.hist_dict = {}
@@ -31,6 +31,7 @@ class OutputFiller():
         self.dsname_in_hist = dsname_in_hist
         self.sys_enabled = sys_enabled
         self.sys_overwrite = sys_overwrite
+        self.cuts_to_plot = cuts_to_plot
         if channels is None:
             self.channels = tuple()
         else:
@@ -41,6 +42,9 @@ class OutputFiller():
             self.copy_nominal = copy_nominal
 
     def fill_cutflows(self, data, systematics, cut):
+        if self.cuts_to_plot is not None:
+            if cut not in self.cuts_to_plot:
+                return
         accumulator = self.output["cutflows"]
         if systematics is not None:
             weight = systematics["weight"].flatten()
