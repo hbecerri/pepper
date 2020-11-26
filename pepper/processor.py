@@ -229,9 +229,9 @@ class Processor(coffea.processor.ProcessorABC):
             sys_overwrite = None
 
         if "cuts_to_plot" in self.config:
-            cuts_to_plot=self.config["cuts_to_plot"]
+            cuts_to_plot = self.config["cuts_to_plot"]
         else:
-            cuts_to_plot=None
+            cuts_to_plot = None
 
         filler = OutputFiller(
             output, self.hists, is_mc, dsname, dsname_in_hist, sys_enabled,

@@ -270,7 +270,8 @@ class ProcessorTTbarLL(pepper.Processor):
         else:
             return VariationArg(None, jer=None)
 
-    def process_selection_jet_part(self, selector, is_mc, variation, dsname, filler):
+    def process_selection_jet_part(self, selector, is_mc, variation, dsname,
+                                   filler):
         logger.debug(f"Running jet_part with variation {variation.name}")
         if is_mc:
             selector.set_multiple_columns(partial(
@@ -278,7 +279,8 @@ class ProcessorTTbarLL(pepper.Processor):
         selector.set_column(self.build_jet_column, "Jet")
         selector.set_column(partial(self.build_met_column, variation.junc,
                                     variation=variation.met), "MET")
-        selector.set_multiple_columns(partial(self.drellyan_sf_columns, filler))
+        selector.set_multiple_columns(
+            partial(self.drellyan_sf_columns, filler))
         if self.drellyan_sf is not None and is_mc:
             self.apply_dy_sfs(dsname, selector)
         selector.add_cut(self.has_jets, "#Jets >= %d"
@@ -916,7 +918,7 @@ class ProcessorTTbarLL(pepper.Processor):
             selector.set_systematic("DYsf", ones, ones)
 
     def drellyan_sf_columns(self, data, filler):
-        #Dummy function, overwritten when computing DY SFs
+        # Dummy function, overwritten when computing DY SFs
         return {}
 
     def in_hem1516(self, phi, eta):
