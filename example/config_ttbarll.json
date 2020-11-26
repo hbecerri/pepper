@@ -1,6 +1,6 @@
 {
     "year": "2018",
-    "datadir": "data",
+    "datadir": "data/2018",
     "store": "/pnfs/desy.de/cms/tier2/store",
     "blinding_denom": null,
     "compute_systematics": false,
