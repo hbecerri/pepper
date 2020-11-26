@@ -7,6 +7,7 @@ import json
 import logging
 from argparse import ArgumentParser
 import os
+from functools import partial
 
 import pepper
 
@@ -35,16 +36,17 @@ class DYOutputFiller(pepper.OutputFiller):
             weight = systematics["weight"].flatten()
         else:
             weight = np.ones(data.size)
-        logger.info("Filling cutflow. Current event count: " + str(weight.sum()))
-        self.fill_accumulator(accumulator, cut, data, weights)
+        logger.info("Filling cutflow. Current event count: "
+                    + str(weight.sum()))
+        self.fill_accumulator(accumulator, cut, data, weight)
         accumulator = self.output["cutflow_errs"]
         if systematics is not None:
             weight = (systematics["weight"].flatten())**2
         else:
             weight = np.ones(data.size)
-        self.fill_accumulator(accumulator, cut, data, weights)
+        self.fill_accumulator(accumulator, cut, data, weight)
 
-    def fill_accumulator(self, accumulator, cut, data, weights):
+    def fill_accumulator(self, accumulator, cut, data, weight):
         if "all" not in accumulator:
             accumulator["all"] = coffea.processor.defaultdict_accumulator(
                 partial(coffea.processor.defaultdict_accumulator, int))
@@ -80,9 +82,9 @@ class DYprocessor(pepper.ProcessorTTbarLL):
             sys_overwrite = None
 
         if "cuts_to_plot" in self.config:
-            cuts_to_plot=self.config["cuts_to_plot"]
+            cuts_to_plot = self.config["cuts_to_plot"]
         else:
-            cuts_to_plot=None
+            cuts_to_plot = None
 
         filler = DYOutputFiller(
             output, self.hists, is_mc, dsname, dsname_in_hist, sys_enabled,
@@ -90,7 +92,6 @@ class DYprocessor(pepper.ProcessorTTbarLL):
             cuts_to_plot=cuts_to_plot)
 
         return filler
-
 
     def z_window(self, data):
         # Don't apply Z window cut, as we'll add columns inside and
@@ -169,7 +170,7 @@ logger.addHandler(logging.StreamHandler())
 if args.debug:
     logger.setLevel(logging.DEBUG)
 
-config = pepper.Config(args.config)
+config = pepper.ConfigTTbarLL(args.config)
 store = config["store"]
 
 
@@ -312,9 +313,11 @@ if args.test:
                    list(hists_injson.values())], f, indent=4)
 
     # Save cutflows
-    coffea.util.save({"cutflow": output["cutflows"], "errs": output["cutflow_errs"]},
+    coffea.util.save({"cutflow": output["cutflows"],
+                      "errs": output["cutflow_errs"]},
                      os.path.join(args.histdir, "cutflows.coffea"))
 else:
-    coffea.util.save({"cutflow": output["cutflows"], "errs": output["cutflow_errs"]},
+    coffea.util.save({"cutflow": output["cutflows"],
+                      "errs": output["cutflow_errs"]},
                      "DY_SF_cutflows.coffea")
 print("Done!")
