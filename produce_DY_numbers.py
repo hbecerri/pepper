@@ -129,7 +129,8 @@ class DYprocessor(pepper.ProcessorTTbarLL):
         return np.full(data.size, True)
 
 
-parser = ArgumentParser(description="Select events from nanoAODs")
+parser = ArgumentParser(description="Run the DY processor to get the numbers "
+                        "needed for DY SF calculation")
 parser.add_argument("config", help="Path to a configuration file")
 parser.add_argument(
     "--eventdir", help="Path to event destination output directory. If not "
