@@ -1,6 +1,8 @@
 import os
 import json
 from argparse import ArgumentParser
+from tqdm import tqdm
+from pprint import pprint
 
 import parsl
 from parsl import python_app
@@ -9,33 +11,40 @@ import pepper
 
 
 @python_app
-def process_dir(sample_dir, d):
+def process_dir(dir, delete=False):
     import awkward
     import h5py
     import glob
     import os
-    deleted_files = []
-    processed_chunks = []
-    for in_file in glob.glob(os.path.join(sample_dir, d, "*.hdf5")):
-        remove = False
+    duplicate_files = []
+    corrupted_files = []
+    processed_chunks = set()
+    for in_file in glob.glob(os.path.join(dir, "*.hdf5")):
         try:
             with h5py.File(in_file, "r") as f:
                 g = awkward.hdf5(f)
-                if g['identifier'] in processed_chunks:
-                    remove = True
-                processed_chunks.append(g['identifier'])
-            if remove:
-                os.remove(in_file)
-                deleted_files.append(
-                    in_file[len(os.path.join(sample_dir, d)) + 1:])
+                identifier = g["identifier"]
         except OSError:
-            pass
-    return(deleted_files)
+            if delete:
+                os.remove(in_file)
+            else:
+                os.rename(in_file, in_file + ".corrupted")
+            corrupted_files.append(os.path.relpath(in_file, dir))
+            continue
+        if identifier in processed_chunks:
+            if delete:
+                os.remove(in_file)
+            else:
+                os.rename(in_file, in_file + ".duplicate")
+            duplicate_files.append(os.path.relpath(in_file, dir))
+        processed_chunks.add(identifier)
+    return duplicate_files, corrupted_files
 
 
 parser = ArgumentParser(
     description="Check if any of the samples in the event directory produced"
-    " by select_events.py are duplicated, and if so, delete the duplicates")
+    " by select_events.py are duplicated or corrupted, and if so, rename or "
+    "delete them")
 parser.add_argument("event_dir", help="Directory to check")
 parser.add_argument(
     "-c", "--condor", type=int, default=100, nargs="?", metavar="simul_jobs",
@@ -44,6 +53,12 @@ parser.add_argument(
     "-r", "--retries", type=int, help="Number of times to retry if there is "
     "exception in an HTCondor job. If not given, retry infinitely."
 )
+parser.add_argument(
+    "-o", "--offset", type=int, help="Skip the first <offset> directories",
+    default=0)
+parser.add_argument(
+    "-d", "--delete", action="store_true", help="Delete duplicate or corrupt "
+    "files instead of renaming them")
 parser.add_argument(
     "-p", "--parsl_config", help="JSON file holding a dictionary with the "
     "keys condor_init and condor_config. Former overwrites the enviroment "
@@ -67,11 +82,15 @@ else:
         args.condor, retries=args.retries)
 parsl.load(parsl_config)
 
-dirs = next(os.walk(sample_dir))[1]
-print("Number of sample directories to run over: ", len(dirs))
+dirs = next(os.walk(sample_dir))[1][args.offset:]
+print(f"Number of sample directories to run over: {len(dirs)}")
 
-results = {}
+futures = {}
 for d in dirs:
-    results[d] = process_dir(sample_dir, d)
+    futures[d] = process_dir(os.path.join(sample_dir, d), args.delete)
+results = {}
+for d, future in tqdm(futures.items()):
+    results[d] = future.result()
 
-print("Directories deleted: ", {d: res.result() for d, res in results.items()})
+print("Duplicate or corrupted files: ")
+pprint(results)
