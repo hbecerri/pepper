@@ -4,11 +4,11 @@ A python framework for analyzing NanoAODs. Easy to use and highly configurable.
 Currently focusing on <img src="https://latex.codecogs.com/gif.latex?\mathrm{t\bar{t}}\rightarrow\mathrm{ll\nu\nu}" />.
 
 ## Installation
-Requires Python3 and the Python packages `coffea` version 0.6.44, `parsl` and `h5py`
+Requires Python3 and the Python packages `coffea` version 0.6.44, `uproot3`, `awkward0.x`, `parsl` and `h5py`
 
-> pip3 install --user coffea==0.6.44 parsl h5py
+> pip3 install --user coffea==0.6.44 "awkward<1.0.0" "uproot<4.0.0" parsl h5py
 
-Unfortunately the naf nodes seem to have a problem with the LLVM bindings, so it is necessary to activate a CMSSW release before doing this install; the recommended release is CMSSW_10_2_4_patch1.
+Pepper has been tested on and is recommended to be used with `CMSSW_10_2_4_patch1`.
 
 The features of the framework are implemented as a Python package, which is inside the `pepper` directory. To use it, you can add the path to where you downloaded the repository to the `PYTHONPATH` variable
 
