@@ -219,7 +219,7 @@ class ProcessorTTbarLL(pepper.Processor):
                 selector_copy = selector.copy()
                 filler.sys_overwrite = variarg.name
                 self.process_selection_jet_part(selector_copy, is_mc,
-                                                variarg, dsname)
+                                                variarg, dsname, filler)
                 if self.destdir is not None:
                     logger.debug(f"Saving per event info for variation"
                                  f" {variarg.name}")
