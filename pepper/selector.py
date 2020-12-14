@@ -336,19 +336,22 @@ class Selector():
         logger.info("Removing column '{column}'")
         del self.table[column]
 
-    def set_multiple_columns(self, columns, no_callback=False):
+    def set_multiple_columns(self, columns, all_cuts=False, no_callback=False):
         """Sets multiple columns of the table
 
         Arguments:
         columns -- A dict of columns, with keys determining the column names.
                    For requirements to the values, see `column` parameter of
                    `set_column`.
+        all_cuts -- The column callable will be called only on events passing
+                    all cuts (including after freezing). The callable must
+                    return a JaggedArray in this case.
         no_callback -- Do not call on_update after the cut is added
         """
         if callable(columns):
-            columns = columns(self.masked)
+            columns = columns(self.final if all_cuts else self.masked)
         for name, column in columns.items():
-            self.set_column(column, name, no_callback=True)
+            self.set_column(column, name, no_callback=True, all_cuts=all_cuts)
         if not no_callback:
             cut_name = self._cuts.names[-1]
             for cb in self.on_update:
