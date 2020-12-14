@@ -1,6 +1,5 @@
 import os
 from functools import partial
-import awkward
 import coffea
 import h5py
 import logging
@@ -9,7 +8,7 @@ from time import time
 import abc
 
 import pepper
-from pepper import Selector, LazyTable, OutputFiller
+from pepper import Selector, OutputFiller
 import pepper.config
 
 
@@ -163,13 +162,12 @@ class Processor(coffea.processor.ProcessorABC):
             for key in out_dict.keys():
                 outf[key] = out_dict[key]
 
-    def process(self, df):
+    def process(self, data):
         starttime = time()
-        data = LazyTable.from_lazydf(df)
-        dsname = df["dataset"]
-        filename = df["filename"]
-        entrystart = data.entrystart
-        entrystop = data.entrystop
+        dsname = data.metadata["dataset"]
+        filename = data.metadata["filename"]
+        entrystart = data.metadata["entrystart"]
+        entrystop = data.metadata["entrystop"]
         logger.debug(f"Started processing {filename} from event "
                      f"{entrystart} to {entrystop - 1} for dataset {dsname}")
         if dsname in self.rps_datasets:
@@ -245,7 +243,8 @@ class Processor(coffea.processor.ProcessorABC):
             genweight = data["genWeight"]
         else:
             genweight = None
-        selector = Selector(data, genweight, filler.get_callbacks())
+        # TODO: get filler working, replace None with filler.get_callbacks()
+        selector = Selector(data, genweight, None)
         return selector
 
     @abc.abstractmethod

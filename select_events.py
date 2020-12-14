@@ -7,6 +7,7 @@ import parsl
 import json
 from argparse import ArgumentParser
 import logging
+from coffea.nanoevents import NanoAODSchema
 
 import pepper
 
@@ -122,6 +123,7 @@ if args.eventdir is not None:
 os.makedirs(args.histdir, exist_ok=True)
 
 processor = pepper.ProcessorTTbarLL(config, args.eventdir)
+executor_args = {"schema": NanoAODSchema, "align_clusters": True}
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
     # Load parsl config immediately instead of putting it into executor_args
@@ -138,12 +140,10 @@ if args.condor is not None:
         parsl_config = pepper.misc.get_parsl_config(
             args.condor, retries=args.retries)
     parsl.load(parsl_config)
-    executor_args = {"align_clusters": True}
 else:
     if args.parsl_config is not None:
         print("Ignoring parsl_config because condor is not specified")
     executor = coffea.processor.iterative_executor
-    executor_args = {"align_clusters": True}
 
 output = coffea.processor.run_uproot_job(
     datasets, "Events", processor, executor, executor_args,

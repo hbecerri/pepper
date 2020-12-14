@@ -3,7 +3,7 @@
 import numpy as np
 import coffea
 from coffea.lookup_tools.extractor import file_converters
-import awkward
+import awkward1 as ak
 from collections import namedtuple
 import warnings
 
@@ -40,18 +40,12 @@ class ScaleFactors:
 
     @classmethod
     def from_hist(cls, hist, dimlabels=None):
-        factors, edges = hist.allnumpy()
-        if isinstance(edges, list):
-            # In 2D and 3D case, edges are placed in a len 1 list
-            edges = edges[0]
-        if not isinstance(edges, tuple):
-            # In 1D case, edges aren't wrapped in a tuple
-            edges = (edges,)
+        edges = hist.to_numpy()[1:]
         if dimlabels is None:
             dimlabels = []
-            for attr in ("_fXaxis", "_fYaxis", "_fZaxis")[:len(edges)]:
-                dimlabels.append(getattr(hist, attr)._fName)
-        sigmas = np.sqrt(hist.allvariances)
+            for member in ("fXaxis", "fYaxis", "fZaxis")[:len(edges)]:
+                dimlabels.append(hist.all_members[member].all_members["fName"])
+        factors, sigmas = hist.values_errors()
         factors_up = factors + sigmas
         factors_down = factors - sigmas
         if len(edges) != len(dimlabels):
@@ -86,13 +80,17 @@ class ScaleFactors:
                 raise ValueError("Scale factor depends on \"{}\" but no such "
                                  "argument was not provided"
                                  .format(key))
-            if isinstance(val, awkward.JaggedArray):
-                counts = val.counts
-                val = val.flatten()
+            if isinstance(val, ak.Array):
+                counts = []
+                for i in range(val.ndim - 1):
+                    counts.append(ak.num(val))
+                    val = val.flatten()
+                val = np.asarray(val)
             binIdxs.append(np.digitize(val, bins_for_key) - 1)
         ret = factors[tuple(binIdxs)]
         if counts is not None:
-            ret = awkward.JaggedArray.fromcounts(counts, ret)
+            for count in reversed(counts):
+                ret = ak.unflatten(ret, count)
         return ret
 
 
@@ -204,7 +202,7 @@ class PileupWeighter:
         self.upsuffix = "_up"
         self.downsuffix = "_down"
         for key, hist in rootfile.items():
-            key = key.decode().rsplit(";", 1)[0]
+            key = key.rsplit(";", 1)[0]
             sf = ScaleFactors.from_hist(hist, ["ntrueint"])
             if key.endswith(self.upsuffix):
                 self.up[key[:-len(self.upsuffix)]] = sf

@@ -3,12 +3,11 @@ import sys
 from functools import partial
 from collections import namedtuple
 import numpy as np
-import awkward
+import awkward1 as ak
 import coffea
 import coffea.lumi_tools
 from coffea.analysis_objects import JaggedCandidateArray as Jca
 import uproot
-from uproot_methods import TLorentzVectorArray
 import logging
 
 import pepper
@@ -173,28 +172,29 @@ class ProcessorTTbarLL(pepper.Processor):
 
     def process_selection(self, selector, dsname, is_mc, filler):
         if dsname.startswith("TTTo"):
-            selector.set_column(self.gentop, "gent_lc", lazy=True)
+            selector.set_column("gent_lc", self.gentop, lazy=True)
             if self.topptweighter is not None:
                 self.do_top_pt_reweighting(selector)
         if self.config["compute_systematics"] and is_mc:
             self.add_generator_uncertainies(dsname, selector)
         if is_mc:
-            self.add_crosssection_scale(selector, dsname)
+            selector.add_cut(
+                "Cross section", partial(self.crosssection_scale, dsname))
 
         if self.config["blinding_denom"] is not None:
-            selector.add_cut(partial(self.blinding, is_mc), "Blinding")
-        selector.add_cut(partial(self.good_lumimask, is_mc, dsname), "Lumi")
+            selector.add_cut("Blinding", partial(self.blinding, is_mc))
+        selector.add_cut("Lumi", partial(self.good_lumimask, is_mc, dsname))
 
         pos_triggers, neg_triggers = pepper.misc.get_trigger_paths_for(
             dsname, is_mc, self.trigger_paths, self.trigger_order)
-        selector.add_cut(partial(
-            self.passing_trigger, pos_triggers, neg_triggers), "Trigger")
+        selector.add_cut("Trigger", partial(
+            self.passing_trigger, pos_triggers, neg_triggers))
 
-        selector.add_cut(partial(self.met_filters, is_mc), "MET filters")
+        selector.add_cut("MET filters", partial(self.met_filters, is_mc))
 
-        selector.set_column(self.build_lepton_column, "Lepton")
+        selector.set_column("Lepton", self.build_lepton_column)
         # Wait with hists filling after channel masks are available
-        selector.add_cut(partial(self.lepton_pair, is_mc), "At least 2 leps",
+        selector.add_cut("At least 2 leps", partial(self.lepton_pair, is_mc),
                          no_callback=True)
         filler.channels = ("is_ee", "is_em", "is_mm")
         selector.set_multiple_columns(self.channel_masks)
@@ -334,7 +334,7 @@ class ProcessorTTbarLL(pepper.Processor):
         # Matrix-element renormalization and factorization scale
         # Get describtion of individual columns of this branch with
         # Events->GetBranch("LHEScaleWeight")->GetTitle() in ROOT
-        data = selector.masked
+        data = selector.data
         if dsname + "_LHEScaleSumw" in self.config["mc_lumifactors"]:
             norm = self.config["mc_lumifactors"][dsname + "_LHEScaleSumw"]
             # Workaround for https://github.com/cms-nanoAOD/cmssw/issues/537
@@ -357,10 +357,9 @@ class ProcessorTTbarLL(pepper.Processor):
                 "MEren", np.ones(data.size), np.ones(data.size))
             selector.set_systematic(
                 "MEfac", np.ones(data.size), np.ones(data.size))
-
         # Parton shower scale
         psweight = data["PSWeight"]
-        if psweight.counts[0] != 1:
+        if ak.num(psweight)[0] != 1:
             # NanoAOD containts one 1.0 per event in PSWeight if there are no
             # PS weights available, otherwise all counts > 1.
             selector.set_systematic("PSisr", psweight[:, 2], psweight[:, 0])
@@ -371,11 +370,10 @@ class ProcessorTTbarLL(pepper.Processor):
             selector.set_systematic(
                 "PSfsr", np.ones(data.size), np.ones(data.size))
 
-    def add_crosssection_scale(self, selector, dsname):
-        num_events = selector.num_selected
+    def crosssection_scale(self, dsname, data):
+        num_events = len(data)
         lumifactors = self.mc_lumifactors
         factor = np.full(num_events, lumifactors[dsname])
-        selector.modify_weight("lumi_factor", factor)
         if (self.config["compute_systematics"]
                 and dsname not in self.config["dataset_for_systematics"]):
             xsuncerts = self.config["crosssection_uncertainty"]
@@ -385,9 +383,10 @@ class ProcessorTTbarLL(pepper.Processor):
                     uncert = 0
                 else:
                     uncert = xsuncerts[dsname][1]
-                selector.set_systematic(group + "XS",
-                                        np.full(num_events, 1 + uncert),
-                                        np.full(num_events, 1 - uncert))
+            return factor, {group + "XS": (np.full(num_events, 1 + uncert),
+                                           np.full(num_events, 1 - uncert))}
+        else:
+            return factor
 
     def blinding(self, is_mc, data):
         if not is_mc:
@@ -401,44 +400,50 @@ class ProcessorTTbarLL(pepper.Processor):
         if is_mc:
             # Lumimask only present in data, all events pass in MC
             # Compute pileup reweighting and lumi variation here
-            allpass = np.full(data.size, True)
-            ntrueint = data["Pileup_nTrueInt"]
-            weight = {}
+            ntrueint = data["Pileup"]["nTrueInt"]
+            sys = {}
             if self.puweighter is not None:
-                central = self.puweighter(dsname, ntrueint)
+                weight = self.puweighter(dsname, ntrueint)
                 if self.config["compute_systematics"]:
                     # If central is zero, let up and down factors also be zero
-                    central_nonzero = np.where(central == 0, np.inf, central)
+                    weight_nonzero = np.where(weight == 0, np.inf, weight)
                     up = self.puweighter(dsname, ntrueint, "up")
                     down = self.puweighter(dsname, ntrueint, "down")
-                    weight["pileup"] = (
-                        central, up / central_nonzero, down / central_nonzero)
-                else:
-                    weight["pileup"] = central
+                    sys["pileup"] = (up / weight_nonzero,
+                                     down / weight_nonzero)
+            else:
+                weight = np.ones(len(data))
             if self.config["compute_systematics"]:
                 if (self.config["year"] == "2018"
                         or self.config["year"] == "2016"):
-                    weight["lumi"] = (None,
-                                      np.full(data.size, 1 + 0.025),
-                                      np.full(data.size, 1 - 0.025))
+                    sys["lumi"] = (np.full(len(data), 1 + 0.025),
+                                   np.full(len(data), 1 - 0.025))
                 elif self.config["year"] == "2017":
-                    weight["lumi"] = (None,
-                                      np.full(data.size, 1 + 0.023),
-                                      np.full(data.size, 1 - 0.023))
-                return (allpass, weight)
+                    sys["lumi"] = (np.full(len(data), 1 + 0.023),
+                                   np.full(len(data), 1 - 0.023))
+                return weight, sys
             else:
-                return allpass
+                return weight
         else:
             run = np.array(data["run"])
             luminosity_block = np.array(data["luminosityBlock"])
             lumimask = coffea.lumi_tools.LumiMask(self.lumimask)
             return lumimask(run, luminosity_block)
 
+    @staticmethod
+    def _normalize_trigger_path(path):
+        if path.startswith("HLT_"):
+            path = path[4:]
+        return path
+
     def passing_trigger(self, pos_triggers, neg_triggers, data):
+        pos_triggers = [self._normalize_trigger_path(p) for p in pos_triggers]
+        neg_triggers = [self._normalize_trigger_path(p) for p in neg_triggers]
+        hlt = data["HLT"]
         trigger = (
-            np.any([data[trigger_path] for trigger_path in pos_triggers],
+            np.any([hlt[trigger_path] for trigger_path in pos_triggers],
                    axis=0)
-            & ~np.any([data[trigger_path] for trigger_path in neg_triggers],
+            & ~np.any([hlt[trigger_path] for trigger_path in neg_triggers],
                       axis=0)
         )
         return trigger
@@ -457,47 +462,48 @@ class ProcessorTTbarLL(pepper.Processor):
             return np.full(data.shape, True)
         else:
             passing_filters =\
-                (data["Flag_goodVertices"]
-                 & data["Flag_globalSuperTightHalo2016Filter"]
-                 & data["Flag_HBHENoiseFilter"]
-                 & data["Flag_HBHENoiseIsoFilter"]
-                 & data["Flag_EcalDeadCellTriggerPrimitiveFilter"]
-                 & data["Flag_BadPFMuonFilter"])
+                (data["Flag"]["goodVertices"]
+                 & data["Flag"]["globalSuperTightHalo2016Filter"]
+                 & data["Flag"]["HBHENoiseFilter"]
+                 & data["Flag"]["HBHENoiseIsoFilter"]
+                 & data["Flag"]["EcalDeadCellTriggerPrimitiveFilter"]
+                 & data["Flag"]["BadPFMuonFilter"])
             if not is_mc:
-                passing_filters &= data["Flag_eeBadScFilter"]
+                passing_filters &= data["Flag"]["eeBadScFilter"]
         if year in ("2018", "2017"):
-            passing_filters &= data["Flag_ecalBadCalibFilterV2"]
+            passing_filters = (
+                passing_filters & data["Flag"]["ecalBadCalibFilterV2"])
 
         return passing_filters
 
     def in_transreg(self, abs_eta):
         return (1.444 < abs_eta) & (abs_eta < 1.566)
 
-    def electron_id(self, e_id, data):
+    def electron_id(self, e_id, electron):
         if e_id == "skip":
             has_id = True
         if e_id == "cut:loose":
-            has_id = data["Electron_cutBased"] >= 2
+            has_id = electron["cutBased"] >= 2
         elif e_id == "cut:medium":
-            has_id = data["Electron_cutBased"] >= 3
+            has_id = electron["cutBased"] >= 3
         elif e_id == "cut:tight":
-            has_id = data["Electron_cutBased"] >= 4
+            has_id = electron["cutBased"] >= 4
         elif e_id == "mva:noIso80":
-            has_id = data["Electron_mvaFall17V2noIso_WP80"]
+            has_id = electron["mvaFall17V2noIso_WP80"]
         elif e_id == "mva:noIso90":
-            has_id = data["Electron_mvaFall17V2noIso_WP90"]
+            has_id = electron["mvaFall17V2noIso_WP90"]
         elif e_id == "mva:Iso80":
-            has_id = data["Electron_mvaFall17V2Iso_WP80"]
+            has_id = electron["mvaFall17V2Iso_WP80"]
         elif e_id == "mva:Iso90":
-            has_id = data["Electron_mvaFall17V2Iso_WP90"]
+            has_id = electron["mvaFall17V2Iso_WP90"]
         else:
             raise ValueError("Invalid electron id string")
         return has_id
 
-    def electron_cuts(self, data, good_lep):
+    def electron_cuts(self, electron, good_lep):
         if self.config["ele_cut_transreg"]:
-            sc_eta_abs = abs(data["Electron_eta"]
-                             + data["Electron_deltaEtaSC"])
+            sc_eta_abs = abs(electron["eta"]
+                             + electron["deltaEtaSC"])
             is_in_transreg = self.in_transreg(sc_eta_abs)
         else:
             is_in_transreg = np.array(False)
@@ -508,58 +514,58 @@ class ProcessorTTbarLL(pepper.Processor):
             e_id, pt_min = self.config[[
                 "additional_ele_id", "additional_ele_pt_min"]]
         eta_min, eta_max = self.config[["ele_eta_min", "ele_eta_max"]]
-        return (self.electron_id(e_id, data)
+        return (self.electron_id(e_id, electron)
                 & (~is_in_transreg)
-                & (eta_min < data["Electron_eta"])
-                & (data["Electron_eta"] < eta_max)
-                & (pt_min < data["Electron_pt"]))
+                & (eta_min < electron["eta"])
+                & (electron["eta"] < eta_max)
+                & (pt_min < electron["pt"]))
 
-    def muon_id(self, m_id, data):
+    def muon_id(self, m_id, muon):
         if m_id == "skip":
             has_id = True
         elif m_id == "cut:loose":
-            has_id = data["Muon_looseId"]
+            has_id = muon["looseId"]
         elif m_id == "cut:medium":
-            has_id = data["Muon_mediumId"]
+            has_id = muon["mediumId"]
         elif m_id == "cut:tight":
-            has_id = data["Muon_tightId"]
+            has_id = muon["tightId"]
         elif m_id == "mva:loose":
-            has_id = data["Muon_mvaId"] >= 1
+            has_id = muon["mvaId"] >= 1
         elif m_id == "mva:medium":
-            has_id = data["Muon_mvaId"] >= 2
+            has_id = muon["mvaId"] >= 2
         elif m_id == "mva:tight":
-            has_id = data["Muon_mvaId"] >= 3
+            has_id = muon["mvaId"] >= 3
         else:
             raise ValueError("Invalid muon id string")
         return has_id
 
-    def muon_iso(self, iso, data):
+    def muon_iso(self, iso, muon):
         if iso == "cut:very_loose":
-            return data["Muon_pfIsoId"] > 0
+            return muon["pfIsoId"] > 0
         elif iso == "cut:loose":
-            return data["Muon_pfIsoId"] > 1
+            return muon["pfIsoId"] > 1
         elif iso == "cut:medium":
-            return data["Muon_pfIsoId"] > 2
+            return muon["pfIsoId"] > 2
         elif iso == "cut:tight":
-            return data["Muon_pfIsoId"] > 3
+            return muon["pfIsoId"] > 3
         elif iso == "cut:very_tight":
-            return data["Muon_pfIsoId"] > 4
+            return muon["pfIsoId"] > 4
         elif iso == "cut:very_very_tight":
-            return data["Muon_pfIsoId"] > 5
+            return muon["pfIsoId"] > 5
         else:
             iso, iso_value = iso.split(":")
             value = float(iso_value)
             if iso == "dR<0.3_chg":
-                return data["Muon_pfRelIso03_chg"] < value
+                return muon["pfRelIso03_chg"] < value
             elif iso == "dR<0.3_all":
-                return data["Muon_pfRelIso03_all"] < value
+                return muon["pfRelIso03_all"] < value
             elif iso == "dR<0.4_all":
-                return data["Muon_pfRelIso04_all"] < value
+                return muon["pfRelIso04_all"] < value
         raise ValueError("Invalid muon iso string")
 
-    def muon_cuts(self, data, good_lep):
+    def muon_cuts(self, muon, good_lep):
         if self.config["muon_cut_transreg"]:
-            is_in_transreg = self.in_transreg(abs(data["Muon_eta"]))
+            is_in_transreg = self.in_transreg(abs(muon["eta"]))
         else:
             is_in_transreg = np.array(False)
         if good_lep:
@@ -570,40 +576,25 @@ class ProcessorTTbarLL(pepper.Processor):
                 "additional_muon_id", "additional_muon_pt_min",
                 "additional_muon_iso"]]
         eta_min, eta_max = self.config[["muon_eta_min", "muon_eta_max"]]
-        return (self.muon_id(m_id, data)
-                & self.muon_iso(iso, data)
+        return (self.muon_id(m_id, muon)
+                & self.muon_iso(iso, muon)
                 & (~is_in_transreg)
-                & (eta_min < data["Muon_eta"])
-                & (data["Muon_eta"] < eta_max)
-                & (pt_min < data["Muon_pt"]))
+                & (eta_min < muon["eta"])
+                & (muon["eta"] < eta_max)
+                & (pt_min < muon["pt"]))
 
     def build_lepton_column(self, data):
-        keys = ["pt", "eta", "phi", "mass", "pdgId"]
-        lep_dict = {}
-        ge = self.electron_cuts(data, good_lep=True)
-        gm = self.muon_cuts(data, good_lep=True)
-        for key in keys:
-            ele = data["Electron_" + key]
-            muon = data["Muon_" + key]
-            # Workaround for awkward issue #239
-            if ele.counts.sum() == 0:
-                ele = awkward.JaggedArray.fromcounts(ele.counts, [])
-            if muon.counts.sum() == 0:
-                muon = awkward.JaggedArray.fromcounts(muon.counts, [])
-            arr = awkward.concatenate([ele[ge], muon[gm]], axis=1)
-            offsets = arr.offsets
-            lep_dict[key] = arr.flatten()  # Could use concatenate here
-        # Add supercluster eta, which only is given for electrons
-        arr = awkward.concatenate([data["Electron_eta"][ge]
-                                  + data["Electron_deltaEtaSC"][ge],
-                                  data["Muon_eta"][gm]], axis=1)
-        lep_dict["sceta"] = arr.flatten()
-
-        leptons = Jca.candidatesfromoffsets(offsets, **lep_dict)
+        electron = data["Electron"]
+        muon = data["Muon"]
+        electron = electron[self.electron_cuts(electron, good_lep=True)]
+        muon = muon[self.muon_cuts(muon, good_lep=True)]
+        lepton = ak.concatenate([electron, muon], axis=1)
+        lepton["sceta"] = ak.concatenate(
+            [electron["eta"] + electron["deltaEtaSC"], muon["eta"]], axis=1)
 
         # Sort leptons by pt
-        leptons = leptons[leptons.pt.argsort()]
-        return leptons
+        lepton = lepton[ak.argsort(lepton["pt"])]
+        return lepton
 
     def channel_masks(self, data):
         leps = data["Lepton"]
