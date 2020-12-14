@@ -119,14 +119,27 @@ class Processor(coffea.processor.ProcessorABC):
                     "columns_to_save must be str or list")
             for subspecifier in specifier:
                 try:
-                    item = item[subspecifier]
-                except KeyError:
+                    item = getattr(item, subspecifier)
+                except AttributeError:
                     try:
-                        item = getattr(item, subspecifier)
-                    except AttributeError:
+                        if ((isinstance(item, awkward.Table)
+                                or (isinstance(item, awkward.JaggedArray)
+                                    and isinstance(
+                                        item.content, awkward.Table)))
+                                and subspecifier not in item.columns):
+                            # Workaround for awkward.Table raising a
+                            # ValueError instead of a KeyError
+                            raise KeyError
+                        else:
+                            item = item[subspecifier]
+                    except KeyError:
                         logger.info("Skipping to save column because it is "
                                     f"not present: {specifier}")
                         break
+                if callable(item):
+                    item = item()
+                if item is None:
+                    break
             else:
                 if isinstance(item, awkward.JaggedArray):
                     # Strip rows that are not selected from memory
