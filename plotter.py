@@ -110,24 +110,21 @@ def plot(data_hist, bkgd_hist, sig_hist, sys, namebase, bkgd_cols={},
                            clear=False,
                            overlay="proc",
                            stack=False)
-    try:
-        pepper.plot.plot1d(data_hist,
-                           ax=ax1,
-                           overlay="proc",
-                           clear=False,
-                           error_opts={
-                               "color": "black",
-                               "marker": "o",
-                               "markersize": 4})
-        pepper.plot.plotratio(data_hist.sum("proc"),
-                              bkgd_hist.sum("proc"),
-                              ax=ax2,
-                              error_opts={"fmt": "ok", "markersize": 4},
-                              denom_fill_opts={},
-                              unc="num",
-                              sys=sys)
-    except:
-        pass
+    pepper.plot.plot1d(data_hist,
+                       ax=ax1,
+                       overlay="proc",
+                       clear=False,
+                       error_opts={
+                           "color": "black",
+                           "marker": "o",
+                           "markersize": 4})
+    pepper.plot.plotratio(data_hist.sum("proc"),
+                          bkgd_hist.sum("proc"),
+                          ax=ax2,
+                          error_opts={"fmt": "ok", "markersize": 4},
+                          denom_fill_opts={},
+                          unc="num",
+                          sys=sys)
     ax2.axhline(1, linestyle="--", color="black", linewidth=0.5)
     for handle, label in zip(*ax1.get_legend_handles_labels()):
         if label in bkgd_cols:

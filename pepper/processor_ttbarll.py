@@ -873,10 +873,12 @@ class ProcessorTTbarLL(pepper.Processor):
                 era = self.config["year"] + "MC"
             else:
                 era = dsname[3:8]
-            dx = (self.met_xy_shifts["METxcorr"][era][0] * data["Pileup_nTrueInt"]
-                + self.met_xy_shifts["METxcorr"][era][1])
-            dy = (self.met_xy_shifts["METycorr"][era][0] * data["Pileup_nTrueInt"]
-                + self.met_xy_shifts["METycorr"][era][1])
+            dx = (self.met_xy_shifts["METxcorr"][era][0]
+                  * data["Pileup_nTrueInt"]
+                  + self.met_xy_shifts["METxcorr"][era][1])
+            dy = (self.met_xy_shifts["METycorr"][era][0]
+                  * data["Pileup_nTrueInt"]
+                  + self.met_xy_shifts["METycorr"][era][1])
             met = TLorentzVectorArray.from_cartesian(
                 met.x - dx, met.y - dy, met.z, met.t)
         if variation == "up":
