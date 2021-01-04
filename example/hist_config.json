@@ -85,6 +85,23 @@
             ]
         }
     },
+    "METphi": {
+        "bins": [
+            {
+                "name": "phi",
+                "label": "MET $\\phi$ (GeV)",
+                "n_or_arr": 40,
+                "lo": -3.14,
+                "hi": 3.14
+            }
+        ],
+        "fill": {
+            "phi": [
+                "MET",
+                "phi"
+            ]
+        }
+    },
     "deltaphi": {
         "bins": [
             {
