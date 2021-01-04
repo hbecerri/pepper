@@ -44,6 +44,7 @@ class ConfigTTbarLL(pepper.Config):
             "jet_ressf": partial(
                 self._get_jet_general, evaltype="jersf",
                 cls=coffea.jetmet_tools.JetResolutionScaleFactor),
+            "MET_xy_shifts": self._get_maybe_external,
             "mc_lumifactors": self._get_maybe_external,
             "crosssection_uncertainty": self._get_maybe_external,
             "hists": self._get_hists,

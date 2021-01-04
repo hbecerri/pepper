@@ -114,6 +114,10 @@ class ProcessorTTbarLL(pepper.Processor):
         else:
             logger.warning("No Drell-Yan scale factor specified")
             self.drellyan_sf = None
+        if "MET_xy_shifts" in self.config:
+            self.met_xy_shifts = self.config["MET_xy_shifts"]
+        else:
+            self.met_xy_shifts = None
 
     @staticmethod
     def _check_config_integrity(config):
@@ -277,8 +281,9 @@ class ProcessorTTbarLL(pepper.Processor):
             selector.set_multiple_columns(partial(
                 self.compute_jet_factors, variation.junc, variation.jer))
         selector.set_column(self.build_jet_column, "Jet")
-        selector.set_column(partial(self.build_met_column, variation.junc,
-                                    variation=variation.met), "MET")
+        selector.set_column(
+            partial(self.build_met_column, variation.junc, is_mc, dsname,
+                    variation=variation.met), "MET")
         selector.set_multiple_columns(
             partial(self.drellyan_sf_columns, filler))
         if self.drellyan_sf is not None and is_mc:
@@ -858,11 +863,22 @@ class ProcessorTTbarLL(pepper.Processor):
             "mass": zeros,
             "emef": zeros})
 
-    def build_met_column(self, junc, data, variation="central"):
+    def build_met_column(self, junc, is_mc, dsname, data, variation="central"):
         met = TLorentzVectorArray.from_ptetaphim(data["MET_pt"],
                                                  np.zeros(data.size),
                                                  data["MET_phi"],
                                                  np.zeros(data.size))
+        if self.met_xy_shifts:
+            if is_mc:
+                era = self.config["year"] + "MC"
+            else:
+                era = dsname[3:8]
+            dx = (self.met_xy_shifts["METxcorr"][era][0] * data["Pileup_nTrueInt"]
+                + self.met_xy_shifts["METxcorr"][era][1])
+            dy = (self.met_xy_shifts["METycorr"][era][0] * data["Pileup_nTrueInt"]
+                + self.met_xy_shifts["METycorr"][era][1])
+            met = TLorentzVectorArray.from_cartesian(
+                met.x - dx, met.y - dy, met.z, met.t)
         if variation == "up":
             dx = data["MET_MetUnclustEnUpDeltaX"]
             dy = data["MET_MetUnclustEnUpDeltaY"]
