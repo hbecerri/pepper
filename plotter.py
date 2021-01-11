@@ -12,7 +12,7 @@ import json
 from cycler import cycler
 
 from pepper import Config
-import pepper.plot  # noqa: E402
+import pepper.plot
 
 
 mpl.use("Agg")
