@@ -40,12 +40,13 @@ class ScaleFactors:
 
     @classmethod
     def from_hist(cls, hist, dimlabels=None):
-        edges = hist.to_numpy()[1:]
+        edges = hist.to_numpy(flow=True)[1:]
         if dimlabels is None:
             dimlabels = []
             for member in ("fXaxis", "fYaxis", "fZaxis")[:len(edges)]:
                 dimlabels.append(hist.all_members[member].all_members["fName"])
-        factors, sigmas = hist.values_errors()
+        factors = hist.values(flow=True)
+        sigmas = np.sqrt(hist.variances(flow=True))
         factors_up = factors + sigmas
         factors_down = factors - sigmas
         if len(edges) != len(dimlabels):

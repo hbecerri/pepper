@@ -1,6 +1,6 @@
 import os
 import sys
-from functools import partial
+from functools import partial, reduce
 from collections import namedtuple
 import numpy as np
 import awkward as ak
@@ -193,6 +193,8 @@ class ProcessorTTbarLL(pepper.Processor):
 
         selector.add_cut("MET filters", partial(self.met_filters, is_mc))
 
+        selector.set_column("Electron", self.pick_electrons)
+        selector.set_column("Muon", self.pick_muons)
         selector.set_column("Lepton", self.build_lepton_column)
         # Wait with hists filling after channel masks are available
         selector.add_cut("At least 2 leps", partial(self.lepton_pair, is_mc),
@@ -511,6 +513,10 @@ class ProcessorTTbarLL(pepper.Processor):
                 & (electron["eta"] < eta_max)
                 & (pt_min < electron["pt"]))
 
+    def pick_electrons(self, data):
+        electrons = data["Electron"]
+        return electrons[self.electron_cuts(electrons, good_lep=True)]
+
     def muon_id(self, m_id, muon):
         if m_id == "skip":
             has_id = True
@@ -574,45 +580,47 @@ class ProcessorTTbarLL(pepper.Processor):
                 & (muon["eta"] < eta_max)
                 & (pt_min < muon["pt"]))
 
+    def pick_muons(self, data):
+        muons = data["Muon"]
+        return muons[self.muon_cuts(muons, good_lep=True)]
+
     def build_lepton_column(self, data):
         electron = data["Electron"]
         muon = data["Muon"]
-        electron = electron[self.electron_cuts(electron, good_lep=True)]
-        muon = muon[self.muon_cuts(muon, good_lep=True)]
-        lepton = ak.concatenate([electron, muon], axis=1)
-        lepton["sceta"] = ak.concatenate(
-            [electron["eta"] + electron["deltaEtaSC"], muon["eta"]], axis=1)
+        columns = ["pt", "eta", "phi", "mass", "pdgId"]
+        lepton = ak.Array({}, with_name="PtEtaPhiMLorentzVector")
+        for column in columns:
+            lepton[column] = ak.flatten(ak.concatenate(
+                [electron[column], muon[column]], axis=1))
+        lepton = ak.unflatten(lepton, ak.num(electron) + ak.num(muon))
 
         # Sort leptons by pt
         lepton = lepton[ak.argsort(lepton["pt"])]
         return lepton
 
     def channel_masks(self, data):
-        leps = data["Lepton"]
-        firstpdg = abs(leps[:, 0].pdgId)
-        secondpdg = abs(leps[:, 1].pdgId)
         channels = {}
-        channels["is_ee"] = (firstpdg == 11) & (secondpdg == 11)
-        channels["is_mm"] = (firstpdg == 13) & (secondpdg == 13)
+        channels["is_ee"] = ak.num(data["Electron"]) == 2
+        channels["is_mm"] = ak.num(data["Muon"]) == 2
         channels["is_em"] = (~channels["is_ee"]) & (~channels["is_mm"])
         return channels
 
     def compute_lepton_sf(self, data):
-        is_ele = abs(data["Lepton"].pdgId) == 11
-        eles = data["Lepton"][is_ele]
-        muons = data["Lepton"][~is_ele]
+        eles = data["Electron"]
+        muons = data["Muon"]
 
         weight = np.ones(len(data))
         systematics = {}
         # Electron identification efficiency
         for i, sffunc in enumerate(self.electron_sf):
-            central = ak.prod(sffunc(eta=eles.sceta, pt=eles.pt), axis=1)
+            sceta = eles.eta + eles.deltaEtaSC
+            central = ak.prod(sffunc(eta=sceta, pt=eles.pt), axis=1)
             key = "electronsf{}".format(i)
             if self.config["compute_systematics"]:
                 up = ak.prod(sffunc(
-                    eta=eles.sceta, pt=eles.pt, variation="up"), axis=1)
+                    eta=sceta, pt=eles.pt, variation="up"), axis=1)
                 down = ak.prod(sffunc(
-                    eta=eles.sceta, pt=eles.pt, variation="down"), axis=1)
+                    eta=sceta, pt=eles.pt, variation="down"), axis=1)
                 systematics[key] = (up / central, down / central)
             weight = weight * central
         # Muon identification and isolation efficiency
@@ -668,8 +676,7 @@ class ProcessorTTbarLL(pepper.Processor):
         counts = ak.num(pt)
         if ak.sum(counts) == 0:
             return ak.unflatten([], counts)
-        import pdb
-        pdb.set_trace()
+        # TODO: test this
         junc = dict(self._junc.getUncertainty(JetPt=pt, JetEta=eta))[source]
         if variation == "up":
             return junc[:, :, 0]
@@ -856,8 +863,7 @@ class ProcessorTTbarLL(pepper.Processor):
             jets = ak.with_parameter(jets, "__record__", "Jet")
             # Cut according to MissingETRun2Corrections Twiki
             jets = jets[(jets["pt_nomuon"] > 15) & (jets["emef"] < 0.9)]
-            import pdb
-            pdb.set_trace()
+            # TODO: test this
             factor = jets["juncfac"] - 1
             metx = metx - ak.sum(jets.x * factor, axis=1)
             mety = mety - ak.sum(jets.y * factor, axis=1)
@@ -895,10 +901,10 @@ class ProcessorTTbarLL(pepper.Processor):
 
         keep = np.full(len(data), True)
         if cut_ele:
-            ele = data["Lepton"][abs(data["Lepton"].pdgId) == 11]
+            ele = data["Electron"]
             keep = keep & (~self.in_hem1516(ele.phi, ele.eta).any())
         if cut_muon:
-            muon = data["Lepton"][abs(data["Lepton"].pdgId) == 13]
+            muon = data["Muon"]
             keep = keep & (~self.in_hem1516(muon.phi, muon.eta).any())
         if cut_jet:
             jet = data["Jet"]
@@ -906,11 +912,9 @@ class ProcessorTTbarLL(pepper.Processor):
         return keep
 
     def channel_trigger_matching(self, data):
-        p0 = abs(data["Lepton"].pdgId[:, 0])
-        p1 = abs(data["Lepton"].pdgId[:, 1])
-        is_ee = (p0 == 11) & (p1 == 11)
-        is_mm = (p0 == 13) & (p1 == 13)
-        is_em = (~is_ee) & (~is_mm)
+        is_ee = data["is_ee"]
+        is_mm = data["is_mm"]
+        is_em = data["is_em"]
         triggers = self.config["channel_trigger_map"]
 
         ret = np.full(len(data), False)
@@ -1029,6 +1033,7 @@ class ProcessorTTbarLL(pepper.Processor):
         return data["is_em"] | (met > self.config["ee/mm_min_met"])
 
     def pick_leps(self, data):
+        # Sort so that we get the order [lepton, antilepton]
         return data["Lepton"][
             ak.argsort(data["Lepton"]["pdgId"], ascending=False)]
 
@@ -1039,30 +1044,34 @@ class ProcessorTTbarLL(pepper.Processor):
         btags = data["Jet"][data["Jet"].btagged]
         jetsnob = data["Jet"][~data["Jet"].btagged]
         # TODO: not tested at all
+        import pdb
+        pdb.set_trace()
         num_btags = ak.num(btags)
-        b0, b1 = ak.where(
+        b0, b1 = ak.unzip(ak.where(
             num_btags > 1, ak.combinations(btags, 2),
             ak.where(
                 num_btags == 1, ak.cartesian([btags, jetsnob]),
-                ak.combinations(jetsnob, 2)))
+                ak.combinations(jetsnob, 2))))
         bs = ak.concatenate([b0, b1], axis=1)
         bs_rev = ak.concatenate([b1, b0], axis=1)
-        mass_alb = ak.sum(ak.cartesian([bs, antilep]), axis=1).mass
-        mass_lb = ak.sum(ak.cartesian([bs_rev, lep]), axis=1).mass
+        mass_alb = reduce(
+            lambda a, b: a + b, ak.unzip(ak.cartesian([bs, antilep]))).mass
+        mass_lb = reduce(
+            lambda a, b: a + b, ak.unzip(ak.cartesian([bs_rev, lep]))).mass
         with uproot.open(self.reco_info_filepath) as f:
-            counts, edges = f["mlb"].to_numpy(flow=True)
-        p_m_alb = counts[np.digitize(mass_alb, edges) - 1]
-        p_m_lb = counts[np.digitize(mass_lb, edges) - 1]
-        bestbpair_mlb = ak.argmax(p_m_alb*p_m_lb)
+            mlb_prob = pepper.scale_factors.ScaleFactors.from_hist(f["mlb"])
+        p_m_alb = mlb_prob(mlb=mass_alb)
+        p_m_lb = mlb_prob(mlb=mass_lb)
+        bestbpair_mlb = ak.argmax(p_m_alb * p_m_lb, axis=1)
         return ak.concatenate([bs[bestbpair_mlb], bs_rev[bestbpair_mlb]],
                               axis=1)
 
     def ttbar_system(self, reco_alg, data):
-        lep = data["recolepton"].p4[:, 0]
-        antilep = data["recolepton"].p4[:, 1]
-        b = data["recob"].p4[:, 0]
-        antib = data["recob"].p4[:, 1]
-        met = data["MET"].p4.flatten()
+        lep = data["recolepton"][:, 0]
+        antilep = data["recolepton"][:, 1]
+        b = data["recob"][:, 0]
+        antib = data["recob"][:, 1]
+        met = data["MET"]
 
         with uproot.open(self.reco_info_filepath) as f:
             if self.config["reco_num_smear"] is None:
@@ -1091,32 +1100,29 @@ class ProcessorTTbarLL(pepper.Processor):
                 energyfl=energyfl, energyfj=energyfj, alphal=alphal,
                 alphaj=alphaj, hist_mlb=mlb, num_smear=num_smear,
                 seed=self.reco_random_seed)
-            top = awkward.concatenate([top, antitop], axis=1)
-            return Jca.candidatesfromcounts(top.counts, p4=top.flatten())
+            return ak.concatenate([top, antitop], axis=1)
         elif reco_alg == "betchart":
             top, antitop = betchart(lep, antilep, b, antib, met)
-            return awkward.concatenate([top, antitop], axis=1)
+            return ak.concatenate([top, antitop], axis=1)
         else:
             raise ValueError(f"Invalid value for reco algorithm: {reco_alg}")
 
     def passing_reco(self, data):
-        return data["recot"].counts > 0
+        return ak.num(data["recot"]) > 0
 
     def build_nu_column(self, data):
-        lep = data["recolepton"].p4[:, 0]
-        antilep = data["recolepton"].p4[:, 1]
-        b = data["recob"].p4[:, 0]
-        antib = data["recob"].p4[:, 1]
-        top = data["recot"].p4[:, 0]
-        antitop = data["recot"].p4[:, 1]
-        nu = Jca.candidatesfromcounts(np.ones(data.size), p4=top - b - antilep)
-        antinu = Jca.candidatesfromcounts(np.ones(data.size),
-                                          p4=antitop - antib - lep)
-        return awkward.concatenate([nu, antinu], axis=1)
+        lep = data["recolepton"][:, 0:1]
+        antilep = data["recolepton"][:, 1:2]
+        b = data["recob"][:, 0:1]
+        antib = data["recob"][:, 1:2]
+        top = data["recot"][:, 0:1]
+        antitop = data["recot"][:, 1:2]
+        nu = top - b - antilep
+        antinu = antitop - antib - lep
+        return ak.concatenate([nu, antinu], axis=1)
 
     def calculate_dark_pt(self, data):
-        nu = data["reconu"].p4[:, 0]
-        antinu = data["reconu"].p4[:, 1]
-        met = data["MET"].p4.flatten()
-        return Jca.candidatesfromcounts(np.ones(data.size),
-                                        p4=met - nu - antinu)
+        nu = data["reconu"][:, 0]
+        antinu = data["reconu"][:, 1]
+        met = data["MET"]
+        return met - nu - antinu

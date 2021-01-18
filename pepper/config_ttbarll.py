@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import numpy as np
-import uproot4 as uproot
+import uproot
 import json
 import coffea
 from functools import partial

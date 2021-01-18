@@ -5,7 +5,6 @@ import h5py
 import uproot
 from collections import defaultdict
 import coffea
-import awkward
 import numpy as np
 import parsl
 import parsl.addresses
