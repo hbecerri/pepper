@@ -3,7 +3,7 @@
 import numpy as np
 import coffea
 from coffea.lookup_tools.extractor import file_converters
-import awkward1 as ak
+import awkward as ak
 from collections import namedtuple
 import warnings
 
@@ -84,7 +84,7 @@ class ScaleFactors:
                 counts = []
                 for i in range(val.ndim - 1):
                     counts.append(ak.num(val))
-                    val = val.flatten()
+                    val = ak.flatten(val)
                 val = np.asarray(val)
             binIdxs.append(np.digitize(val, bins_for_key) - 1)
         ret = factors[tuple(binIdxs)]
@@ -163,27 +163,31 @@ class BTagWeighter:
             else:
                 heavy_vari = direction
 
-        counts = pt.counts
-        jf = jf.flatten()
-        eta = eta.flatten()
-        pt = pt.flatten()
-        discr = discr.flatten()
+        counts = ak.num(pt)
+        jf = ak.flatten(jf)
+        eta = ak.flatten(eta)
+        pt = ak.flatten(pt)
+        discr = ak.flatten(discr)
 
-        sf = np.ones_like(eta)
-        sf[jf == 0] = self._sf_func(wp, light_vari, 2)(eta, pt, discr)[jf == 0]
-        sf[jf == 4] = self._sf_func(wp, heavy_vari, 1)(eta, pt, discr)[jf == 4]
-        sf[jf == 5] = self._sf_func(wp, heavy_vari, 0)(eta, pt, discr)[jf == 5]
-        sf = awkward.JaggedArray.fromcounts(counts, sf)
+        sf = np.ones(len(pt))
+        sf[jf == 0] = np.asarray(self._sf_func(wp, light_vari, 2)(
+            eta, pt, discr))[jf == 0]
+        sf[jf == 4] = np.asarray(self._sf_func(wp, heavy_vari, 1)(
+            eta, pt, discr))[jf == 4]
+        sf[jf == 5] = np.asarray(self._sf_func(wp, heavy_vari, 0)(
+            eta, pt, discr))[jf == 5]
+        sf = ak.unflatten(sf, counts)
 
         eff = self.eff_evaluator[efficiency](jf, pt, abs(eta))
-        eff = awkward.JaggedArray.fromcounts(counts, eff)
+        eff = ak.unflatten(eff, counts)
         sfeff = sf * eff
 
-        is_tagged = discr > self.wps[wp]
-        is_tagged = awkward.JaggedArray.fromcounts(counts, is_tagged)
+        is_tagged = ak.unflatten(discr > self.wps[wp], counts)
 
-        p_mc = eff[is_tagged].prod() * (1 - eff)[~is_tagged].prod()
-        p_data = sfeff[is_tagged].prod() * (1 - sfeff)[~is_tagged].prod()
+        p_mc = ak.prod(eff[is_tagged], axis=1) * ak.prod(
+            (1 - eff)[~is_tagged], axis=1)
+        p_data = ak.prod(sfeff[is_tagged], axis=1) * ak.prod(
+            (1 - sfeff)[~is_tagged], axis=1)
 
         # TODO: What if one runs into numerical problems here?
         return p_data / p_mc

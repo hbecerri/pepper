@@ -1,7 +1,8 @@
 import numpy as np
-import awkward1 as ak
+import awkward as ak
 from collections import defaultdict
 import logging
+from copy import copy
 
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,13 @@ class Selection:
 
     def __len__(self):
         return len(self.names)
+
+    def __copy__(self):
+        s = self.__class__.__new__(self.__class__)
+        s.__dict__.update(self.__dict__)
+        s.names = copy(self.names)
+        s.cuts = copy(self.cuts)
+        return s
 
 
 class Selector:
@@ -72,6 +80,11 @@ class Selector:
         self.add_cut("Before cuts", np.full(self.num, True))
         self._applying_cuts = applying_cuts
 
+        # Workaround for adding lazy column not working
+        self.set_column(
+            "__lazyworkaround", lambda data: np.empty(len(data)),
+            no_callback=True, lazy=True)
+
     @property
     def applying_cuts(self):
         return self._applying_cuts
@@ -96,7 +109,8 @@ class Selector:
         if len(self.unapplied_cuts) == 0:
             return self.data
         else:
-            return ak.mask(self.data, self.unapplied_product.astype(bool))
+            return ak.mask(
+                self.data, ak.values_astype(self.unapplied_product, bool))
 
     @property
     def final_systematics(self):
@@ -155,7 +169,7 @@ class Selector:
                     for value_old in values_old:
                         value = np.empty(n)
                         value[accept] = value_old
-                        values.append(value.mask[accept])
+                        values.append(ak.mask(value, accept))
                 self.set_systematic(sysname, *values, cut=name)
         if not no_callback:
             for cb in self.on_update:
@@ -214,12 +228,30 @@ class Selector:
         if callable(columns):
             columns = columns(self.data)
         if isinstance(columns, ak.Array):
-            for name in columns.layout.keys():
-                self.set_column(columns[name], name, no_callback=True)
+            for name in ak.fields(columns):
+                self.set_column(name, columns[name], no_callback=True)
         else:
             for name, column in columns.items():
-                self.set_column(column, name, no_callback=True)
+                self.set_column(name, column, no_callback=True)
         if not no_callback:
             for cb in self.on_update:
                 cb(data=self.final, systematics=self.final_systematics,
                    cut=self.cutnames[-1])
+
+    def __copy__(self):
+        s = self.__class__.__new__(self.__class__)
+        s.__dict__.update(self.__dict__)
+        # copy(self.data) loads all fields. Workaround
+        s.data = ak.Array({})
+        for field in self.data.fields:
+            s.data[field] = self.data[field]
+        s.data.behavior = self.data.behavior
+        if self.systematics is not None:
+            s.systematics = copy(self.systematics)
+        s.cutnames = copy(self.cutnames)
+        s.unapplied_cuts = copy(self.unapplied_cuts)
+        s.cut_systematic_map = copy(self.cut_systematic_map)
+        return s
+
+    def copy(self):
+        return copy(self)

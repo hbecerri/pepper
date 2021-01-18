@@ -1,5 +1,5 @@
 import json
-import coffea
+import coffea.hist
 import awkward
 import numpy as np
 

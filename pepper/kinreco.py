@@ -1,7 +1,6 @@
 import numpy as np
 import uproot_methods
 import coffea
-from coffea.analysis_objects import JaggedCandidateArray
 import awkward
 
 from pepper.misc import jaggeddepth, chunked_calls

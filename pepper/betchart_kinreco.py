@@ -1,8 +1,6 @@
 import numpy as np
 from uproot_methods.classes.TLorentzVector import TLorentzVectorArray as LVa
-from coffea.analysis_objects import JaggedCandidateArray as Jca
 import math
-from awkward import JaggedArray
 from numba import njit
 from numba.experimental import jitclass
 from numba import float32, float64

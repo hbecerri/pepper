@@ -3,12 +3,13 @@ import sys
 from functools import partial
 from collections import namedtuple
 import numpy as np
-import awkward1 as ak
+import awkward as ak
 import coffea
 import coffea.lumi_tools
-from coffea.analysis_objects import JaggedCandidateArray as Jca
+import coffea.jetmet_tools
 import uproot
 import logging
+from copy import copy
 
 import pepper
 from pepper import sonnenschein, betchart
@@ -198,28 +199,28 @@ class ProcessorTTbarLL(pepper.Processor):
                          no_callback=True)
         filler.channels = ("is_ee", "is_em", "is_mm")
         selector.set_multiple_columns(self.channel_masks)
-        selector.set_column(self.mll, "mll")
-        selector.set_column(self.dilep_pt, "dilep_pt", lazy=True)
+        selector.set_column("mll", self.mll)
+        selector.set_column("dilep_pt", self.dilep_pt, lazy=True)
 
-        selector.freeze_selection()
+        selector.applying_cuts = False
 
-        selector.add_cut(self.opposite_sign_lepton_pair, "Opposite sign")
-        selector.add_cut(partial(self.no_additional_leptons, is_mc),
-                         "No add. leps")
-        selector.add_cut(self.channel_trigger_matching, "Chn. trig. match")
-        selector.add_cut(self.lep_pt_requirement, "Req lep pT")
-        selector.add_cut(self.good_mll, "M_ll")
-        selector.add_cut(self.z_window, "Z window")
+        selector.add_cut("Opposite sign", self.opposite_sign_lepton_pair)
+        selector.add_cut("No add. leps",
+                         partial(self.no_additional_leptons, is_mc))
+        selector.add_cut("Chn. trig. match", self.channel_trigger_matching)
+        selector.add_cut("Req lep pT", self.lep_pt_requirement)
+        selector.add_cut("M_ll", self.good_mll)
+        selector.add_cut("Z window", self.z_window)
 
         if (is_mc and self.config["compute_systematics"]
                 and dsname not in self.config["dataset_for_systematics"]):
             if hasattr(filler, "sys_overwrite"):
                 assert filler.sys_overwrite is None
             for variarg in self.get_jetmet_variation_args():
-                selector_copy = selector.copy()
+                selector_copy = copy(selector)
                 filler.sys_overwrite = variarg.name
                 self.process_selection_jet_part(selector_copy, is_mc,
-                                                variarg, dsname)
+                                                variarg, dsname, filler)
                 if self.destdir is not None:
                     logger.debug(f"Saving per event info for variation"
                                  f" {variarg.name}")
@@ -276,30 +277,29 @@ class ProcessorTTbarLL(pepper.Processor):
         if is_mc:
             selector.set_multiple_columns(partial(
                 self.compute_jet_factors, variation.junc, variation.jer))
-        selector.set_column(self.build_jet_column, "Jet")
-        selector.set_column(partial(self.build_met_column, variation.junc,
-                                    variation=variation.met), "MET")
+        selector.set_column("OrigJet", selector.data["Jet"])
+        selector.set_column("Jet", self.build_jet_column)
+        selector.set_column(
+            "MET", partial(self.build_met_column, variation.junc,
+                           variation=variation.met))
         selector.set_multiple_columns(
             partial(self.drellyan_sf_columns, filler))
         if self.drellyan_sf is not None and is_mc:
-            self.apply_dy_sfs(dsname, selector)
-        selector.add_cut(self.has_jets, "#Jets >= %d"
-                         % self.config["num_jets_atleast"])
+            selector.add_cut("DY scale", partial(self.apply_dy_sfs, dsname))
+        selector.add_cut("Has jet(s)", self.has_jets)
         if (self.config["hem_cut_if_ele"] or self.config["hem_cut_if_muon"]
                 or self.config["hem_cut_if_jet"]):
-            selector.add_cut(self.hem_cut, "HEM cut")
-        selector.add_cut(self.jet_pt_requirement, "Jet pt req")
+            selector.add_cut("HEM cut", self.hem_cut)
+        selector.add_cut("Jet pt req", self.jet_pt_requirement)
         if is_mc and self.config["compute_systematics"]:
             self.scale_systematics_for_btag(selector, variation, dsname)
-        selector.add_cut(partial(self.btag_cut, is_mc), "At least %d btag"
-                         % self.config["num_atleast_btagged"])
-        selector.add_cut(self.met_requirement, "MET > %d GeV"
-                         % self.config["ee/mm_min_met"])
+        selector.add_cut("Has btag(s)", partial(self.btag_cut, is_mc))
+        selector.add_cut("Req MET", self.met_requirement)
 
         reco_alg = self.config["reco_algorithm"]
         if reco_alg is not None:
-            selector.set_column(self.pick_leps, "recolepton", all_cuts=True)
-            selector.set_column(self.pick_bs, "recob", all_cuts=True)
+            selector.set_column("recolepton", self.pick_leps, all_cuts=True)
+            selector.set_column("recob", self.pick_bs, all_cuts=True)
             selector.set_column(
                 partial(self.ttbar_system, reco_alg.lower()),
                 "recot", all_cuts=True, no_callback=True)
@@ -309,21 +309,12 @@ class ProcessorTTbarLL(pepper.Processor):
                                 all_cuts=True, lazy=True)
 
     def gentop(self, data):
-        part = pepper.misc.jcafromjagged(
-            pt=data["GenPart_pt"],
-            eta=data["GenPart_eta"],
-            phi=data["GenPart_phi"],
-            mass=data["GenPart_mass"],
-            pdgId=data["GenPart_pdgId"],
-            statusflags=data["GenPart_statusFlags"]
-        )
-        motheridx = data["GenPart_genPartIdxMother"]
-        hasmother = ((0 <= motheridx) & (motheridx < part.counts))
-        part = part[hasmother]
-        is_last_copy = part.statusflags >> 13 & 1 == 1
-        part = part[is_last_copy]
-        abspdg = abs(part.pdgId)
-        return pepper.misc.sortby(part[abspdg == 6], "pdgId")
+        part = data["GenPart"]
+        part = part[~ak.is_none(part.parent, axis=1)]
+        part = part[part.hasFlags("isLastCopy")]
+        part = part[abs(part.pdgId) == 6]
+        part = part[ak.argsort(part.pdgId, ascending=False)]
+        return part
 
     def do_top_pt_reweighting(self, selector):
         pt = selector.masked["gent_lc"].pt
@@ -611,38 +602,42 @@ class ProcessorTTbarLL(pepper.Processor):
         eles = data["Lepton"][is_ele]
         muons = data["Lepton"][~is_ele]
 
-        weights = {}
+        weight = np.ones(len(data))
+        systematics = {}
         # Electron identification efficiency
         for i, sffunc in enumerate(self.electron_sf):
-            central = sffunc(eta=eles.sceta, pt=eles.pt).prod()
+            central = ak.prod(sffunc(eta=eles.sceta, pt=eles.pt), axis=1)
             key = "electronsf{}".format(i)
             if self.config["compute_systematics"]:
-                up = sffunc(
-                    eta=eles.sceta, pt=eles.pt, variation="up").prod()
-                down = sffunc(
-                    eta=eles.sceta, pt=eles.pt, variation="down").prod()
-                weights[key] = (central, up / central, down / central)
-            else:
-                weights[key] = central
+                up = ak.prod(sffunc(
+                    eta=eles.sceta, pt=eles.pt, variation="up"), axis=1)
+                down = ak.prod(sffunc(
+                    eta=eles.sceta, pt=eles.pt, variation="down"), axis=1)
+                systematics[key] = (up / central, down / central)
+            weight = weight * central
         # Muon identification and isolation efficiency
         for i, sffunc in enumerate(self.muon_sf):
-            central = sffunc(abseta=abs(muons.eta), pt=muons.pt).prod()
+            central = ak.prod(
+                sffunc(abseta=abs(muons.eta), pt=muons.pt), axis=1)
             key = "muonsf{}".format(i)
             if self.config["compute_systematics"]:
-                up = sffunc(
-                    abseta=abs(muons.eta), pt=muons.pt, variation="up").prod()
-                down = sffunc(
-                    abseta=abs(muons.eta), pt=muons.pt,
-                    variation="down").prod()
-                weights[key] = (central, up / central, down / central)
-            else:
-                weights[key] = central
-        return weights
+                up = ak.prod(sffunc(
+                    abseta=abs(muons.eta), pt=muons.pt, variation="up"),
+                    axis=1)
+                down = ak.prod(sffunc(
+                    abseta=abs(muons.eta), pt=muons.pt, variation="down"),
+                    axis=1)
+                systematics[key] = (up / central, down / central)
+            weight = weight * central
+        return weight, systematics
 
     def lepton_pair(self, is_mc, data):
-        accept = data["Lepton"].counts >= 2
+        accept = np.asarray(ak.num(data["Lepton"]) >= 2)
         if is_mc:
-            return (accept, self.compute_lepton_sf(data[accept]))
+            weight, systematics = self.compute_lepton_sf(data[accept])
+            accept = accept.astype(float)
+            accept[accept.astype(bool)] *= np.asarray(weight)
+            return accept, systematics
         else:
             return accept
 
@@ -655,10 +650,10 @@ class ProcessorTTbarLL(pepper.Processor):
                 == abs(data["Lepton"][:, 1].pdgId))
 
     def mll(self, data):
-        return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).mass
+        return (data["Lepton"][:, 0] + data["Lepton"][:, 1]).mass
 
     def dilep_pt(self, data):
-        return (data["Lepton"].p4[:, 0] + data["Lepton"].p4[:, 1]).pt
+        return (data["Lepton"][:, 0] + data["Lepton"][:, 1]).pt
 
     def compute_junc_factor(self, data, variation, source="jes", pt=None,
                             eta=None):
@@ -667,16 +662,14 @@ class ProcessorTTbarLL(pepper.Processor):
         if source not in self._junc.levels:
             raise ValueError(f"Jet uncertainty not found: {source}")
         if pt is None:
-            pt = data["Jet_pt"]
+            pt = data["Jet"].pt
         if eta is None:
-            eta = data["Jet_eta"]
-        counts = pt.counts
-        if counts.size == 0 or counts.sum() == 0:
-            return awkward.JaggedArray.fromcounts(counts, [])
-        # Make sure pt and eta aren't starts-stops arrays.
-        # Needed by JetCorrectionUncertainty
-        pt = awkward.JaggedArray.fromcounts(counts, pt.flatten())
-        eta = awkward.JaggedArray.fromcounts(counts, eta.flatten())
+            eta = data["Jet"].eta
+        counts = ak.num(pt)
+        if ak.sum(counts) == 0:
+            return ak.unflatten([], counts)
+        import pdb
+        pdb.set_trace()
         junc = dict(self._junc.getUncertainty(JetPt=pt, JetEta=eta))[source]
         if variation == "up":
             return junc[:, :, 0]
@@ -686,21 +679,16 @@ class ProcessorTTbarLL(pepper.Processor):
     def compute_jer_factor(self, data, variation="central"):
         # Coffea offers a class named JetTransformer for this. Unfortunately
         # it is more inconvinient and bugged than useful.
-        counts = data["Jet_pt"].counts
-        if counts.size == 0 or counts.sum() == 0:
-            return awkward.JaggedArray.fromcounts(counts, [])
-        # Make sure pt and eta aren't offset arrays. Needed by JetResolution
-        pt = awkward.JaggedArray.fromcounts(counts, data["Jet_pt"].flatten())
-        eta = awkward.JaggedArray.fromcounts(counts, data["Jet_eta"].flatten())
-        rho = np.repeat(data["fixedGridRhoFastjetAll"], counts)
-        rho = awkward.JaggedArray.fromcounts(counts, rho)
-        genidx = data["Jet_genJetIdx"]
-        hasgen = ((0 <= genidx) & (genidx < data["GenJet_pt"].counts))
-        genpt = pt.zeros_like()
-        genpt[hasgen] = data["GenJet_pt"][genidx[hasgen]]
-        jer = self._jer.getResolution(JetPt=pt, JetEta=eta, Rho=rho)
-        jersmear = jer * np.random.normal(size=jer.size)
-        jersf = self._jersf.getScaleFactor(JetPt=pt, JetEta=eta, Rho=rho)
+        counts = ak.num(data["Jet"])
+        if ak.sum(counts) == 0:
+            return ak.unflatten([], counts)
+        jer = self._jer.getResolution(
+            JetPt=data["Jet"].pt, JetEta=data["Jet"].eta,
+            Rho=data["fixedGridRhoFastjetAll"])
+        jersf = self._jersf.getScaleFactor(
+            JetPt=data["Jet"].pt, JetEta=data["Jet"].eta,
+            Rho=data["fixedGridRhoFastjetAll"])
+        jersmear = jer * np.random.normal(size=len(jer))
         if variation == "central":
             jersf = jersf[:, :, 0]
         elif variation == "up":
@@ -711,94 +699,87 @@ class ProcessorTTbarLL(pepper.Processor):
             raise ValueError("variation must be one of 'central', 'up' or "
                              "'down'")
         # Hybrid method: compute stochastic smearing, apply scaling if possible
-        factor = 1 + np.sqrt(np.maximum(jersf**2 - 1, 0)) * jersmear
-        factor[hasgen] = (1 + (jersf - 1) * (pt - genpt) / pt)[hasgen]
+        pt = data["Jet"].pt
+        genpt = data["Jet"].matched_gen.pt
+        factor_stoch = 1 + np.sqrt(np.maximum(jersf**2 - 1, 0)) * jersmear
+        factor_scale = 1 + (jersf - 1) * (pt - genpt) / pt
+        factor = ak.where(
+            ak.is_none(genpt, axis=1), factor_stoch, factor_scale)
         return factor
 
     def compute_jet_factors(self, junc, jer, data):
-        factor = data["Jet_pt"].ones_like()
         if junc is not None:
             juncfac = self.compute_junc_factor(data, *junc)
         else:
-            juncfac = data["Jet_pt"].ones_like()
+            juncfac = ak.ones_like(data["Jet"].pt)
         if jer is not None:
             jerfac = self.compute_jer_factor(data, jer)
         else:
-            jerfac = data["Jet_pt"].ones_like()
+            jerfac = ak.ones_like(data["Jet"].pt)
         factor = juncfac * jerfac
         return {"jetfac": factor, "juncfac": juncfac, "jerfac": jerfac}
 
     def good_jet(self, data):
+        jets = data["Jet"]
+        leptons = data["Lepton"]
         j_id, j_puId, lep_dist, eta_min, eta_max, pt_min = self.config[[
             "good_jet_id", "good_jet_puId", "good_jet_lepton_distance",
             "good_jet_eta_min", "good_jet_eta_max", "good_jet_pt_min"]]
         if j_id == "skip":
             has_id = True
         elif j_id == "cut:loose":
-            has_id = (data["Jet_jetId"] & 0b1).astype(bool)
+            has_id = jets.isLoose
             # Always False in 2017 and 2018
         elif j_id == "cut:tight":
-            has_id = (data["Jet_jetId"] & 0b10).astype(bool)
+            has_id = jets.isTight
         elif j_id == "cut:tightlepveto":
-            has_id = (data["Jet_jetId"] & 0b100).astype(bool)
+            has_id = jets.isTightLeptonVeto
         else:
             raise pepper.config.ConfigError(
                     "Invalid good_jet_id: {}".format(j_id))
         if j_puId == "skip":
             has_puId = True
         elif j_puId == "cut:loose":
-            has_puId = (data["Jet_puId"] & 0b100).astype(bool)
+            has_puId = ak.values_astype(jets["puId"] & 0b100, bool)
         elif j_puId == "cut:medium":
-            has_puId = (data["Jet_puId"] & 0b10).astype(bool)
+            has_puId = ak.values_astype(jets["puId"] & 0b10, bool)
         elif j_puId == "cut:tight":
-            has_puId = (data["Jet_puId"] & 0b1).astype(bool)
+            has_puId = ak.values_astype(jets["puId"] & 0b1, bool)
         else:
             raise pepper.config.ConfigError(
                     "Invalid good_jet_id: {}".format(j_puId))
         # Only apply PUID if pT < 50 GeV
-        has_puId = has_puId | (data["Jet_pt"] >= 50)
+        has_puId = has_puId | (jets.pt >= 50)
 
-        j_pt = data["Jet_pt"]
-        if "jetfac" in data:
+        j_pt = jets.pt
+        if "jetfac" in ak.fields(data):
             j_pt = j_pt * data["jetfac"]
-
-        j_eta = data["Jet_eta"]
-        j_phi = data["Jet_phi"]
-        l_eta = data["Lepton"].eta
-        l_phi = data["Lepton"].phi
-        j_eta, l_eta = j_eta.cross(l_eta, nested=True).unzip()
-        j_phi, l_phi = j_phi.cross(l_phi, nested=True).unzip()
+        j_eta = jets.eta
+        j_phi = jets.phi
+        l_eta = leptons.eta
+        l_phi = leptons.phi
+        j_eta, l_eta = ak.unzip(ak.cartesian([j_eta, l_eta], nested=True))
+        j_phi, l_phi = ak.unzip(ak.cartesian([j_phi, l_phi], nested=True))
         delta_eta = j_eta - l_eta
         delta_phi = j_phi - l_phi
         delta_r = np.hypot(delta_eta, delta_phi)
-        has_lepton_close = (delta_r < lep_dist).any()
+        has_lepton_close = ak.any(delta_r < lep_dist, axis=2)
 
         return (has_id & has_puId
                 & (~has_lepton_close)
-                & (eta_min < data["Jet_eta"])
-                & (data["Jet_eta"] < eta_max)
+                & (eta_min < jets.eta)
+                & (jets.eta < eta_max)
                 & (pt_min < j_pt))
 
     def build_jet_column(self, data):
-        keys = ["pt", "eta", "phi", "mass", "hadronFlavour"]
-        jet_dict = {}
-        gj = self.good_jet(data)
-        for key in keys:
-            if "Jet_" + key not in data:
-                continue
-            arr = data["Jet_" + key]
-            if key in ("pt", "mass") and "jetfac" in data:
-                arr = arr * data["jetfac"]
-            arr = arr[gj]
-            offsets = arr.offsets
-            jet_dict[key] = arr.flatten()
+        jets = data["Jet"][self.good_jet(data)]
 
         # Evaluate b-tagging
         tagger, wp = self.config["btag"].split(":")
         if tagger == "deepcsv":
-            disc = data["Jet_btagDeepB"][gj]
+            jets["btag"] = jets["btagDeepB"]
         elif tagger == "deepjet":
-            disc = data["Jet_btagDeepFlavB"][gj]
+            jets["btag"] = jets["btagDeepFlavB"]
         else:
             raise pepper.config.ConfigError(
                 "Invalid tagger name: {}".format(tagger))
@@ -808,105 +789,97 @@ class ProcessorTTbarLL(pepper.Processor):
             raise pepper.config.ConfigError(
                 "Invalid working point \"{}\" for {} in year {}".format(
                     wp, tagger, year))
-        jet_dict["btag"] = disc.flatten()
-        jet_dict["btagged"] = (disc > getattr(wptuple, wp)).flatten()
+        jets["btagged"] = jets["btag"] > getattr(wptuple, wp)
 
-        jets = Jca.candidatesfromoffsets(offsets, **jet_dict)
-
-        # Sort jets by pt
-        jets = jets[jets.pt.argsort()]
         return jets
 
     def build_lowptjet_column(self, junc, data):
-        rawpt = data["CorrT1METJet_rawPt"]
-        eta = data["CorrT1METJet_eta"]
+        jets = data["CorrT1METJet"]
+        rawpt = jets.rawPt
+        eta = jets.eta
         # For MET we care about jets close to 15 GeV. JEC is derived with
         # pt > 10 GeV and |eta| < 5.2, thus cut there
         mask = (rawpt > 10) & (abs(eta) < 5.2)
         rawpt = rawpt[mask]
         eta = eta[mask]
-        phi = data["CorrT1METJet_phi"][mask]
-        area = data["CorrT1METJet_area"][mask]
-        counts = rawpt.counts
-        rho = np.repeat(data["fixedGridRhoFastjetAll"], counts)
-        rho = awkward.JaggedArray.fromcounts(counts, rho)
+        phi = jets.phi[mask]
+        area = jets.area[mask]
+        rho = data["fixedGridRhoFastjetAll"]
         l1l2l3 = self._jec.getCorrection(JetPt=rawpt, JetEta=eta, JetA=area,
                                          Rho=rho)
         pt = rawpt * l1l2l3
-        pt_nomuon = pt * (1 - data["CorrT1METJet_muonSubtrFactor"][mask])
-        factor = pt.ones_like()
+        pt_nomuon = pt * (1 - jets["muonSubtrFactor"][mask])
+        factor = ak.ones_like(pt)
         if junc is not None:
             factor = factor * self.compute_junc_factor(data, *junc, pt=pt,
                                                        eta=eta)
 
-        zeros = pt.zeros_like()
-        return pepper.misc.jcafromjagged(**{
+        zeros = ak.zeros_like(pt)
+        return ak.Array({
             "pt": pt,
             "pt_nomuon": pt_nomuon,
             "juncfac": factor,
             "eta": eta,
             "phi": phi,
             "mass": zeros,
-            "emef": zeros})
+            "emef": zeros
+        }, with_name="Jet", behavior=data["Jet"].behavior)
 
     def build_met_column(self, junc, data, variation="central"):
-        met = TLorentzVectorArray.from_ptetaphim(data["MET_pt"],
-                                                 np.zeros(data.size),
-                                                 data["MET_phi"],
-                                                 np.zeros(data.size))
+        met = data["MET"]
+        metx = met.pt * np.cos(met.phi)
+        mety = met.pt * np.sin(met.phi)
         if variation == "up":
-            dx = data["MET_MetUnclustEnUpDeltaX"]
-            dy = data["MET_MetUnclustEnUpDeltaY"]
-            met = TLorentzVectorArray.from_cartesian(
-                met.x + dx, met.y + dy, met.z, met.t)
+            metx = metx + met.MetUnclustEnUpDeltaX
+            mety = mety + met.MetUnclustEnUpDeltaY
         elif variation == "down":
-            dx = data["MET_MetUnclustEnUpDeltaX"]
-            dy = data["MET_MetUnclustEnUpDeltaY"]
-            met = TLorentzVectorArray.from_cartesian(
-                met.x - dx, met.y - dy, met.z, met.t)
+            metx = metx - met.MetUnclustEnUpDeltaX
+            mety = mety - met.MetUnclustEnUpDeltaY
         elif variation != "central":
             raise ValueError(
                 "variation must be one of 'central', 'up' or 'down'")
-        if "juncfac" in data and (data["juncfac"] != 1).any().any():
+        if "juncfac" in ak.fields(data) and ak.any(data["juncfac"] != 1):
             # Do MET type-1 corrections
-            jets = pepper.misc.jcafromjagged(**{
-                "pt": data["Jet_pt"],
-                "pt_nomuon": (data["Jet_pt"]
-                              * (1 - data["Jet_muonSubtrFactor"])),
+            jets = data["OrigJet"]
+            jets = ak.Array({
+                "pt": jets.pt,
+                "pt_nomuon": jets.pt * (1 - jets.Jet_muonSubtrFactor),
                 "juncfac": data["juncfac"],
-                "eta": data["Jet_eta"],
-                "phi": data["Jet_phi"],
-                "mass": data["Jet_mass"],
-                "emef": data["Jet_neEmEF"] + data["Jet_chEmEF"]})
+                "eta": jets.eta,
+                "phi": jets.phi,
+                "mass": jets.mass,
+                "emef": jets.neEmEF + jets.chEmEF
+            })
             lowptjets = self.build_lowptjet_column(junc, data)
-            jets = pepper.misc.concatenate([jets, lowptjets], axis=1)
+            jets = ak.concatenate([jets, lowptjets], axis=1)
+            # Concatenating somehow removes the Jet type. Readd
+            jets = ak.with_parameter(jets, "__record__", "Jet")
             # Cut according to MissingETRun2Corrections Twiki
             jets = jets[(jets["pt_nomuon"] > 15) & (jets["emef"] < 0.9)]
-
+            import pdb
+            pdb.set_trace()
             factor = jets["juncfac"] - 1
-            newx = met.x - (jets.p4.x * factor).sum()
-            newy = met.y - (jets.p4.y * factor).sum()
-            met = TLorentzVectorArray.from_ptetaphim(np.hypot(newx, newy),
-                                                     np.zeros(data.size),
-                                                     np.arctan2(newy, newx),
-                                                     np.zeros(data.size))
-        return Jca.candidatesfromoffsets(np.arange(data.size + 1), p4=met)
+            metx = metx - ak.sum(jets.x * factor, axis=1)
+            mety = mety - ak.sum(jets.y * factor, axis=1)
+        met["pt"] = np.hypot(metx, mety)
+        met["phi"] = np.arctan2(mety, metx)
+        return met
 
-    def apply_dy_sfs(self, dsname, selector):
+    def apply_dy_sfs(self, dsname, data):
         if dsname.startswith("DY"):
-            data = selector.masked
-            channel = np.where(data["is_ee"], 0, np.where(data["is_em"], 1, 2))
-            met = data["MET"].pt.flatten()
+            channel = ak.where(data["is_ee"], 0, ak.where(data["is_em"], 1, 2))
+            met = data["MET"].pt
             central = self.drellyan_sf(channel=channel, met=met)
-            selector.modify_weight("DY scale factors", central)
             if self.config["compute_systematics"]:
                 up = self.drellyan_sf(channel=channel, met=met, variation="up")
                 down = self.drellyan_sf(
                     channel=channel, met=met, variation="down")
-                selector.set_systematic("DYsf", up / central, down / central)
+                return central, {"DYsf": (up / central, down / central)}
+            return central
         elif self.config["compute_systematics"]:
-            ones = np.ones(selector.num_selected)
-            selector.set_systematic("DYsf", ones, ones)
+            ones = np.ones(len(data))
+            return np.full(len(data), True), {"DYsf": (ones, ones)}
+        return np.full(len(data), True)
 
     def drellyan_sf_columns(self, data, filler):
         # Dummy function, overwritten when computing DY SFs
@@ -920,16 +893,16 @@ class ProcessorTTbarLL(pepper.Processor):
         cut_muon = self.config["hem_cut_if_muon"]
         cut_jet = self.config["hem_cut_if_jet"]
 
-        keep = np.full(data.size, True)
+        keep = np.full(len(data), True)
         if cut_ele:
             ele = data["Lepton"][abs(data["Lepton"].pdgId) == 11]
-            keep &= ~self.in_hem1516(ele.phi, ele.eta).any()
+            keep = keep & (~self.in_hem1516(ele.phi, ele.eta).any())
         if cut_muon:
             muon = data["Lepton"][abs(data["Lepton"].pdgId) == 13]
-            keep &= ~self.in_hem1516(muon.phi, muon.eta).any()
+            keep = keep & (~self.in_hem1516(muon.phi, muon.eta).any())
         if cut_jet:
             jet = data["Jet"]
-            keep &= ~self.in_hem1516(jet.phi, jet.eta).any()
+            keep = keep & (~self.in_hem1516(jet.phi, jet.eta).any())
         return keep
 
     def channel_trigger_matching(self, data):
@@ -940,40 +913,32 @@ class ProcessorTTbarLL(pepper.Processor):
         is_em = (~is_ee) & (~is_mm)
         triggers = self.config["channel_trigger_map"]
 
-        ret = np.full(data.size, False)
-        if "ee" in triggers:
-            ret |= is_ee & self.passing_trigger(triggers["ee"], [], data)
-        if "mumu" in triggers:
-            ret |= is_mm & self.passing_trigger(triggers["mumu"], [], data)
-        if "emu" in triggers:
-            ret |= is_em & self.passing_trigger(triggers["emu"], [], data)
-        if "e" in triggers:
-            ret |= is_ee & self.passing_trigger(triggers["e"], [], data)
-            ret |= is_em & self.passing_trigger(triggers["e"], [], data)
-        if "mu" in triggers:
-            ret |= is_mm & self.passing_trigger(triggers["mu"], [], data)
-            ret |= is_em & self.passing_trigger(triggers["mu"], [], data)
+        ret = np.full(len(data), False)
+        check = [
+            (is_ee, "ee"), (is_mm, "mumu"), (is_em, "emu"),
+            (is_ee | is_em, "e"), (is_mm | is_em, "mu")]
+        for mask, trigname in check:
+            if trigname in triggers:
+                ret = ret | (
+                    mask & self.passing_trigger(triggers[trigname], [], data))
 
         return ret
 
     def lep_pt_requirement(self, data):
-        n = np.zeros(data.size)
+        n = np.zeros(len(data))
         for i, pt_min in enumerate(self.config["lep_pt_min"]):
-            mask = data["Lepton"].counts > i
-            n[mask] += (pt_min < data["Lepton"].pt[mask, i]).astype(int)
+            mask = ak.num(data["Lepton"]) > i
+            n[mask] += np.asarray(
+                pt_min < data["Lepton"].pt[mask, i]).astype(int)
         return n >= self.config["lep_pt_num_satisfied"]
 
     def good_mll(self, data):
         return data["mll"] > self.config["mll_min"]
 
     def no_additional_leptons(self, is_mc, data):
-        add_ele = self.electron_cuts(data, good_lep=False)
-        add_muon = self.muon_cuts(data, good_lep=False)
-        accept = add_ele.sum() + add_muon.sum() <= 2
-        if is_mc:
-            return (accept, self.compute_lepton_sf(data[accept]))
-        else:
-            return accept
+        add_ele = self.electron_cuts(data["Electron"], good_lep=False)
+        add_muon = self.muon_cuts(data["Muon"], good_lep=False)
+        return ak.sum(add_ele, axis=1) + ak.sum(add_muon, axis=1) <= 2
 
     def z_window(self, data):
         m_min = self.config["z_boson_window_start"]
@@ -982,13 +947,13 @@ class ProcessorTTbarLL(pepper.Processor):
         return data["is_em"] | is_out_window
 
     def has_jets(self, data):
-        return self.config["num_jets_atleast"] <= data["Jet"].counts
+        return self.config["num_jets_atleast"] <= ak.num(data["Jet"])
 
     def jet_pt_requirement(self, data):
-        n = np.zeros(data.size)
+        n = np.zeros(len(data))
         for i, pt_min in enumerate(self.config["jet_pt_min"]):
-            mask = data["Jet"].counts > i
-            n[mask] += (pt_min < data["Jet"].pt[mask, i]).astype(int)
+            mask = ak.num(data["Jet"]) > i
+            n[mask] += np.asarray(pt_min < data["Jet"].pt[mask, i]).astype(int)
         return n >= self.config["jet_pt_num_satisfied"]
 
     def compute_weight_btag(self, data, efficiency="central", never_sys=False):
@@ -998,7 +963,8 @@ class ProcessorTTbarLL(pepper.Processor):
         eta = jets.eta
         pt = jets.pt
         discr = jets["btag"]
-        weight = {}
+        weight = np.ones(len(data))
+        systematics = {}
         for i, weighter in enumerate(self.btagweighters):
             central = weighter(wp, flav, eta, pt, discr, "central", efficiency)
             if not never_sys and self.config["compute_systematics"]:
@@ -1010,12 +976,14 @@ class ProcessorTTbarLL(pepper.Processor):
                     wp, flav, eta, pt, discr, "heavy up", efficiency)
                 down = weighter(
                     wp, flav, eta, pt, discr, "heavy down", efficiency)
-                weight[f"btagsf{i}"] = (central, up / central, down / central)
-                weight[f"btagsf{i}light"] = (
-                    None, light_up / central, light_down / central)
-            else:
-                weight[f"btagsf{i}"] = central
-        return weight
+                systematics[f"btagsf{i}"] = (up / central, down / central)
+                systematics[f"btagsf{i}light"] = (
+                    light_up / central, light_down / central)
+            weight = weight * central
+        if never_sys:
+            return weight
+        else:
+            return weight, systematics
 
     def scale_systematics_for_btag(self, selector, variation, dsname):
         """Modifies factors in the systematic table to account for differences
@@ -1023,72 +991,71 @@ class ProcessorTTbarLL(pepper.Processor):
         ROOT file contains a histogram with the name of the variation."""
         available = set.intersection(
             *(w.available_efficiencies for w in self.btagweighters))
-        data = selector.masked
-        systematics = selector.masked_systematics
-        central = np.prod(list(self.compute_weight_btag(
-            data, never_sys=True).values()), axis=0)
-        if variation == self.get_jetmet_nominal_arg():
-            if dsname in self.config["dataset_for_systematics"]:
-                name = self.config["dataset_for_systematics"][dsname][1]
-                systematics = awkward.Table({name: systematics["weight"]})
-            for name in systematics.columns:
+        data = selector.data
+        systematics = selector.systematics
+        central = self.compute_weight_btag(data, never_sys=True)
+        if (variation == self.get_jetmet_nominal_arg()
+                and dsname not in self.config["dataset_for_systematics"]):
+            for name in ak.fields(systematics):
                 if name == "weight":
                     continue
                 if name not in available:
                     continue
                 sys = systematics[name]
-                varied_sf = np.prod(list(self.compute_weight_btag(
-                    data, name, True).values()), axis=0)
+                varied_sf = self.compute_weight_btag(data, name, True)
                 selector.set_systematic(name, sys / central * varied_sf)
+        elif dsname in self.config["dataset_for_systematics"]:
+            name = self.config["dataset_for_systematics"][dsname][1]
+            if name in available:
+                varied_sf = self.compute_weight_btag(data, name, True)
+                selector.set_systematic("weight", sys / central * varied_sf)
         elif variation.name in available:
-            varied_sf = np.prod(list(self.compute_weight_btag(
-                data, variation.name, True).values()), axis=0)
-            selector.modify_weight("Btag eff variation dependence",
-                                   1 / central * varied_sf)
+            varied_sf = self.compute_weight_btag(data, variation.name, True)
+            selector.set_systematic("weight", sys / central * varied_sf)
 
     def btag_cut(self, is_mc, data):
-        num_btagged = data["Jet"]["btagged"].sum()
-        is_tagged = num_btagged >= self.config["num_atleast_btagged"]
+        num_btagged = ak.sum(data["Jet"]["btagged"], axis=1)
+        accept = np.asarray(num_btagged >= self.config["num_atleast_btagged"])
         if is_mc and self.btagweighters is not None:
-            return (is_tagged, self.compute_weight_btag(data[is_tagged]))
+            weight, systematics = self.compute_weight_btag(data[accept])
+            accept = accept.astype(float)
+            accept[accept.astype(bool)] *= np.asarray(weight)
+            return accept, systematics
         else:
-            return is_tagged
+            return accept
 
     def met_requirement(self, data):
         met = data["MET"].pt
         return data["is_em"] | (met > self.config["ee/mm_min_met"])
 
     def pick_leps(self, data):
-        return pepper.misc.sortby(data["Lepton"], "pdgId")
+        return data["Lepton"][
+            ak.argsort(data["Lepton"]["pdgId"], ascending=False)]
 
     def pick_bs(self, data):
         recolepton = data["recolepton"]
-        lep = recolepton.fromjagged(awkward.JaggedArray.fromcounts(
-            np.full(data.size, 1), recolepton[:, 0]))
-        antilep = recolepton.fromjagged(awkward.JaggedArray.fromcounts(
-            np.full(data.size, 1), recolepton[:, 1]))
+        lep = recolepton[:, 0]
+        antilep = recolepton[:, 1]
         btags = data["Jet"][data["Jet"].btagged]
         jetsnob = data["Jet"][~data["Jet"].btagged]
-        b0, b1 = pepper.misc.pairswhere(btags.counts > 1,
-                                        btags.distincts(),
-                                        btags.cross(jetsnob))
-        b0, b1 = pepper.misc.pairswhere(btags.counts == 0,
-                                        jetsnob.distincts(),
-                                        b0.cross(b1))
-        bs = pepper.misc.concatenate([b0, b1], axis=1)
-        bbars = pepper.misc.concatenate([b1, b0], axis=1)
-        alb = bs.cross(antilep)
-        lbbar = bbars.cross(lep)
-        hist_mlb = uproot.open(self.reco_info_filepath)["mlb"]
-        p_m_alb = awkward.JaggedArray.fromcounts(
-            bs.counts, hist_mlb.allvalues[np.searchsorted(
-                hist_mlb.alledges, alb.mass.content)-1])
-        p_m_lbbar = awkward.JaggedArray.fromcounts(
-            bs.counts, hist_mlb.allvalues[np.searchsorted(
-                hist_mlb.alledges, lbbar.mass.content)-1])
-        bestbpair_mlb = (p_m_alb*p_m_lbbar).argmax()
-        return awkward.concatenate([bs[bestbpair_mlb], bbars[bestbpair_mlb]],
-                                   axis=1)
+        # TODO: not tested at all
+        num_btags = ak.num(btags)
+        b0, b1 = ak.where(
+            num_btags > 1, ak.combinations(btags, 2),
+            ak.where(
+                num_btags == 1, ak.cartesian([btags, jetsnob]),
+                ak.combinations(jetsnob, 2)))
+        bs = ak.concatenate([b0, b1], axis=1)
+        bs_rev = ak.concatenate([b1, b0], axis=1)
+        mass_alb = ak.sum(ak.cartesian([bs, antilep]), axis=1).mass
+        mass_lb = ak.sum(ak.cartesian([bs_rev, lep]), axis=1).mass
+        with uproot.open(self.reco_info_filepath) as f:
+            counts, edges = f["mlb"].to_numpy(flow=True)
+        p_m_alb = counts[np.digitize(mass_alb, edges) - 1]
+        p_m_lb = counts[np.digitize(mass_lb, edges) - 1]
+        bestbpair_mlb = ak.argmax(p_m_alb*p_m_lb)
+        return ak.concatenate([bs[bestbpair_mlb], bs_rev[bestbpair_mlb]],
+                              axis=1)
 
     def ttbar_system(self, reco_alg, data):
         lep = data["recolepton"].p4[:, 0]

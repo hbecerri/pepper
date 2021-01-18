@@ -5,7 +5,6 @@ import h5py
 import uproot
 from collections import defaultdict
 import coffea
-from coffea.analysis_objects import JaggedCandidateArray as Jca
 import awkward
 import numpy as np
 import parsl
