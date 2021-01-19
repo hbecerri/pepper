@@ -204,14 +204,14 @@ class ProcessorTTbarLL(pepper.Processor):
         selector.set_column("mll", self.mll)
         selector.set_column("dilep_pt", self.dilep_pt, lazy=True)
 
-        selector.applying_cuts = False
+        # Do not freeze selection because there still is a bug in awkward
 
         selector.add_cut("Opposite sign", self.opposite_sign_lepton_pair)
-        selector.add_cut("No add. leps",
+        selector.add_cut("No add leps",
                          partial(self.no_additional_leptons, is_mc))
-        selector.add_cut("Chn. trig. match", self.channel_trigger_matching)
+        selector.add_cut("Chn trig match", self.channel_trigger_matching)
         selector.add_cut("Req lep pT", self.lep_pt_requirement)
-        selector.add_cut("M_ll", self.good_mll)
+        selector.add_cut("m_ll", self.good_mll)
         selector.add_cut("Z window", self.z_window)
 
         if (is_mc and self.config["compute_systematics"]
@@ -303,11 +303,11 @@ class ProcessorTTbarLL(pepper.Processor):
             selector.set_column("recolepton", self.pick_leps, all_cuts=True)
             selector.set_column("recob", self.pick_bs, all_cuts=True)
             selector.set_column(
-                partial(self.ttbar_system, reco_alg.lower()),
-                "recot", all_cuts=True, no_callback=True)
-            selector.add_cut(self.passing_reco, "Reco")
-            selector.set_column(self.build_nu_column, "reconu", all_cuts=True)
-            selector.set_column(self.calculate_dark_pt, "dark_pt",
+                "recot", partial(self.ttbar_system, reco_alg.lower()),
+                all_cuts=True, no_callback=True)
+            selector.add_cut("Reco", self.passing_reco)
+            selector.set_column("reconu", self.build_nu_column, all_cuts=True)
+            selector.set_column("dark_pt", self.calculate_dark_pt,
                                 all_cuts=True, lazy=True)
 
     def gentop(self, data):
@@ -1043,9 +1043,6 @@ class ProcessorTTbarLL(pepper.Processor):
         antilep = recolepton[:, 1]
         btags = data["Jet"][data["Jet"].btagged]
         jetsnob = data["Jet"][~data["Jet"].btagged]
-        # TODO: not tested at all
-        import pdb
-        pdb.set_trace()
         num_btags = ak.num(btags)
         b0, b1 = ak.unzip(ak.where(
             num_btags > 1, ak.combinations(btags, 2),
@@ -1062,7 +1059,8 @@ class ProcessorTTbarLL(pepper.Processor):
             mlb_prob = pepper.scale_factors.ScaleFactors.from_hist(f["mlb"])
         p_m_alb = mlb_prob(mlb=mass_alb)
         p_m_lb = mlb_prob(mlb=mass_lb)
-        bestbpair_mlb = ak.argmax(p_m_alb * p_m_lb, axis=1)
+        bestbpair_mlb = ak.unflatten(
+            ak.argmax(p_m_alb * p_m_lb, axis=1), np.full(len(bs), 1))
         return ak.concatenate([bs[bestbpair_mlb], bs_rev[bestbpair_mlb]],
                               axis=1)
 
