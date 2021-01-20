@@ -226,10 +226,9 @@ class ProcessorTTbarLL(pepper.Processor):
                 if self.destdir is not None:
                     logger.debug(f"Saving per event info for variation"
                                  f" {variarg.name}")
-                    df = selector_copy.masked
                     self._save_per_event_info(
                         dsname + "_" + variarg.name, selector_copy,
-                        (df.filename, df.entrystart, df.entrystop), False)
+                        self.get_identifier(selector_copy), False)
             filler.sys_overwrite = None
 
         # Do normal, no-variation run
@@ -802,35 +801,25 @@ class ProcessorTTbarLL(pepper.Processor):
 
     def build_lowptjet_column(self, junc, data):
         jets = data["CorrT1METJet"]
-        rawpt = jets.rawPt
-        eta = jets.eta
         # For MET we care about jets close to 15 GeV. JEC is derived with
         # pt > 10 GeV and |eta| < 5.2, thus cut there
-        mask = (rawpt > 10) & (abs(eta) < 5.2)
-        rawpt = rawpt[mask]
-        eta = eta[mask]
-        phi = jets.phi[mask]
-        area = jets.area[mask]
-        rho = data["fixedGridRhoFastjetAll"]
-        l1l2l3 = self._jec.getCorrection(JetPt=rawpt, JetEta=eta, JetA=area,
-                                         Rho=rho)
-        pt = rawpt * l1l2l3
-        pt_nomuon = pt * (1 - jets["muonSubtrFactor"][mask])
-        factor = ak.ones_like(pt)
-        if junc is not None:
-            factor = factor * self.compute_junc_factor(data, *junc, pt=pt,
-                                                       eta=eta)
+        jets = jets[(jets.rawPt > 10) & (abs(jets.eta) < 5.2)]
+        l1l2l3 = self._jec.getCorrection(
+            JetPt=jets.rawPt, JetEta=jets.eta, JetA=jets.area,
+            Rho=data["fixedGridRhoFastjetAll"])
+        jets["pt"] = l1l2l3 * jets.rawPt
+        jets["pt_nomuon"] = jets["pt"] * (1 - jets["muonSubtrFactor"])
 
-        zeros = ak.zeros_like(pt)
-        return ak.Array({
-            "pt": pt,
-            "pt_nomuon": pt_nomuon,
-            "juncfac": factor,
-            "eta": eta,
-            "phi": phi,
-            "mass": zeros,
-            "emef": zeros
-        }, with_name="Jet", behavior=data["Jet"].behavior)
+        if junc is not None:
+            jets["juncfac"] = self.compute_junc_factor(
+                data, *junc, pt=jets["pt"], eta=jets["eta"]) - 1
+        else:
+            jets["juncfac"] = ak.zeros_like(jets["pt"])
+        jets["emef"] = jets["mass"] = ak.zeros_like(jets["pt"])
+        jets.behavior = data["Jet"].behavior
+        jets = ak.with_parameter(jets, "__record__", "Jet")
+
+        return jets
 
     def build_met_column(self, junc, data, variation="central"):
         met = data["MET"]
@@ -850,23 +839,28 @@ class ProcessorTTbarLL(pepper.Processor):
             jets = data["OrigJet"]
             jets = ak.Array({
                 "pt": jets.pt,
-                "pt_nomuon": jets.pt * (1 - jets.Jet_muonSubtrFactor),
-                "juncfac": data["juncfac"],
+                "pt_nomuon": jets.pt * (1 - jets.muonSubtrFactor),
+                "juncfac": data["juncfac"] - 1,
                 "eta": jets.eta,
                 "phi": jets.phi,
                 "mass": jets.mass,
                 "emef": jets.neEmEF + jets.chEmEF
-            })
+            }, with_name="Jet", behavior=jets.behavior)
             lowptjets = self.build_lowptjet_column(junc, data)
-            jets = ak.concatenate([jets, lowptjets], axis=1)
-            # Concatenating somehow removes the Jet type. Readd
+            # Concatenating removes the type. Readd
             jets = ak.with_parameter(jets, "__record__", "Jet")
             # Cut according to MissingETRun2Corrections Twiki
             jets = jets[(jets["pt_nomuon"] > 15) & (jets["emef"] < 0.9)]
-            # TODO: test this
-            factor = jets["juncfac"] - 1
-            metx = metx - ak.sum(jets.x * factor, axis=1)
-            mety = mety - ak.sum(jets.y * factor, axis=1)
+            lowptjets = lowptjets[(lowptjets["pt_nomuon"] > 15)
+                                  & (lowptjets["emef"] < 0.9)]
+            # lowptjets lose their type here. Probably a bug, workaround
+            lowptjets = ak.with_parameter(lowptjets, "__record__", "Jet")
+            metx = metx - (
+                ak.sum(jets.x * jets["juncfac"], axis=1)
+                + ak.sum(lowptjets.x * lowptjets["juncfac"], axis=1))
+            mety = mety - (
+                ak.sum(jets.y * jets["juncfac"], axis=1)
+                + ak.sum(lowptjets.y * lowptjets["juncfac"], axis=1))
         met["pt"] = np.hypot(metx, mety)
         met["phi"] = np.arctan2(mety, metx)
         return met

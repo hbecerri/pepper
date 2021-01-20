@@ -2,6 +2,7 @@ from pepper.accumulator import PackedSelectionAccumulator
 from pepper.accumulator import ArrayAccumulator
 from pepper.hist_defns import HistDefinition
 from pepper import datasets
+from pepper.hdffile import HDF5File
 from pepper.lazytable import LazyTable
 from pepper import misc
 from pepper.output_filler import DummyOutputFiller
@@ -20,6 +21,7 @@ __all__ = [
     "ArrayAccumulator",
     "HistDefinition",
     "datasets",
+    "HDF5File",
     "LazyTable",
     "misc",
     "DummyOutputFiller",

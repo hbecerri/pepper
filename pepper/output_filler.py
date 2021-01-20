@@ -1,5 +1,6 @@
 from functools import partial
 import numpy as np
+import awkward as ak
 import coffea
 import logging
 
@@ -9,7 +10,7 @@ import pepper
 logger = logging.getLogger(__name__)
 
 
-class DummyOutputFiller():
+class DummyOutputFiller:
     def __init__(self, output):
         self.output = output
 
@@ -17,7 +18,7 @@ class DummyOutputFiller():
         return []
 
 
-class OutputFiller():
+class OutputFiller:
     def __init__(self, output, hist_dict, is_mc, dsname, dsname_in_hist,
                  sys_enabled, sys_overwrite=None, channels=None,
                  copy_nominal=None, cuts_to_plot=None):
@@ -47,29 +48,31 @@ class OutputFiller():
                 return
         accumulator = self.output["cutflows"]
         if systematics is not None:
-            weight = systematics["weight"].flatten()
+            weight = systematics["weight"]
         else:
-            weight = np.ones(data.size)
+            weight = np.ones(len(data))
         if "all" not in accumulator:
             accumulator["all"] = coffea.processor.defaultdict_accumulator(
                 partial(coffea.processor.defaultdict_accumulator, int))
         if cut not in accumulator["all"][self.dsname]:
-            accumulator["all"][self.dsname][cut] = weight.sum()
-            logger.info("Filling cutflow. Current event count: " +
-                        str(accumulator["all"][self.dsname][cut]))
+            count = ak.sum(weight)
+            accumulator["all"][self.dsname][cut] = count
+            logger.info(
+                "Filling cutflow. Current event count: {} ({} rows)".format(
+                    count, len(weight)))
         for ch in self.channels:
             if ch not in accumulator:
                 accumulator[ch] = coffea.processor.defaultdict_accumulator(
                     partial(coffea.processor.defaultdict_accumulator, int))
             if cut not in accumulator[ch][self.dsname]:
-                accumulator[ch][self.dsname][cut] = weight[data[ch]].sum()
+                accumulator[ch][self.dsname][cut] = ak.sum(weight[data[ch]])
 
     def fill_hists(self, data, systematics, cut):
         accumulator = self.output["hists"]
         channels = self.channels
         do_systematics = self.sys_enabled and systematics is not None
         if systematics is not None:
-            weight = systematics["weight"].flatten()
+            weight = systematics["weight"]
         else:
             weight = None
         for histname, fill_func in self.hist_dict.items():
@@ -96,10 +99,10 @@ class OutputFiller():
                     is_mc=self.is_mc, weight=weight)
 
                 if do_systematics:
-                    for syscol in systematics.columns:
+                    for syscol in ak.fields(systematics):
                         if syscol == "weight":
                             continue
-                        sysweight = weight * systematics[syscol].flatten()
+                        sysweight = weight * systematics[syscol]
                         hist = fill_func(
                             data=data, channels=channels,
                             dsname=self.dsname_in_hist, is_mc=self.is_mc,

@@ -1,5 +1,6 @@
 import os
 from functools import partial
+import awkward as ak
 import coffea
 import h5py
 import logging
@@ -8,7 +9,7 @@ from time import time
 import abc
 
 import pepper
-from pepper import Selector, OutputFiller
+from pepper import Selector, OutputFiller, HDF5File
 import pepper.config
 
 
@@ -110,57 +111,44 @@ class Processor(coffea.processor.ProcessorABC):
     def _prepare_saved_columns(self, selector):
         columns = {}
         for specifier in self.config["columns_to_save"]:
-            item = selector.masked
-            if isinstance(specifier, str):
-                specifier = [specifier]
-            elif not isinstance(specifier, list):
+            datapicker = pepper.hist_defns.DataPicker(specifier)
+            item = datapicker(selector.data)
+            # Strip rows that are not selected from memory
+            item = ak.flatten(item, axis=0)
+            if item is None:
+                logger.info("Skipping to save column because it is not "
+                            f"present: {specifier}")
+                continue
+            key = datapicker.name
+            if key in columns:
                 raise pepper.config.ConfigError(
-                    "columns_to_save must be str or list")
-            for subspecifier in specifier:
-                try:
-                    item = item[subspecifier]
-                except KeyError:
-                    try:
-                        item = getattr(item, subspecifier)
-                    except AttributeError:
-                        logger.info("Skipping to save column because it is "
-                                    f"not present: {specifier}")
-                        break
-            else:
-                if isinstance(item, awkward.JaggedArray):
-                    # Strip rows that are not selected from memory
-                    item = item.deepcopy()
-                    if isinstance(item.content, awkward.Table):
-                        # Remove columns used for caching by Coffea
-                        for column in item.content.columns:
-                            if column.startswith("__"):
-                                del item.content[column]
-                key = "_".join(specifier)
-                if key in columns:
-                    raise pepper.config.ConfigError(
-                        f"Ambiguous column to save '{key}', (from "
-                        f"{specifier})")
-                columns[key] = item
-        return awkward.Table(columns)
+                    f"Ambiguous column to save '{key}', (from {specifier})")
+            columns[key] = item
+        return ak.Array(columns)
 
     def _save_per_event_info(
             self, dsname, selector, identifier, save_full_sys=True):
+        out_dict = {"dsname": dsname, "identifier": identifier}
+        out_dict["events"] = self._prepare_saved_columns(selector)
+        cutnames, cutflags = selector.get_cuts()
+        out_dict["cutnames"] = cutnames
+        out_dict["cutflags"] = cutflags
+        if (self.config["compute_systematics"] and save_full_sys
+                and selector.systematics is not None):
+            out_dict["systematics"] = ak.flatten(selector.systematics,
+                                                 axis=0)
+        elif selector.systematics is not None:
+            out_dict["weight"] = ak.flatten(
+                selector.systematics["weight"], axis=0)
         with self._open_output(dsname) as f:
-            outf = awkward.hdf5(f)
-            out_dict = {"dsname": dsname, "identifier": identifier}
-            out_dict["events"] = self._prepare_saved_columns(selector)
-            cutnames, cutflags = selector.get_cuts()
-            out_dict["cutnames"] = cutnames
-            out_dict["cutflags"] = cutflags
-            if (self.config["compute_systematics"] and save_full_sys
-                    and selector.masked_systematics is not None):
-                out_dict["systematics"] = \
-                    selector.masked_systematics.deepcopy()
-            else:
-                out_dict["weight"] = selector.weight
-
+            outf = HDF5File(f)
             for key in out_dict.keys():
                 outf[key] = out_dict[key]
+
+    @staticmethod
+    def get_identifier(data):
+        meta = data.metadata
+        return meta["filename"], meta["entrystart"], meta["entrystop"]
 
     def process(self, data):
         starttime = time()
@@ -182,7 +170,7 @@ class Processor(coffea.processor.ProcessorABC):
         if self.destdir is not None:
             logger.debug("Saving per event info")
             self._save_per_event_info(
-                dsname, selector, (filename, entrystart, entrystop))
+                dsname, selector, self.get_identifier(selector))
 
         timetaken = time() - starttime
         logger.debug(f"Processing finished. Took {timetaken:.3f} s.")
@@ -243,8 +231,7 @@ class Processor(coffea.processor.ProcessorABC):
             genweight = data["genWeight"]
         else:
             genweight = None
-        # TODO: get filler working, replace None with filler.get_callbacks()
-        selector = Selector(data, genweight, None)
+        selector = Selector(data, genweight, filler.get_callbacks())
         return selector
 
     @abc.abstractmethod

@@ -1,12 +1,6 @@
-import json
 import coffea.hist
-import awkward
+import awkward as ak
 import numpy as np
-
-
-def create_hist_dict(config_json):
-    hist_config = json.load(open(config_json))
-    return {key: HistDefinition(val) for key, val in hist_config.items()}
 
 
 def not_arr(arr):
@@ -18,11 +12,9 @@ def leaddiff(quantity):
     if isinstance(quantity, np.ndarray):
         if quantity.ndim == 1:
             quantity = quantity.reshape((-1, 1))
-        quantity = awkward.JaggedArray.fromregular(quantity)
-    enough = quantity.counts >= 2
-    q_enough = quantity[enough]
-    diff = q_enough[:, 0] - q_enough[:, 1]
-    return awkward.JaggedArray.fromcounts(enough.astype(int), diff)
+        quantity = ak.Array(quantity)
+    enough = quantity[ak.broadcast_arrays(ak.num(quantity) >= 2, quantity)[0]]
+    return enough[:, 0:1] - enough[:, 1:2]
 
 
 def concatenate(*arr, axis=0):
@@ -33,9 +25,9 @@ def concatenate(*arr, axis=0):
         if isinstance(a, np.ndarray):
             if a.ndim == 1:
                 a = a.reshape((-1, 1))
-            a = awkward.JaggedArray.fromregular(a)
+            a = ak.Array(a)
         arr_processed.append(a)
-    return awkward.concatenate(arr_processed, axis=axis)
+    return ak.concatenate(arr_processed, axis=axis)
 
 
 func_dict = {
@@ -67,7 +59,7 @@ class HistDefinitionError(Exception):
     pass
 
 
-class HistDefinition():
+class HistDefinition:
     def __init__(self, config):
         self.ylabel = "Counts"
         self.dataset_axis = coffea.hist.Cat("dataset", "Dataset name")
@@ -112,61 +104,58 @@ class HistDefinition():
         for key, data in fill_vals.items():
             if data is None:
                 continue
-            if hasattr(data, "size"):
-                if size is not None and data.size != size:
-                    raise HistDefinitionError(f"Got inconsistent filling size "
-                                              f"({size} and {data.size})")
-                size = data.size
-            if isinstance(data, awkward.JaggedArray):
-                if counts is not None and (counts != data.counts).any():
+            if size is not None and len(data) != size:
+                raise ValueError(f"Got inconsistent filling size "
+                                 f"({size} and {len(data)}")
+            size = len(data)
+            if isinstance(data, ak.Array) and data.ndim > 1:
+                if data.ndim > 2:
+                    raise ValueError(f"data for {key} is more than 2 dim")
+                if counts is not None and ak.any(counts != ak.num(data)):
                     if counts_mask is None:
                         counts_mask = np.full(size, True)
-                    counts_mask = counts == data.counts
+                    counts_mask = counts == np.asarray(ak.num(data))
                     counts[~counts_mask] = 0
                 else:
-                    counts = data.counts
+                    counts = np.asarray(ak.num(data))
                 jagged.append(key)
             else:
                 flat.append(key)
         prepared = {}
+        if counts_mask is not None:
+            if mask is not None:
+                mask = mask & counts_mask
+            else:
+                mask = counts_mask
         for key, data in fill_vals.items():
-            if data is not None:
-                if key in jagged:
-                    if data.counts.sum() == 0:
-                        # Workaround for awkward issue #239
-                        pass
-                    elif counts_mask is not None and mask is not None:
-                        data = data[counts_mask & mask]
-                    elif mask is not None:
-                        data = data[mask]
-                    elif counts_mask is not None:
-                        data = data[counts_mask]
-                    data = data.flatten()
-                elif key in flat and counts is not None:
-                    if isinstance(mask, awkward.JaggedArray):
-                        data = data.repeat(counts)[mask.flatten()]
-                    elif mask is not None:
-                        data = data[mask].repeat(counts[mask])
-                    else:
-                        data = data.repeat(counts)
+            if data is None:
+                prepared[key] = None
+                continue
+            if key in flat:
+                if len(jagged) > 0:
+                    data = ak.broadcast_arrays(data, fill_vals[jagged[0]])[0]
                 elif mask is not None:
-                    data = data[mask]
-            prepared[key] = data
+                    data = ak.broadcast_arrays(data, mask)[0]
+            if mask is not None:
+                data = data[mask]
+            if data.ndim > 1:
+                data = ak.flatten(data)
+            prepared[key] = np.asarray(data)
         return prepared
 
     def __call__(self, data, channels, dsname, is_mc, weight):
-        fill_vals = {name: self.pick_data(method, data)
+        fill_vals = {name: DataPicker(method)(data)
                      for name, method in self.bin_fills.items()}
-        cat_masks = {name: {cat: self.pick_data(method, data)
+        cat_masks = {name: {cat: DataPicker(method)(data)
                             for cat, method in val.items()}
                      for name, val in self.cat_fills.items()}
         if self.weight is not None:
-            fill_vals["weight"] = self.pick_data(self.weight, data)
+            fill_vals["weight"] = DataPicker(self.weight)(data)
         elif weight is not None:
             fill_vals["weight"] = weight
         cat_present = {name: (val if any(mask is not None
                                          for mask in val.values())
-                              else {"All": np.full(data.size, True)})
+                              else {"All": np.full(len(data), True)})
                        for name, val in cat_masks.items()}
         axes = self.axes.copy()
         if channels is not None and len(channels) > 0:
@@ -199,7 +188,13 @@ class HistDefinition():
 
         return hist
 
-    def pick_data(self, method, data):
+
+class DataPicker:
+    def __init__(self, method):
+        self._method = method
+
+    def __call__(self, data):
+        method = self._method
         orig_data = data
         if not isinstance(method, list):
             raise HistDefinitionError("Fill method must be list")
@@ -209,13 +204,10 @@ class HistDefinition():
                     data = getattr(data, sel)
                 except AttributeError:
                     try:
-                        if ((isinstance(data, awkward.Table)
-                                or (isinstance(data, awkward.JaggedArray)
-                                    and isinstance(
-                                        data.content, awkward.Table)))
-                                and sel not in data.columns):
-                            # Workaround for awkward.Table raising a
-                            # ValueError instead of a KeyError
+                        if (isinstance(data, ak.Array)
+                                and sel not in ak.fields(data)):
+                            # Workaround for awkward raising a ValueError
+                            # instead of a KeyError
                             raise KeyError
                         else:
                             data = data[sel]
@@ -255,15 +247,14 @@ class HistDefinition():
                         start = leading - 1
                         end = start + 1
                     if isinstance(data, np.ndarray):
-                        data = awkward.JaggedArray.fromregular(data)
-                    elif not isinstance(data, awkward.JaggedArray):
+                        data = ak.Array(data)
+                    elif not isinstance(data, ak.Array):
                         raise HistDefinitionError(
-                            "Can only do 'leading' on numpy or jagged arrays")
-                    # Do not change data.size as we later need to apply channel
-                    # masks
-                    start = np.minimum(data.stops, data.starts + start)
-                    end = np.minimum(data.stops, data.starts + end)
-                    data = awkward.JaggedArray(start, end, data.content)
+                            "Can only do 'leading' on numpy or awkward arrays")
+                    data = data[:, start:end]
+            else:
+                raise HistDefinitionError("Fill constains invalid type, must "
+                                          f"be str or dict: {type(sel)}")
         else:
             return data
         return None
@@ -280,7 +271,7 @@ class HistDefinition():
                 raise HistDefinitionError("args for function must be list")
             for value in sel["args"]:
                 if isinstance(value, list):
-                    args.append(self.pick_data(value, orig_data))
+                    args.append(self.__class__(value)(orig_data))
                     if args[-1] is None:
                         return None
                 else:
@@ -290,7 +281,7 @@ class HistDefinition():
                 raise HistDefinitionError("kwargs for function must be dict")
             for key, value in sel["kwargs"].items():
                 if isinstance(value, list):
-                    kwargs[key] = self.pick_data(value, orig_data)
+                    kwargs[key] = self.__class__(value)(orig_data)
                     if kwargs[key] is None:
                         return None
                 else:
@@ -299,3 +290,39 @@ class HistDefinition():
             return func(*args, **kwargs)
         else:
             return func(data, *args, **kwargs)
+
+    @property
+    def name(self):
+        name = ""
+        for sel in self._method:
+            if isinstance(sel, str):
+                name += sel.replace("/", "")
+            elif isinstance(sel, dict):
+                if "function" in sel:
+                    name += sel["function"].replace("/", "")
+                elif "key" in sel:
+                    name += sel["key"].replace("/", "")
+                elif "attribute" in sel:
+                    name += sel["attribute"].replace("/", "")
+                elif "leading" in sel:
+                    name += "leading"
+                    if isinstance(sel["leading"], tuple):
+                        if (not isinstance(sel["leading"][0], int)
+                                or not isinstance(sel["leading"][0], int)):
+                            raise HistDefinitionError(
+                                "Invalid value for leading tuple. Must be int")
+                        name += (str(sel["leading"][0]) + "-"
+                                 + str(sel["leading"][1]))
+                    elif isinstance(sel["leading"], int):
+                        name += str(sel["leading"])
+                    else:
+                        raise HistDefinitionError(
+                            "Invalid value for leading. Must be int or tuple")
+                else:
+                    raise HistDefinitionError(
+                        f"Dict without any recognized keys: {sel}")
+            else:
+                raise HistDefinitionError("Fill constains invalid type, must "
+                                          f"be str or dict: {type(sel)}")
+            name += "_"
+        return name
