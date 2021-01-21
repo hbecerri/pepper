@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import os
-import numpy as np
 from argparse import ArgumentParser
 import json
 from collections import defaultdict
+import awkward as ak
 import uproot
 from itertools import chain
 from tqdm import tqdm
@@ -14,20 +14,22 @@ import pepper
 
 def update_counts(f, counts, process_name, geskey, lhesskey, lhepdfskey):
     gen_event_sumw = f["Runs"][geskey].array()[0]
-    has_lhe = f["Runs"][lhesskey].array()[0].size != 0
+    has_lhe = len(f["Runs"][lhesskey].array()[0]) != 0
     if has_lhe:
         lhe_scale_sumw = f["Runs"][lhesskey].array()[0]
         # Workaround for a bug NanoAODv6 and earlier.
         # This only works if NanoAOD bug #537 is not present at the same time
         if len(lhe_scale_sumw) == 9:
-            lhe_scale_sumw /= lhe_scale_sumw[4]
-        lhe_scale_sumw *= gen_event_sumw
+            lhe_scale_sumw = lhe_scale_sumw / lhe_scale_sumw[4]
+        lhe_scale_sumw = lhe_scale_sumw * gen_event_sumw
         lhe_pdf_sumw = f["Runs"][lhepdfskey].array()[0] * gen_event_sumw
 
     counts[process_name] += gen_event_sumw
     if has_lhe:
-        counts[process_name + "_LHEScaleSumw"] += lhe_scale_sumw
-        counts[process_name + "_LHEPdfSumw"] += lhe_pdf_sumw
+        counts[process_name + "_LHEScaleSumw"] =\
+            counts[process_name + "_LHEScaleSumw"] + lhe_scale_sumw
+        counts[process_name + "_LHEPdfSumw"] =\
+            counts[process_name + "_LHEPdfSumw"] + lhe_pdf_sumw
     return counts
 
 
@@ -102,7 +104,7 @@ for key in counts.keys():
     factor = xs * args.lumi / counts[key]
     if key.endswith("_LHEScaleSumw") or key.endswith("_LHEPdfSumw"):
         factor = counts[dsname] / counts[key]
-    if isinstance(factor, np.ndarray):
+    if isinstance(factor, ak.Array):
         factor = list(factor)
     factors[key] = factor
     if key == dsname:

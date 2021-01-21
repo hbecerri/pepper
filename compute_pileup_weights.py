@@ -2,7 +2,7 @@ import os
 import sys
 import pepper
 import coffea
-import uproot
+import uproot3
 import parsl
 from argparse import ArgumentParser
 
@@ -20,7 +20,7 @@ class Processor(pepper.Processor):
 
 
 def save_output(hist, datahist, datahistup, datahistdown, filename):
-    with uproot.recreate(filename) as f:
+    with uproot3.recreate(filename) as f:
         for idn in hist.identifiers("dataset"):
             dataset = idn.name
             hist_int = hist.integrate("dataset", dataset)
@@ -73,11 +73,11 @@ if args.debug:
     print("Processing only one file per dataset because of --debug")
     datasets = {key: [val[0]] for key, val in datasets.items()}
 
-with uproot.open(args.data_pu_hist) as f:
+with uproot3.open(args.data_pu_hist) as f:
     datahist = pepper.misc.rootimport(f["pileup"])
-with uproot.open(args.data_pu_hist_up) as f:
+with uproot3.open(args.data_pu_hist_up) as f:
     datahistup = pepper.misc.rootimport(f["pileup"])
-with uproot.open(args.data_pu_hist_down) as f:
+with uproot3.open(args.data_pu_hist_down) as f:
     datahistdown = pepper.misc.rootimport(f["pileup"])
 if len(datahist.axes()) != 1:
     print("data_pu_hist has invalid number of axes. Only one axis is allowed.")

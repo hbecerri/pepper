@@ -3,7 +3,7 @@ import uproot_methods
 import coffea
 import awkward
 
-from pepper.misc import jaggeddepth, chunked_calls
+from pepper.misc import chunked_calls
 
 
 def _maybe_sample(s, size, rng):
