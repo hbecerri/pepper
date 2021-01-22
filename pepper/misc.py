@@ -68,11 +68,11 @@ def export(hist):
     axes = hist.axes()
 
     if d == 1:
-        from uproot_methods.classes.TH1 import Methods
+        from uproot3_methods.classes.TH1 import Methods
     elif d == 2:
-        from uproot_methods.classes.TH2 import Methods
+        from uproot3_methods.classes.TH2 import Methods
     else:
-        from uproot_methods.classes.TH3 import Methods
+        from uproot3_methods.classes.TH3 import Methods
 
     class TH(Methods, list):
         pass

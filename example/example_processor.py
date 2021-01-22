@@ -4,15 +4,19 @@
 
 import pepper
 import numpy as np
+import awkward as ak
 import coffea
 import coffea.lumi_tools
+from coffea.nanoevents import NanoAODSchema
 from functools import partial
 import argparse
 import parsl
-import uproot
 import awkward
 import os
 import logging
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+import uproot3  # noqa: E402
 
 
 # All processors should inherit from pepper.Processor
@@ -33,95 +37,102 @@ class MyProcessor(pepper.Processor):
 
         # Add a cut only allowing events according to the golden JSON
         if not is_mc:
-            selector.add_cut(partial(self.good_lumimask, is_mc), "Lumi")
+            selector.add_cut("Lumi", partial(self.good_lumimask, is_mc))
 
         # Only allow events that pass triggers specified in config
         # This also takes into account a trigger order to avoid triggering
         # the same event if it's in two different data datasets.
         pos_triggers, neg_triggers = pepper.misc.get_trigger_paths_for(
             dsname, is_mc, self.trigger_paths, self.trigger_order)
-        selector.add_cut(partial(
-            self.passing_trigger, pos_triggers, neg_triggers), "Trigger")
+        selector.add_cut("Trigger", partial(
+            self.passing_trigger, pos_triggers, neg_triggers))
 
-        # Define our first object: the leptons
-        selector.set_column(self.build_lepton_column, "Lepton")
+        # Pick electrons satisfying our criterias
+        selector.set_column("Electron", self.pick_electrons)
+        # Also pick muons
+        selector.set_column("Muon", self.pick_muons)
 
         # Only accept events that have to leptons
-        selector.add_cut(self.lepton_pair, "Exactly 2 leptons")
+        selector.add_cut("Exactly 2 leptons", self.lepton_pair)
 
         # Only accept events that have oppositely changed leptons
-        selector.add_cut(self.opposite_sign_lepton_pair, "OC leptons")
+        selector.add_cut("OC leptons", self.opposite_sign_lepton_pair)
 
     def good_lumimask(self, is_mc, data):
+        # This function gets called by the selector in order to get information
+        # on which events to discard or how to modify the event weight.
+        # The data argument is given by the selector and is a nanoevent object,
+        # giving us access to all info inside the Events tree of the NanoAOD
         run = np.array(data["run"])
         luminosity_block = np.array(data["luminosityBlock"])
         lumimask = coffea.lumi_tools.LumiMask(self.lumimask)
         return lumimask(run, luminosity_block)
 
     def passing_trigger(self, pos_triggers, neg_triggers, data):
+        hlt = data["HLT"]
         trigger = (
-            np.any([data[trigger_path] for trigger_path in pos_triggers],
+            np.any([hlt[trigger_path] for trigger_path in pos_triggers],
                    axis=0)
-            & ~np.any([data[trigger_path] for trigger_path in neg_triggers],
+            & ~np.any([hlt[trigger_path] for trigger_path in neg_triggers],
                       axis=0)
         )
         return trigger
 
-    def build_lepton_column(self, data):
-        # First find leptons that we think a good enough for our purposes
-        good_electron = self.electron_cuts(data)
-        good_muon = self.muon_cuts(data)
+    def pick_electrons(self, data):
+        ele = data["Electron"]
 
-        keys = ["pt", "eta", "phi", "mass", "pdgId"]
-        lep_dict = {}
-        # Here we collect the observables we need for electrons and muons.
-        # We are not interested in taus so skip them.
-        for key in keys:
-            electron_data = data["Electron_" + key][good_electron]
-            muon_data = data["Muon_" + key][good_muon]
-            lep_dict[key] = awkward.concatenate(
-                [electron_data, muon_data], axis=1)
-
-        # Create a JaggedCandidateArrays
-        # It is made up from multiple jagged arrays and always
-        # includes a Lorentz vector, just what we need for particles.
-        # For documentation see coffea.analysis_objects.JaggedCandidateMethods
-        leptons = pepper.misc.jcafromjagged(**lep_dict)
-
-        # Sort leptons by pt
-        leptons = leptons[leptons.pt.argsort()]
-        return leptons
-
-    def electron_cuts(self, data):
         # We do not want electrons that are between the barrel and the end cap
-        sc_eta_abs = abs(data["Electron_eta"] + data["Electron_deltaEtaSC"])
+        # For this, we need the eta of the electron with respect to its
+        # supercluster
+        sc_eta_abs = abs(ele.eta + ele.deltaEtaSC)
         is_in_transreg = (1.444 < sc_eta_abs) & (sc_eta_abs < 1.566)
 
         # Electron ID, as an example we use the MVA one here
-        has_id = data["Electron_mvaFall17V2Iso_WP90"]
+        has_id = ele.mvaFall17V2Iso_WP90
 
         # Finally combine all the requirements
-        return (has_id
-                & (~is_in_transreg)
-                & (self.config["ele_eta_min"] < data["Electron_eta"])
-                & (data["Electron_eta"] < self.config["ele_eta_max"])
-                & (self.config["good_ele_pt_min"] < data["Electron_pt"]))
+        is_good = (
+            has_id
+            & (~is_in_transreg)
+            & (self.config["ele_eta_min"] < ele.eta)
+            & (ele.eta < self.config["ele_eta_max"])
+            & (self.config["good_ele_pt_min"] < ele.pt))
 
-    def muon_cuts(self, data):
-        has_id = data["Muon_mediumId"]
-        has_iso = data["Muon_pfIsoId"] > 1
-        return (has_id
-                & has_iso
-                & (self.config["muon_eta_min"] < data["Muon_eta"])
-                & (data["Muon_eta"] < self.config["muon_eta_max"])
-                & (self.config["good_muon_pt_min"] < data["Muon_pt"]))
+        # Return all electrons with are deemed to be good
+        return ele[is_good]
+
+    def pick_muons(self, data):
+        muon = data["Muon"]
+        has_id = muon.mediumId
+        has_iso = muon.pfIsoId > 1
+        is_good = (
+            has_id
+            & has_iso
+            & (self.config["muon_eta_min"] < muon.eta)
+            & (muon.eta < self.config["muon_eta_max"])
+            & (self.config["good_muon_pt_min"] < muon.pt))
+
+        return muon[is_good]
 
     def lepton_pair(self, data):
-        return data["Lepton"].counts == 2
+        # We only want events with excatly two leptons, thus look at our
+        # electron and muon counts and pick events accordingly
+        return ak.num(data["Electron"]) + ak.num(data["Muon"]) == 2
 
     def opposite_sign_lepton_pair(self, data):
-        return (np.sign(data["Lepton"][:, 0].pdgId)
-                != np.sign(data["Lepton"][:, 1].pdgId))
+        # At this point we only have events with exactly two leptons, but now
+        # we want only events where they have opposite charge
+
+        # First concatenate the charge of our electron(s) and our muon(s)
+        # into one array
+        charge = ak.concatenate(
+            [data["Electron"].charge, data["Muon"].charge], axis=1)
+
+        # Now in this array we can simply compare the first and the second
+        # element. Note that this is done on axis 1, axis 0 is always used for
+        # event indexing, e.g. you would compare charges from event 0 and 1 if
+        # you do charge[0] != charge[1]
+        return charge[:, 0] != charge[:, 1]
 
 
 parser = argparse.ArgumentParser(description="Run MyProcessor")
@@ -134,7 +145,9 @@ logger = logging.getLogger("pepper")
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.DEBUG)
 
-config = pepper.Config(args.config)
+# Here we use the ConfigTTbarLL instead of its base Config, to use some of its
+# predefined extras
+config = pepper.ConfigTTbarLL(args.config)
 processor = MyProcessor(config)
 datasets = config.get_datasets()
 
@@ -150,7 +163,7 @@ else:
     executor = coffea.processor.iterative_executor
 
 output = coffea.processor.run_uproot_job(
-    datasets, "Events", processor, executor)
+    datasets, "Events", processor, executor, {"schema": NanoAODSchema})
 
 # Save cutflows
 coffea.util.save(output["cutflows"], "cutflows.coffea")
@@ -162,7 +175,7 @@ for cut, hist in output["hists"].items():
     roothists = pepper.misc.export_with_sparse(hist)
     if len(roothists) == 0:
         continue
-    with uproot.recreate(os.path.join("hists", fname)) as f:
+    with uproot3.recreate(os.path.join("hists", fname)) as f:
         for key, subhist in roothists.items():
             key = "_".join(key).replace("/", "_")
             f[key] = subhist
