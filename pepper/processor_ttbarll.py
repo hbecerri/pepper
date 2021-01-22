@@ -346,9 +346,9 @@ class ProcessorTTbarLL(pepper.Processor):
                     data["LHEScaleWeight"][:, 3] * norm[3])
         else:
             selector.set_systematic(
-                "MEren", np.ones(data.size), np.ones(data.size))
+                "MEren", np.ones(len(data)), np.ones(len(data)))
             selector.set_systematic(
-                "MEfac", np.ones(data.size), np.ones(data.size))
+                "MEfac", np.ones(len(data)), np.ones(len(data)))
         # Parton shower scale
         psweight = data["PSWeight"]
         if ak.num(psweight)[0] != 1:
@@ -358,9 +358,9 @@ class ProcessorTTbarLL(pepper.Processor):
             selector.set_systematic("PSfsr", psweight[:, 3], psweight[:, 1])
         else:
             selector.set_systematic(
-                "PSisr", np.ones(data.size), np.ones(data.size))
+                "PSisr", np.ones(len(data)), np.ones(len(data)))
             selector.set_systematic(
-                "PSfsr", np.ones(data.size), np.ones(data.size))
+                "PSfsr", np.ones(len(data)), np.ones(len(data)))
 
     def crosssection_scale(self, dsname, data):
         num_events = len(data)
