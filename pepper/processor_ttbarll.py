@@ -422,15 +422,7 @@ class ProcessorTTbarLL(pepper.Processor):
             lumimask = coffea.lumi_tools.LumiMask(self.lumimask)
             return lumimask(run, luminosity_block)
 
-    @staticmethod
-    def _normalize_trigger_path(path):
-        if path.startswith("HLT_"):
-            path = path[4:]
-        return path
-
     def passing_trigger(self, pos_triggers, neg_triggers, data):
-        pos_triggers = [self._normalize_trigger_path(p) for p in pos_triggers]
-        neg_triggers = [self._normalize_trigger_path(p) for p in neg_triggers]
         hlt = data["HLT"]
         trigger = (
             np.any([hlt[trigger_path] for trigger_path in pos_triggers],
@@ -917,8 +909,10 @@ class ProcessorTTbarLL(pepper.Processor):
             (is_ee | is_em, "e"), (is_mm | is_em, "mu")]
         for mask, trigname in check:
             if trigname in triggers:
+                trigger = [pepper.misc.normalize_trigger_path(t)
+                           for t in triggers[trigname]]
                 ret = ret | (
-                    mask & self.passing_trigger(triggers[trigname], [], data))
+                    mask & self.passing_trigger(trigger, [], data))
 
         return ret
 

@@ -11,14 +11,22 @@ import inspect
 import gc
 
 
-def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None):
+def normalize_trigger_path(path):
+    if path.startswith("HLT_"):
+        path = path[4:]
+    return path
+
+
+def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None,
+                          normalize=True):
     """Get trigger paths needed for the specific dataset.
 
     Arguments:
     dataset -- Name of the dataset
     trigger_paths -- dict mapping dataset names to their triggers
-    trigger_order -- List of datasets to define the order in which the triggers
+    trigger_order -- list of datasets to define the order in which the triggers
                      are applied.
+    normalize -- bool, whether to remove HLT_ from the beginning
 
     Returns a tuple of lists (pos_triggers, neg_triggers) describing trigger
     paths to include and to exclude respectively.
@@ -34,7 +42,12 @@ def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None):
                 break
             neg_triggers.extend(trigger_paths[dsname])
         pos_triggers = trigger_paths[dataset]
-    return list(dict.fromkeys(pos_triggers)), list(dict.fromkeys(neg_triggers))
+    pos_triggers = list(dict.fromkeys(pos_triggers))
+    neg_triggers = list(dict.fromkeys(neg_triggers))
+    if normalize:
+        pos_triggers = [normalize_trigger_path(t) for t in pos_triggers]
+        neg_triggers = [normalize_trigger_path(t) for t in neg_triggers]
+    return pos_triggers, neg_triggers
 
 
 def get_event_files(eventdir, eventext, datasets):
