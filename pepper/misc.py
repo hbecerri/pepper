@@ -1,6 +1,7 @@
 import os
 import sys
 from glob import glob
+import awkward as ak
 import coffea
 import numpy as np
 import parsl
@@ -322,19 +323,26 @@ def chunked_calls(array_param, chunksize, returns_multiple=False):
     returns_multiple -- Needs to be set to true if the function returns more
                         than one variable, e.g. as a tuple or list
     """
+
+    def concatenate(arrays):
+        if isinstance(arrays[0], np.ndarray):
+            return np.concatenate(arrays)
+        else:
+            return ak.concatenate(arrays)
+
     def decorator(func):
         sig = inspect.signature(func)
 
         @wraps(func)
         def wrapper(*args, **kwargs):
             kwargs = sig.bind(*args, **kwargs).arguments
-            rows = kwargs[array_param].shape[0]
+            rows = len(kwargs[array_param])
             if rows <= chunksize:
                 # Nothing to chunk, just return whatever func returns
                 return func(**kwargs)
             array_parameters = {array_param}
             for param, arg in kwargs.items():
-                if hasattr(arg, "shape") and arg.shape[0] == rows:
+                if hasattr(arg, "__len__") and len(arg) == rows:
                     array_parameters.add(param)
             starts = np.arange(0, rows, chunksize)
             stops = np.r_[starts[1:], rows]
@@ -347,7 +355,7 @@ def chunked_calls(array_param, chunksize, returns_multiple=False):
                 if ret_chunk is None:
                     return None
                 ret_chunks.append(ret_chunk)
-                # Force clean upof memory to keep usage low
+                # Force clean up of memory to keep usage low
                 gc.collect()
             if len(ret_chunks) == 1:
                 concated = ret_chunks[0]

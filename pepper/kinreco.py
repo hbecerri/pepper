@@ -1,7 +1,7 @@
 import numpy as np
-import uproot_methods
+import uproot
 import coffea
-import awkward
+import awkward as ak
 
 from pepper.misc import chunked_calls
 
@@ -14,8 +14,8 @@ def _maybe_sample(s, size, rng):
         centers = s.axes()[0].centers()
         p = values / values.sum()
         s = rng.choice(centers, size, p=p)
-    elif isinstance(s, uproot_methods.classes.TH1.Methods):
-        values, edges = s.numpy()
+    elif isinstance(s, uproot.model.Model) and s.classname.startswith("TH1"):
+        values, edges = s.to_numpy()
         centers = (edges[1:] + edges[:-1]) / 2
         p = values / values.sum()
         s = rng.choice(centers, size, p=p)
@@ -58,10 +58,12 @@ def _rotate_axis(vec, axis, angle):
 
 
 def _smear(fourvec, energyf, alpha, num, rng):
-    num_events = fourvec.size
-    e = fourvec.E[:, None]
-    p3 = np.stack([fourvec.x, fourvec.y, fourvec.z], axis=-1)[:, None, :]
-    m = fourvec.mass[:, None]
+    num_events = len(fourvec)
+    # Axes are [events, smearing, lorentz]
+    e = np.asarray(fourvec.energy)[:, None]
+    p3 = np.stack([np.asarray(fourvec.x), np.asarray(fourvec.y),
+                   np.asarray(fourvec.z)], axis=-1)[:, None, :]
+    m = np.asarray(fourvec.mass)[:, None]
     if num is None:
         return e, p3[..., 0], p3[..., 1], p3[..., 2]
 
@@ -104,12 +106,33 @@ def _roots_vectorized(poly, axis=-1):
     return roots
 
 
-def _lorvecfromnumpy(x, y, z, t):
-    x = awkward.JaggedArray.fromregular(x)
-    y = awkward.JaggedArray.fromregular(y)
-    z = awkward.JaggedArray.fromregular(z)
-    t = awkward.JaggedArray.fromregular(t)
-    return uproot_methods.TLorentzVectorArray.from_cartesian(x, y, z, t)
+def _lorvecfromnumpy(x, y, z, t, behavior, name="LorentzVector"):
+    x = ak.Array(x)
+    y = ak.Array(y)
+    z = ak.Array(z)
+    t = ak.Array(t)
+    # Make axes to outer layer
+    counts = []
+    for i in range(x.ndim - 1):
+        counts.append(ak.num(x))
+        x = ak.flatten(x)
+        y = ak.flatten(y)
+        z = ak.flatten(z)
+        t = ak.flatten(t)
+    v = ak.Array({"x": x, "y": y, "z": z, "t": t}, with_name=name,
+                 behavior=behavior)
+    for count in reversed(counts):
+        v = ak.unflatten(v, count)
+    return v
+
+
+def _from_regular(array, axis=1, highlevel=True):
+    """from_regular with multiple axis at once"""
+    if isinstance(axis, int):
+        return ak.from_regular(array, axis, highlevel)
+    for i in axis:
+        array = ak.from_regular(array, i, highlevel)
+    return array
 
 
 @chunked_calls("lep", 10000, True)
@@ -138,29 +161,30 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     alphal -- Histogram giving the angle between reco and gen leptons. If None,
               lepton angles won't be smeared
     alphaj -- Same as alphal for bottom quarks
-    hist_mlb -- Histogram of the lepton-bottom-quark-mass distribution. Is
-                needed, if num_smear is not None
+    hist_mlb -- uproot histogram of the lepton-bottom-quark-mass distribution.
+                Is needed, if num_smear is not None
     seed -- Seed in the random number generator. If None, a random seed will be
             used. For defailts see the parameter of numpy.random.default_rng().
     """
 
     rng = np.random.default_rng(seed)
 
-    if jaggeddepth(lep) > 1:
+    if lep.ndim > 1:
         # Get rid of jagged dimension, as we have one particle per row and
         # variable
-        lep = lep.flatten()
-        antilep = antilep.flatten()
-        b = b.flatten()
-        antib = antib.flatten()
-        met = met.flatten()
+        lep = ak.flatten(lep)
+        antilep = ak.flatten(antilep)
+        b = ak.flatten(b)
+        antib = ak.flatten(antib)
+        met = ak.flatten(met)
 
     # Allow num_smear to be 0
     if num_smear == 0:
         num_smear = None
 
+    behav = lep.behavior
     # Use 2d numpy arrays. Use first axis for events, second for smearing
-    num_events = lep.size
+    num_events = len(lep)
     lE, lx, ly, lz = _smear(lep, energyfl, alphal, num_smear, rng)
     alE, alx, aly, alz = _smear(antilep, energyfl, alphal, num_smear, rng)
     bE, bx, by, bz = _smear(b, energyfj, alphaj, num_smear, rng)
@@ -170,8 +194,10 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     # Unpack MET compontents and also propagate smearing to it
     METx = (met.x[:, None] - lx + lep.x[:, None] - alx + antilep.x[:, None]
                            - bx + b.x[:, None] - abx + antib.x[:, None])
+    METx = np.asarray(METx)
     METy = (met.y[:, None] - ly + lep.y[:, None] - aly + antilep.y[:, None]
                            - by + b.y[:, None] - aby + antib.y[:, None])
+    METy = np.asarray(METy)
 
     mwp = _maybe_sample(mwp, (num_events, 1), rng)
     mwm = _maybe_sample(mwm, (num_events, 1), rng)
@@ -197,10 +223,11 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
                        - (ly + aby)**2 - (lz + abz)**2)
         malb = np.sqrt((alE + bE)**2 - (alx + bx)**2
                        - (aly + by)**2 - (alz + bz)**2)
-        # Set nan, over and underflow to 0
-        allvalues = np.r_[0, hist_mlb.values, 0, 0]
-        plab = allvalues[np.searchsorted(hist_mlb.alledges, mlab) - 1]
-        palb = allvalues[np.searchsorted(hist_mlb.alledges, malb) - 1]
+        # Set over and underflow to 0
+        values, edges = hist_mlb.to_numpy(flow=True)
+        values = np.r_[0, values[1:-1], 0]
+        plab = values[np.digitize(mlab, edges) - 1]
+        palb = values[np.digitize(malb, edges) - 1]
         weights = plab * palb
     elif num_smear is not None and num_smear > 1:
         raise ValueError("Smearing is enabled but got None for hist_mlb")
@@ -318,109 +345,108 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     vbarpz = ((-b1[..., None] - b2[..., None] * vbarpx - b3[..., None]
                * vbarpy) / b4[..., None])
 
-    is_real = awkward.JaggedArray.fromregular(is_real)
-    vpx = awkward.JaggedArray.fromregular(vpx)[is_real]
-    vpy = awkward.JaggedArray.fromregular(vpy)[is_real]
-    vpz = awkward.JaggedArray.fromregular(vpz)[is_real]
-    vbarpx = awkward.JaggedArray.fromregular(vbarpx)[is_real]
-    vbarpy = awkward.JaggedArray.fromregular(vbarpy)[is_real]
-    vbarpz = awkward.JaggedArray.fromregular(vbarpz)[is_real]
-    weights = awkward.JaggedArray.fromregular(weights)
+    # Neutrino mass is assumed to be 0
+    vE = np.sqrt(vpx ** 2 + vpy ** 2 + vpz ** 2)
+    vbarE = np.sqrt(vbarpx ** 2 + vbarpy ** 2 + vbarpz ** 2)
 
-    v = uproot_methods.TLorentzVectorArray.from_xyzm(
-        vpx, vpy, vpz, vpz.zeros_like())
-    av = uproot_methods.TLorentzVectorArray.from_xyzm(
-        vbarpx, vbarpy, vbarpz, vbarpz.zeros_like())
-    b = _lorvecfromnumpy(bx, by, bz, bE)
-    ab = _lorvecfromnumpy(abx, aby, abz, abE)
-    lep = _lorvecfromnumpy(lx, ly, lz, lE)
-    alep = _lorvecfromnumpy(alx, aly, alz, alE)
+    v = _lorvecfromnumpy(vpx, vpy, vpz, vE, behav)
+    av = _lorvecfromnumpy(vbarpx, vbarpy, vbarpz, vbarE, behav)
+    is_real = _from_regular(is_real, axis=(1, 2))
+    b = _lorvecfromnumpy(bx, by, bz, bE, behav)
+    ab = _lorvecfromnumpy(abx, aby, abz, abE, behav)
+    lep = _lorvecfromnumpy(lx, ly, lz, lE, behav)
+    alep = _lorvecfromnumpy(alx, aly, alz, alE, behav)
     wp = v + alep
-    # Doing alep + v (terms switched) causes bugs in uproot/awkward
     wm = av + lep
     t = wp + b
     at = wm + ab
 
     # Reduce solution axis and pick the solution with the smallest mtt
-    has_solution = v.flatten().counts >= 1
-    has_solution = awkward.JaggedArray.fromcounts(
-        np.full(num_events, num_smear), has_solution)
-    min_mtt = (t + at).mass.argmin()
-    v = v[min_mtt][has_solution][:, :, 0]
-    av = av[min_mtt][has_solution][:, :, 0]
-    wp = wp[min_mtt][has_solution][:, :, 0]
-    wm = wm[min_mtt][has_solution][:, :, 0]
-    t = t[min_mtt][has_solution][:, :, 0]
-    at = at[min_mtt][has_solution][:, :, 0]
-    weights = weights[has_solution]
+    has_solution = ak.any(is_real, axis=2)
+    min_mtt = ak.argmin((t + at).mass, axis=2, keepdims=True)
+    v = ak.flatten(v[min_mtt][has_solution], axis=2)
+    av = ak.flatten(av[min_mtt][has_solution], axis=2)
+    wp = ak.flatten(wp[min_mtt][has_solution], axis=2)
+    wm = ak.flatten(wm[min_mtt][has_solution], axis=2)
+    t = ak.flatten(t[min_mtt][has_solution], axis=2)
+    at = ak.flatten(at[min_mtt][has_solution], axis=2)
+    weights = _from_regular(weights, axis=1)[has_solution]
 
     # Undo smearing by averaging
-    sum_weights = weights.sum()
-    t = (t * weights / sum_weights).sum()
-    at = (at * weights / sum_weights).sum()
-
-    if not isinstance(t, awkward.JaggedArray):
-        # Put back into a JaggedArrays
-        # .sum() removes the JaggedArray layer but only if not empty
-        has_solution = has_solution.any()
-        cls = uproot_methods.classes.TLorentzVector.JaggedArrayMethods
-        counts = has_solution.astype(int)
-        t = cls.fromcounts(counts, t[has_solution])
-        at = cls.fromcounts(counts, at[has_solution])
+    sum_weights = ak.where(ak.num(weights) > 0, ak.sum(weights, axis=1), 1.)
+    # Divide is currently not implemented for coffea vectors. Workaround
+    t = ak.with_name(ak.sum(t * weights, axis=1), "LorentzVector") * (
+        1 / sum_weights)
+    at = ak.with_name(ak.sum(at * weights, axis=1), "LorentzVector") * (
+        1 / sum_weights)
 
     return t, at
 
 
 if __name__ == '__main__':
+    from coffea.nanoevents.methods import vector
     # test case:
-    lep = JaggedCandidateArray.candidatesfromcounts(
-        [1], energy=np.array([165.33320]), px=np.array([26.923591]),
-        py=np.array([16.170616]), pz=np.array([-162.3227]))
-    antilep = JaggedCandidateArray.candidatesfromcounts(
-        [1], energy=np.array([49.290821]), px=np.array([-34.58441]),
-        py=np.array([-13.27824]), pz=np.array([-32.51431]))
-    b = JaggedCandidateArray.candidatesfromcounts(
-        [1], energy=np.array([205.54469]), px=np.array([99.415420]),
-        py=np.array([-78.89404]), pz=np.array([-161.6102]))
-    antib = JaggedCandidateArray.candidatesfromcounts(
-        [1], energy=np.array([362.82086]), px=np.array([-49.87086]),
-        py=np.array([91.930526]), pz=np.array([-347.3868]))
-    nu = JaggedCandidateArray.candidatesfromcounts(
-        [1], energy=np.array([70.848953]), px=np.array([34.521587]),
-        py=np.array([-51.23474]), pz=np.array([-6.555319]))
-    antinu = JaggedCandidateArray.candidatesfromcounts(
-        [1], energy=np.array([13.760989]), px=np.array([11.179965]),
-        py=np.array([-3.844941]), pz=np.array([7.0419898]))
-    sump4 = nu.p4 + antinu.p4
-    met = JaggedCandidateArray.candidatesfromcounts(
-        [1], pt=sump4.pt[0], eta=np.zeros(1), phi=sump4.phi[0],
-        mass=np.zeros(1))
-    top, antitop = sonnenschein(
-        lep["p4"], antilep["p4"], b["p4"], antib["p4"], met["p4"])
-    print("MC Truth:", (antilep.p4 + nu.p4 + b.p4)[0],
-                       (lep.p4 + antinu.p4 + antib.p4)[0])
+    lep = ak.Array({
+        "t": [165.33320], "x": [26.923591], "y": [16.170616],
+        "z": [-162.3227]}, with_name="LorentzVector", behavior=vector.behavior)
+    antilep = ak.Array({
+        "t": [49.290821], "x": [-34.58441], "y": [-13.27824],
+        "z": [-32.51431]}, with_name="LorentzVector", behavior=vector.behavior)
+    b = ak.Array({
+        "t": [205.54469], "x": [99.415420], "y": [-78.89404],
+        "z": [-161.6102]}, with_name="LorentzVector", behavior=vector.behavior)
+    antib = ak.Array({
+        "t": [362.82086], "x": [-49.87086], "y": [91.930526],
+        "z": [-347.3868]}, with_name="LorentzVector", behavior=vector.behavior)
+    nu = ak.Array({
+        "t": [70.848953], "x": [34.521587], "y": [-51.23474],
+        "z": [-6.555319]}, with_name="LorentzVector", behavior=vector.behavior)
+    antinu = ak.Array({
+        "t": [13.760989], "x": [11.179965], "y": [-3.844941],
+        "z": [7.0419898]}, with_name="LorentzVector", behavior=vector.behavior)
+    sump4 = nu + antinu
+    met = ak.Array({
+        "pt": sump4.pt, "eta": [0.], "phi": sump4.phi, "mass": [0.]},
+        with_name="PtEtaPhiMLorentzVector", behavior=vector.behavior)
+    top, antitop = sonnenschein(lep, antilep, b, antib, met)
+    print("MC Truth:", (antilep + nu + b)[0],
+                       (lep + antinu + antib)[0])
     print("Reconstructed:", top, antitop)
-    # top: [TLorentzVector(x=93.465, y=-160.14, z=-213.12, t=331)]
-    # antitop: [TLorentzVector(x=-5.8792, y=120.99, z=-507.62, t=549.64)]
+    # Reconstructed: [{x: 93.5, y: -160, z: -213, t: 331}]
+    #                [{x: -5.88, y: 121, z: -508, t: 550}]
 
     import time
     n = 10000
-    lep = uproot_methods.TLorentzVectorArray.from_cartesian(
-        np.full(n, 26.923591), np.full(n, 16.170616), np.full(n, -162.3227),
-        np.full(n, 165.33320))
-    alep = uproot_methods.TLorentzVectorArray.from_cartesian(
-        np.full(n, -34.58441), np.full(n, -13.27824), np.full(n, -32.51431),
-        np.full(n, 49.290821))
-    b = uproot_methods.TLorentzVectorArray.from_cartesian(
-        np.full(n, 99.415420), np.full(n, -78.89404), np.full(n, -161.6102),
-        np.full(n, 205.54469))
-    ab = uproot_methods.TLorentzVectorArray.from_cartesian(
-        np.full(n, -49.87086), np.full(n, 91.930526), np.full(n, -347.3868),
-        np.full(n, 362.82086))
-    met = uproot_methods.TLorentzVectorArray.from_cartesian(
-        np.full(n, 45.701552), np.full(n, -55.079681), np.full(n, 0.),
-        np.full(n, 71.5709656))
+    lep = ak.Array({
+        "t": np.full(n, 165.33320), "x": np.full(n, 26.923591),
+        "y": np.full(n, 16.170616), "z": np.full(n, -162.3227)},
+        with_name="LorentzVector", behavior=vector.behavior)
+    antilep = ak.Array({
+        "t": np.full(n, 49.290821), "x": np.full(n, -34.58441),
+        "y": np.full(n, -13.27824), "z": np.full(n, -32.51431)},
+        with_name="LorentzVector", behavior=vector.behavior)
+    b = ak.Array({
+        "t": np.full(n, 205.54469), "x": np.full(n, 99.415420),
+        "y": np.full(n, -78.89404), "z": np.full(n, -161.6102)},
+        with_name="LorentzVector", behavior=vector.behavior)
+    antib = ak.Array({
+        "t": np.full(n, 362.82086), "x": np.full(n, -49.87086),
+        "y": np.full(n, 91.930526), "z": np.full(n, -347.3868)},
+        with_name="LorentzVector", behavior=vector.behavior)
+    nu = ak.Array({
+        "t": np.full(n, 70.848953), "x": np.full(n, 34.521587),
+        "y": np.full(n, -51.23474), "z": np.full(n, -6.555319)},
+        with_name="LorentzVector", behavior=vector.behavior)
+    antinu = ak.Array({
+        "t": np.full(n, 13.760989), "x": np.full(n, 11.179965),
+        "y": np.full(n, -3.844941), "z": np.full(n, 7.0419898)},
+        with_name="LorentzVector", behavior=vector.behavior)
+    sump4 = nu + antinu
+    met = ak.Array({
+        "pt": sump4.pt, "eta": np.zeros(n), "phi": sump4.phi,
+        "mass": np.zeros(n)}, with_name="PtEtaPhiMLorentzVector",
+        behavior=vector.behavior)
 
     t = time.time()
-    sonnenschein(lep, alep, b, ab, met)
+    sonnenschein(lep, antilep, b, antib, met)
     print("Took {} s for {} events".format(time.time() - t, n))
