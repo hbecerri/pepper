@@ -1029,8 +1029,12 @@ class ProcessorTTbarLL(pepper.Processor):
         recolepton = data["recolepton"]
         lep = recolepton[:, 0]
         antilep = recolepton[:, 1]
-        btags = data["Jet"][data["Jet"].btagged]
-        jetsnob = data["Jet"][~data["Jet"].btagged]
+        # Build a reduced jet collection to avoid loading all branches and
+        # make make this function faster overall
+        columns = ["pt", "eta", "phi", "mass", "btagged"]
+        jets = ak.with_name(data["Jet"][columns], "PtEtaPhiMLorentzVector")
+        btags = jets[data["Jet"].btagged]
+        jetsnob = jets[~data["Jet"].btagged]
         num_btags = ak.num(btags)
         b0, b1 = ak.unzip(ak.where(
             num_btags > 1, ak.combinations(btags, 2),
