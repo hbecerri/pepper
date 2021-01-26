@@ -278,6 +278,8 @@ class Selector:
                 when the data array determines it has to.
         """
 
+        logger.info(
+            f"Setting column {column_name}" + (" lazily" if lazy else ""))
         if lazy:
             column = ak.virtual(column, (self.data,), cache={},
                                 length=self.num)
