@@ -113,12 +113,15 @@ class Processor(coffea.processor.ProcessorABC):
         for specifier in self.config["columns_to_save"]:
             datapicker = pepper.hist_defns.DataPicker(specifier)
             item = datapicker(selector.data)
-            # Strip rows that are not selected from memory
-            item = ak.flatten(item, axis=0)
             if item is None:
                 logger.info("Skipping to save column because it is not "
                             f"present: {specifier}")
                 continue
+            try:
+                item = pepper.misc.akstriparray(item)
+            except ValueError:
+                # Hoping for awkward to provide an actual way to stip arrays
+                pass
             key = datapicker.name
             if key in columns:
                 raise pepper.config.ConfigError(

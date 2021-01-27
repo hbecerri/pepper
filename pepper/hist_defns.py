@@ -325,4 +325,5 @@ class DataPicker:
                 raise HistDefinitionError("Fill constains invalid type, must "
                                           f"be str or dict: {type(sel)}")
             name += "_"
+        name = name[:-1]  # Remove last underscore
         return name

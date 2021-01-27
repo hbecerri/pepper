@@ -385,3 +385,23 @@ def chunked_calls(array_param, chunksize, returns_multiple=False):
 
         return wrapper
     return decorator
+
+
+def akstriparray(array):
+    """Make an awkward array use as least memory as possible. This raises a
+    ValueError for record arrays"""
+    stripped = array
+    counts = []
+    for i in range(stripped.ndim - 1):
+        if isinstance(stripped.type.type, ak.types.RegularType):
+            counts.append(stripped.type.type.size)
+        else:
+            counts.append(ak.num(stripped))
+        stripped = ak.flatten(stripped)
+    stripped = ak.flatten(stripped, axis=None)
+    for count in reversed(counts):
+        stripped = ak.unflatten(stripped, count)
+    for name, val in ak.parameters(array):
+        stripped = ak.with_parameter(stripped, name, val)
+    stripped.behavior = array.behavior
+    return stripped
