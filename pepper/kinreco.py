@@ -349,9 +349,9 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     vE = np.sqrt(vpx ** 2 + vpy ** 2 + vpz ** 2)
     vbarE = np.sqrt(vbarpx ** 2 + vbarpy ** 2 + vbarpz ** 2)
 
-    v = _lorvecfromnumpy(vpx, vpy, vpz, vE, behav)
-    av = _lorvecfromnumpy(vbarpx, vbarpy, vbarpz, vbarE, behav)
     is_real = _from_regular(is_real, axis=(1, 2))
+    v = _lorvecfromnumpy(vpx, vpy, vpz, vE, behav)[is_real]
+    av = _lorvecfromnumpy(vbarpx, vbarpy, vbarpz, vbarE, behav)[is_real]
     b = _lorvecfromnumpy(bx, by, bz, bE, behav)
     ab = _lorvecfromnumpy(abx, aby, abz, abE, behav)
     lep = _lorvecfromnumpy(lx, ly, lz, lE, behav)
@@ -362,15 +362,10 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     at = wm + ab
 
     # Reduce solution axis and pick the solution with the smallest mtt
-    has_solution = ak.any(is_real, axis=2)
     min_mtt = ak.argmin((t + at).mass, axis=2, keepdims=True)
-    v = ak.flatten(v[min_mtt][has_solution], axis=2)
-    av = ak.flatten(av[min_mtt][has_solution], axis=2)
-    wp = ak.flatten(wp[min_mtt][has_solution], axis=2)
-    wm = ak.flatten(wm[min_mtt][has_solution], axis=2)
-    t = ak.flatten(t[min_mtt][has_solution], axis=2)
-    at = ak.flatten(at[min_mtt][has_solution], axis=2)
-    weights = _from_regular(weights, axis=1)[has_solution]
+    t = ak.flatten(t[min_mtt], axis=2)
+    at = ak.flatten(at[min_mtt], axis=2)
+    weights = _from_regular(weights, axis=1)[ak.any(is_real, axis=2)]
 
     # Undo smearing by averaging
     sum_weights = ak.where(ak.num(weights) > 0, ak.sum(weights, axis=1), 1.)
