@@ -95,52 +95,39 @@ class HistDefinition:
 
     @staticmethod
     def _prepare_fills(fill_vals, mask=None):
-        # Check size, flatten jaggedness, pad flat arrays if needed, apply mask
-        counts = None
-        counts_mask = None
+        """This checks for length consistency across the fill_vals,
+        removes events where counts do not agree (in case of 2 dims), applies
+        the given mask and flattens everything into numpy arrays"""
         size = None
-        jagged = []
-        flat = []
-        for key, data in fill_vals.items():
-            if data is None:
-                continue
-            if size is not None and len(data) != size:
-                raise ValueError(f"Got inconsistent filling size "
-                                 f"({size} and {len(data)}")
-            size = len(data)
-            if isinstance(data, ak.Array) and data.ndim > 1:
-                if data.ndim > 2:
-                    raise ValueError(f"data for {key} is more than 2 dim")
-                if counts is not None and ak.any(counts != ak.num(data)):
-                    if counts_mask is None:
-                        counts_mask = np.full(size, True)
-                    counts_mask = counts == np.asarray(ak.num(data))
-                    counts[~counts_mask] = 0
-                else:
-                    counts = np.asarray(ak.num(data))
-                jagged.append(key)
-            else:
-                flat.append(key)
+        counts = None
+        jagged_example = None
         prepared = {}
-        if counts_mask is not None:
-            if mask is not None:
-                mask = mask & counts_mask
-            else:
-                mask = counts_mask
         for key, data in fill_vals.items():
             if data is None:
-                prepared[key] = None
-                continue
-            if key in flat:
-                if len(jagged) > 0:
-                    data = ak.broadcast_arrays(data, fill_vals[jagged[0]])[0]
-                elif mask is not None:
-                    data = ak.broadcast_arrays(data, mask)[0]
-            if mask is not None:
-                data = data[mask]
-            if data.ndim > 1:
-                data = ak.flatten(data)
-            prepared[key] = np.asarray(data)
+                # Early return, no need to bother with other fill_vals
+                return {key: None}
+            if data.ndim > 2:
+                raise ValueError(f"Got more than 2 dimensions for {key}")
+            if size is None:
+                size = len(data)
+            elif size != len(data):
+                raise ValueError("Got inconsistant filling size ({size} and"
+                                 f"{len(data)} for {key})")
+            if mask is None:
+                mask = ak.Array(np.full(size, True))
+            # Make sure all fills have the same mask originating from ak.mask
+            mask = mask & ~ak.is_none(data)
+            # Make sure all counts agree
+            if data.ndim == 2:
+                if counts is None:
+                    counts = ak.num(data)
+                    jagged_example = data
+                else:
+                    mask = mask & (counts == ak.num(data))
+        for key, data in fill_vals.items():
+            if jagged_example is not None and data.ndim == 1:
+                data = ak.broadcast_arrays(data, jagged_example)[0]
+            prepared[key] = np.asarray(ak.flatten(data[mask], axis=None))
         return prepared
 
     def __call__(self, data, channels, dsname, is_mc, weight):

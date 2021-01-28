@@ -204,7 +204,7 @@ class ProcessorTTbarLL(pepper.Processor):
         selector.set_column("mll", self.mll)
         selector.set_column("dilep_pt", self.dilep_pt, lazy=True)
 
-        # Do not freeze selection because there still is a bug in awkward
+        selector.applying_cuts = False
 
         selector.add_cut("Opposite sign", self.opposite_sign_lepton_pair)
         selector.add_cut("No add leps",

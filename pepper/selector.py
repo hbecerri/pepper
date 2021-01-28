@@ -110,23 +110,18 @@ class Selector:
     def final(self):
         """Data of events which have passed all cuts (including unapplied ones)
         """
-        if len(self.unapplied_cuts) == 0:
-            return self.data
-        else:
-            return ak.mask(
-                self.data, ak.values_astype(self.unapplied_product, bool))
+        return ak.mask(
+            self.data, ak.values_astype(self.unapplied_product, bool))
 
     @property
     def final_systematics(self):
         """Systematics of events which have passed all cuts
         (including unapplied ones)"""
-        if len(self.unapplied_cuts) == 0:
-            return self.systematics
-        else:
-            unapplied = self.unapplied_product
-            masked = ak.mask(self.systematics, unapplied.astype(bool))
-            masked["weight"] = masked["weight"] * unapplied
-            return masked
+        unapplied = self.unapplied_product
+        masked = ak.mask(
+            self.systematics, ak.values_astype(unapplied, bool))
+        masked["weight"] = masked["weight"] * unapplied
+        return masked
 
     @property
     def num(self):
@@ -170,6 +165,8 @@ class Selector:
             accept = accept(self.data)
         if isinstance(accept, tuple):
             accept, systematics = accept
+        # Allow accept to be masked. Treat masked values as False
+        accept = ak.fill_none(accept, 0)
         self.cutnames.append(name)
         if not isinstance(accept, np.ndarray):
             accept = np.array(accept)
@@ -284,7 +281,16 @@ class Selector:
             column = ak.virtual(column, (self.data,), cache={},
                                 length=self.num)
         elif callable(column):
-            column = column(self.final if all_cuts else self.data)
+            if all_cuts:
+                data = self.final
+                mask = ~ak.is_none(data)
+                data = ak.flatten(self.final, axis=0)
+            else:
+                data = self.data
+                mask = None
+            column = column(data)
+            if mask is not None:
+                column = ak.mask(column[np.cumsum(np.asarray(mask)) - 1], mask)
         self.data[column_name] = column
         if not no_callback:
             for cb in self.on_update:
@@ -308,11 +314,23 @@ class Selector:
                 when the data array determines it has to.
         """
         if callable(columns):
+            if all_cuts:
+                data = self.final
+                mask = ~ak.is_none(data)
+                data = ak.flatten(self.final, axis=0)
+            else:
+                data = self.data
+                mask = None
             columns = columns(self.final if all_cuts else self.data)
+        else:
+            mask = None
         if isinstance(columns, ak.Array):
             for name in ak.fields(columns):
-                self.set_column(name, columns[name], no_callback=True,
-                                lazy=lazy)
+                column = columns[name]
+                if mask is not None:
+                    column = ak.mask(
+                        column[np.cumsum(np.asarray(mask)) - 1], mask)
+                self.set_column(name, column, no_callback=True, lazy=lazy)
         else:
             for name, column in columns.items():
                 self.set_column(name, column, no_callback=True, lazy=lazy)
