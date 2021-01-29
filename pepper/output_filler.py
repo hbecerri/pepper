@@ -50,7 +50,7 @@ class OutputFiller:
         if systematics is not None:
             weight = systematics["weight"]
         else:
-            weight = np.ones(len(data))
+            weight = ak.Array(np.ones(len(data)))
         if "all" not in accumulator:
             accumulator["all"] = coffea.processor.defaultdict_accumulator(
                 partial(coffea.processor.defaultdict_accumulator, int))

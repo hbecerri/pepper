@@ -453,7 +453,8 @@ class ProcessorTTbarLL(pepper.Processor):
                  & data["Flag"]["EcalDeadCellTriggerPrimitiveFilter"]
                  & data["Flag"]["BadPFMuonFilter"])
             if not is_mc:
-                passing_filters &= data["Flag"]["eeBadScFilter"]
+                passing_filters = (
+                    passing_filters & data["Flag"]["eeBadScFilter"])
         if year in ("2018", "2017"):
             passing_filters = (
                 passing_filters & data["Flag"]["ecalBadCalibFilterV2"])

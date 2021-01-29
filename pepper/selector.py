@@ -118,6 +118,8 @@ class Selector:
     def final_systematics(self):
         """Systematics of events which have passed all cuts
         (including unapplied ones)"""
+        if self.systematics is None:
+            return None
         unapplied = self.unapplied_product
         masked = ak.mask(
             self.systematics, ak.values_astype(unapplied, bool))
