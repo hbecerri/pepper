@@ -92,6 +92,10 @@ class HistDefinition:
         if len(missing_fills) != 0:
             raise HistDefinitionError(
                 "Missing fills for axes: " + ", ".join(missing_fills))
+        if "step_requirement" in config:
+            self.step_requirement = config["step_requirement"]
+        else:
+            self.step_requirement = None
 
     @staticmethod
     def _prepare_fills(fill_vals, mask=None):

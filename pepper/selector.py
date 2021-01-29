@@ -77,6 +77,7 @@ class Selector:
         self.cutnames = []
         self.unapplied_cuts = Selection()
         self.cut_systematic_map = defaultdict(list)
+        self.done_steps = set()
 
         self._applying_cuts = True
         self.add_cut("Before cuts", np.full(self.num, True))
@@ -136,6 +137,13 @@ class Selector:
         else:
             return (self.unapplied_product != 0).sum()
 
+    def _invoke_callbacks(self):
+        data = self.final
+        systematics = self.final_systematics
+        for cb in self.on_update:
+            cb(data=data, systematics=systematics, cut=self.cutnames[-1],
+               done_steps=self.done_steps)
+
     def add_cut(self, name, accept, systematics=None, no_callback=False):
         """Adds a cut and applies it if `self.applying_cuts` is True, otherwise
         the cut will be stored in `self.unapplied_cuts`. Applying in this
@@ -194,10 +202,9 @@ class Selector:
                         value[accept] = value_old
                         values.append(ak.mask(value, accept))
                 self.set_systematic(sysname, *values, cut=name)
+        self.done_steps.add("cut:" + name)
         if not no_callback:
-            for cb in self.on_update:
-                cb(data=self.final, systematics=self.final_systematics,
-                   cut=name)
+            self._invoke_callbacks()
 
     def apply_all_cuts(self):
         """Applies all unapplied cuts, discarding rows of `self.data` where the
@@ -292,10 +299,9 @@ class Selector:
             if mask is not None:
                 column = ak.mask(column[np.cumsum(np.asarray(mask)) - 1], mask)
         self.data[column_name] = column
+        self.done_steps.add("column:" + column_name)
         if not no_callback:
-            for cb in self.on_update:
-                cb(data=self.final, systematics=self.final_systematics,
-                   cut=self.cutnames[-1])
+            self._invoke_callbacks()
 
     def set_multiple_columns(self, columns, all_cuts=False, no_callback=False,
                              lazy=False):
@@ -335,9 +341,7 @@ class Selector:
             for name, column in columns.items():
                 self.set_column(name, column, no_callback=True, lazy=lazy)
         if not no_callback:
-            for cb in self.on_update:
-                cb(data=self.final, systematics=self.final_systematics,
-                   cut=self.cutnames[-1])
+            self._invoke_callbacks()
 
     def get_cuts(self):
         """Returns a tuple a list of all cut names and an array containing the

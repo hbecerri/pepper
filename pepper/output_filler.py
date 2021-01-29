@@ -42,7 +42,7 @@ class OutputFiller:
         else:
             self.copy_nominal = copy_nominal
 
-    def fill_cutflows(self, data, systematics, cut):
+    def fill_cutflows(self, data, systematics, cut, done_steps):
         if self.cuts_to_plot is not None:
             if cut not in self.cuts_to_plot:
                 return
@@ -67,7 +67,7 @@ class OutputFiller:
             if cut not in accumulator[ch][self.dsname]:
                 accumulator[ch][self.dsname][cut] = ak.sum(weight[data[ch]])
 
-    def fill_hists(self, data, systematics, cut):
+    def fill_hists(self, data, systematics, cut, done_steps):
         accumulator = self.output["hists"]
         channels = self.channels
         do_systematics = self.sys_enabled and systematics is not None
@@ -76,6 +76,9 @@ class OutputFiller:
         else:
             weight = None
         for histname, fill_func in self.hist_dict.items():
+            if (fill_func.step_requirement is not None
+                    and fill_func.step_requirement not in done_steps):
+                continue
             if self.sys_overwrite is not None:
                 sysname = self.sys_overwrite
                 # But only if we want to compute systematics
