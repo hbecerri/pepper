@@ -175,7 +175,9 @@ class ProcessorTTbarLL(pepper.Processor):
         if dsname.startswith("TTTo"):
             selector.set_column("gent_lc", self.gentop, lazy=True)
             if self.topptweighter is not None:
-                self.do_top_pt_reweighting(selector)
+                selector.add_cut(
+                    "Top pt reweighting", self.do_top_pt_reweighting,
+                    no_callback=True)
         if self.config["compute_systematics"] and is_mc:
             self.add_generator_uncertainies(dsname, selector)
         if is_mc:
@@ -317,10 +319,9 @@ class ProcessorTTbarLL(pepper.Processor):
         part = part[ak.argsort(part.pdgId, ascending=False)]
         return part
 
-    def do_top_pt_reweighting(self, selector):
-        pt = selector.masked["gent_lc"].pt
-        sf = self.topptweighter(pt[:, 0], pt[:, 1])
-        selector.modify_weight("Top pt reweighting", sf)
+    def do_top_pt_reweighting(self, data):
+        pt = data["gent_lc"].pt
+        return self.topptweighter(pt[:, 0], pt[:, 1])
 
     def add_generator_uncertainies(self, dsname, selector):
         # Matrix-element renormalization and factorization scale
@@ -942,6 +943,8 @@ class ProcessorTTbarLL(pepper.Processor):
         return self.config["num_jets_atleast"] <= ak.num(data["Jet"])
 
     def jet_pt_requirement(self, data):
+        if len(data) == 0:
+            return np.full(len(data), False)
         n = np.zeros(len(data))
         for i, pt_min in enumerate(self.config["jet_pt_min"]):
             mask = ak.num(data["Jet"]) > i

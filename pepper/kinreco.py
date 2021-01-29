@@ -362,10 +362,11 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     at = wm + ab
 
     # Reduce solution axis and pick the solution with the smallest mtt
+    has_solution = ak.any(is_real, axis=2)
     min_mtt = ak.argmin((t + at).mass, axis=2, keepdims=True)
-    t = ak.flatten(t[min_mtt], axis=2)
-    at = ak.flatten(at[min_mtt], axis=2)
-    weights = _from_regular(weights, axis=1)[ak.any(is_real, axis=2)]
+    t = ak.flatten(t[min_mtt][has_solution], axis=2)
+    at = ak.flatten(at[min_mtt][has_solution], axis=2)
+    weights = _from_regular(weights, axis=1)[has_solution]
 
     # Undo smearing by averaging
     sum_weights = ak.where(ak.num(weights) > 0, ak.sum(weights, axis=1), 1.)
