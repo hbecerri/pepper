@@ -1,13 +1,16 @@
 import sys
-import numpy as np
-import coffea
 from collections import namedtuple
-import parsl
 import json
 import logging
 from argparse import ArgumentParser
 import os
 from functools import partial
+
+import numpy as np
+import parsl
+import awkward as ak
+import coffea
+from coffea.nanoevents import NanoAODSchema
 
 import pepper
 
@@ -31,33 +34,31 @@ else:
 
 class DYOutputFiller(pepper.OutputFiller):
     def fill_cutflows(self, data, systematics, cut):
-        accumulator = self.output["cutflows"]
         if systematics is not None:
-            weight = systematics["weight"].flatten()
+            weight = systematics["weight"]
         else:
-            weight = np.ones(data.size)
+            weight = np.ones(len(data))
         logger.info("Filling cutflow. Current event count: "
-                    + str(weight.sum()))
-        self.fill_accumulator(accumulator, cut, data, weight)
-        accumulator = self.output["cutflow_errs"]
+                    + str(ak.sum(weight)))
+        self.fill_accumulator(self.output["cutflows"], cut, data, weight)
         if systematics is not None:
-            weight = (systematics["weight"].flatten())**2
+            weight = systematics["weight"] ** 2
         else:
-            weight = np.ones(data.size)
-        self.fill_accumulator(accumulator, cut, data, weight)
+            weight = np.ones(len(data))
+        self.fill_accumulator(self.output["cutflow_errs"], cut, data, weight)
 
     def fill_accumulator(self, accumulator, cut, data, weight):
         if "all" not in accumulator:
             accumulator["all"] = coffea.processor.defaultdict_accumulator(
                 partial(coffea.processor.defaultdict_accumulator, int))
         if cut not in accumulator["all"][self.dsname]:
-            accumulator["all"][self.dsname][cut] = weight.sum()
+            accumulator["all"][self.dsname][cut] = ak.sum(weight)
         for ch in self.channels:
             if ch not in accumulator:
                 accumulator[ch] = coffea.processor.defaultdict_accumulator(
                     partial(coffea.processor.defaultdict_accumulator, int))
             if cut not in accumulator[ch][self.dsname]:
-                accumulator[ch][self.dsname][cut] = weight[data[ch]].sum()
+                accumulator[ch][self.dsname][cut] = ak.sum(weight[data[ch]])
 
 
 class DYprocessor(pepper.ProcessorTTbarLL):
@@ -81,34 +82,34 @@ class DYprocessor(pepper.ProcessorTTbarLL):
             dsname_in_hist = dsname
             sys_overwrite = None
 
-        if "cuts_to_plot" in self.config:
-            cuts_to_plot = self.config["cuts_to_plot"]
+        if "cuts_to_histogram" in self.config:
+            cuts_to_histogram = self.config["cuts_to_histogram"]
         else:
-            cuts_to_plot = None
+            cuts_to_histogram = None
 
         filler = DYOutputFiller(
             output, self.hists, is_mc, dsname, dsname_in_hist, sys_enabled,
             sys_overwrite=sys_overwrite, copy_nominal=self.copy_nominal,
-            cuts_to_plot=cuts_to_plot)
+            cuts_to_histogram=cuts_to_histogram)
 
         return filler
 
     def z_window(self, data):
         # Don't apply Z window cut, as we'll add columns inside and
         # outside of it later
-        return np.full(data.size, True)
+        return np.full(len(data), True)
 
     def drellyan_sf_columns(self, filler, data):
         m_min = self.config["z_boson_window_start"]
         m_max = self.config["z_boson_window_end"]
         Z_window = (data["mll"] >= m_min) & (data["mll"] <= m_max)
-        MET = data["MET"].pt.flatten()
+        MET = data["MET"].pt
         channel = {"ee": data["is_ee"],
                    "em": data["is_em"],
                    "mm": data["is_mm"]}
         Z_w = {"in": Z_window, "out": ~Z_window}
-        btags = {"0b": (data["Jet"]["btagged"].sum() == 0),
-                 "1b": (data["Jet"]["btagged"].sum() > 0)}
+        btags = {"0b": (ak.sum(data["Jet"]["btagged"]) == 0),
+                 "1b": (ak.sum(data["Jet"]["btagged"]) > 0)}
         MET_bins = {"0_to_40": (MET < 40),
                     "40_to_70": (MET > 40) & (MET < 70),
                     "70_to_100": (MET > 70) & (MET < 100),
@@ -125,7 +126,7 @@ class DYprocessor(pepper.ProcessorTTbarLL):
         return new_chs
 
     def btag_cut(self, is_mc, data):
-        return np.full(data.size, True)
+        return np.full(len(data), True)
 
 
 parser = ArgumentParser(description="Select events from nanoAODs")
@@ -227,6 +228,9 @@ if len(datasets) == 0:
     print("No datasets found")
     exit(1)
 
+# Create histdir and in case of errors, raise them now (before processing)
+os.makedirs(args.histdir, exist_ok=True)
+
 if args.test:
     for hist in config["hists"].values():
         if hasattr(hist, "cats"):
@@ -258,7 +262,7 @@ else:
     config["hists"] = {}
 
 processor = DYprocessor(config, args.eventdir)
-
+executor_args = {"schema": NanoAODSchema, "align_clusters": True}
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
     # Load parsl config immediately instead of putting it into executor_args
@@ -276,12 +280,10 @@ if args.condor is not None:
         parsl_config = pepper.misc.get_parsl_config(
             args.condor, retries=args.retries)
     parsl.load(parsl_config)
-    executor_args = {}
 else:
     if args.parsl_config is not None:
         print("Ignoring parsl_config because condor is not specified")
     executor = coffea.processor.iterative_executor
-    executor_args = {}
 
 output = coffea.processor.run_uproot_job(
     datasets, "Events", processor, executor, executor_args,
