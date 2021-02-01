@@ -42,12 +42,12 @@ class OutputFiller:
         else:
             self.copy_nominal = copy_nominal
 
-    def fill_cutflows(self, data, systematics, cut):
+    def fill_cutflows(self, data, systematics, cut, done_steps):
         accumulator = self.output["cutflows"]
         if systematics is not None:
             weight = systematics["weight"]
         else:
-            weight = np.ones(len(data))
+            weight = ak.Array(np.ones(len(data)))
         if "all" not in accumulator:
             accumulator["all"] = coffea.processor.defaultdict_accumulator(
                 partial(coffea.processor.defaultdict_accumulator, int))
@@ -64,7 +64,7 @@ class OutputFiller:
             if cut not in accumulator[ch][self.dsname]:
                 accumulator[ch][self.dsname][cut] = ak.sum(weight[data[ch]])
 
-    def fill_hists(self, data, systematics, cut):
+    def fill_hists(self, data, systematics, cut, done_steps):
         if self.cuts_to_histogram is not None:
             if cut not in self.cuts_to_histogram:
                 return
@@ -76,6 +76,9 @@ class OutputFiller:
         else:
             weight = None
         for histname, fill_func in self.hist_dict.items():
+            if (fill_func.step_requirement is not None
+                    and fill_func.step_requirement not in done_steps):
+                continue
             if self.sys_overwrite is not None:
                 sysname = self.sys_overwrite
                 # But only if we want to compute systematics

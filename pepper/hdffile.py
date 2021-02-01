@@ -1,3 +1,4 @@
+import h5py
 from collections import MutableMapping
 import numpy as np
 import awkward as ak
@@ -5,7 +6,14 @@ import json
 
 
 class HDF5File(MutableMapping):
-    def __init__(self, file, lazy=False):
+    def __init__(self, file, mode=None, lazy=False):
+        if isinstance(file, str):
+            if mode is None:
+                raise ValueError("If file is a str, mode can not be None")
+            file = h5py.File(file, mode)
+            self._should_close = True
+        else:
+            self._should_close = False
         self._file = file
         self.lazy = lazy
 
@@ -39,6 +47,7 @@ class HDF5File(MutableMapping):
         group.attrs["length"] = json.dumps(length)
         group.attrs["parameters"] = json.dumps(ak.parameters(value))
         group.attrs["convertto"] = convertto
+        self._file.attrs["version"] = 1
 
     def __getitem__(self, key):
         group = self._file[key]
@@ -74,6 +83,14 @@ class HDF5File(MutableMapping):
 
     def __repr__(self):
         return f"<AkHdf5 ({self._file.filename})>"
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._should_close:
+            self._file.close()
+        return False
 
     def keys(self):
         return self._file.keys()

@@ -206,7 +206,7 @@ class ProcessorTTbarLL(pepper.Processor):
         selector.set_column("mll", self.mll)
         selector.set_column("dilep_pt", self.dilep_pt, lazy=True)
 
-        # Do not freeze selection because there still is a bug in awkward
+        selector.applying_cuts = False
 
         selector.add_cut("Opposite sign", self.opposite_sign_lepton_pair)
         selector.add_cut("No add leps",
@@ -454,7 +454,8 @@ class ProcessorTTbarLL(pepper.Processor):
                  & data["Flag"]["EcalDeadCellTriggerPrimitiveFilter"]
                  & data["Flag"]["BadPFMuonFilter"])
             if not is_mc:
-                passing_filters &= data["Flag"]["eeBadScFilter"]
+                passing_filters = (
+                    passing_filters & data["Flag"]["eeBadScFilter"])
         if year in ("2018", "2017"):
             passing_filters = (
                 passing_filters & data["Flag"]["ecalBadCalibFilterV2"])
