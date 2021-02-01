@@ -33,18 +33,18 @@ else:
 
 
 class DYOutputFiller(pepper.OutputFiller):
-    def fill_cutflows(self, data, systematics, cut):
+    def fill_cutflows(self, data, systematics, cut, done_steps):
         if systematics is not None:
             weight = systematics["weight"]
         else:
-            weight = np.ones(len(data))
+            weight = ak.Array(np.ones(len(data)))
         logger.info("Filling cutflow. Current event count: "
                     + str(ak.sum(weight)))
         self.fill_accumulator(self.output["cutflows"], cut, data, weight)
         if systematics is not None:
             weight = systematics["weight"] ** 2
         else:
-            weight = np.ones(len(data))
+            weight = ak.Array(np.ones(len(data)))
         self.fill_accumulator(self.output["cutflow_errs"], cut, data, weight)
 
     def fill_accumulator(self, accumulator, cut, data, weight):
