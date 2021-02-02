@@ -155,11 +155,15 @@ class Selector:
         name -- Name of the cut
         accept -- An array of bools or floats or a tuple of the former and a
                   systematics dict or a callable returning any of the former.
-                  In the array a value of 0 or False means that the
+                  In the array a value of 0 or `False` means that the
                   event corresponding to the row is discarded. Any other value
-                  wiill get multiplied into the event weight. Here a value of
-                  True corresponds to a 1.
-                  The systematics
+                  will get multiplied into the event weight. Here a value of
+                  `True` corresponds to a 1.
+                  The systematics dict is a mapping of systematics name ->
+                  values, where name and values have the same meaning as in
+                  `self.set_systematic`. The values arrays of lengths equal
+                  `self.num` either before or after the cut is applied.
+                  Systematics given for cut evets are ignored.
                   In case this is a callable, the callable will be called and
                   its return value will be used as the new value for this
                   parameter.
@@ -195,14 +199,22 @@ class Selector:
                                      "be given as tuple, not list")
                 if not isinstance(values, tuple):
                     values = (values,)
-                if not self.applying_cuts:
-                    values_old = values
-                    values = []
-                    n = self.num
-                    for value_old in values_old:
-                        value = np.empty(n)
-                        value[accept] = value_old
-                        values.append(ak.mask(value, accept))
+                values_old = values
+                values = []
+                n = self.num
+                for value_old in values_old:
+                    if len(value_old) != n:
+                        if self.applying_cuts:
+                            value = value_old[accept]
+                        else:
+                            value = np.empty(n)
+                            value[accept] = value_old
+                            value = ak.mask(value, accept)
+                    elif not self.applying_cuts:
+                        value = ak.mask(value_old, accept)
+                    else:
+                        value = value_old
+                    values.append(value)
                 self.set_systematic(sysname, *values, cut=name)
         self.done_steps.add("cut:" + name)
         if not no_callback:
@@ -365,6 +377,7 @@ class Selector:
         s.cutnames = copy(self.cutnames)
         s.unapplied_cuts = copy(self.unapplied_cuts)
         s.cut_systematic_map = copy(self.cut_systematic_map)
+        s.done_steps = copy(self.done_steps)
         return s
 
     def copy(self):

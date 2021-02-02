@@ -275,11 +275,7 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
     if condor_init is None:
         condor_init = """
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-if lsb_release -r | grep -q 7\\.; then
-cd /cvmfs/cms.cern.ch/slc7_amd64_gcc700/cms/cmssw-patch/CMSSW_10_2_4_patch1/src
-else
-cd /cvmfs/cms.cern.ch/slc6_amd64_gcc700/cms/cmssw-patch/CMSSW_10_2_4_patch1/src
-fi
+cd /cvmfs/cms.cern.ch/slc7_amd64_gcc820/cms/cmssw/CMSSW_11_1_0_pre5_PY3/src
 eval `scramv1 runtime -sh`
 cd -
 """

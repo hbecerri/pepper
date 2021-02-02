@@ -51,7 +51,10 @@ func_dict = {
 
     "not": not_arr,
     "leaddiff": leaddiff,
-    "concatenate": concatenate
+    "concatenate": concatenate,
+
+    "sum": lambda x: ak.sum(x, axis=1),
+    "num": ak.num,
 }
 
 

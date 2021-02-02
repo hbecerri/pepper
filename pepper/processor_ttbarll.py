@@ -371,13 +371,15 @@ class ProcessorTTbarLL(pepper.Processor):
                 and dsname not in self.config["dataset_for_systematics"]):
             xsuncerts = self.config["crosssection_uncertainty"]
             groups = set(v[0] for v in xsuncerts.values() if v is not None)
+            systematics = {}
             for group in groups:
                 if xsuncerts[dsname] is None or group != xsuncerts[dsname][0]:
                     uncert = 0
                 else:
                     uncert = xsuncerts[dsname][1]
-            return factor, {group + "XS": (np.full(num_events, 1 + uncert),
-                                           np.full(num_events, 1 - uncert))}
+                systematics[group + "XS"] = (np.full(num_events, 1 + uncert),
+                                             np.full(num_events, 1 - uncert))
+            return factor, systematics
         else:
             return factor
 
@@ -588,7 +590,7 @@ class ProcessorTTbarLL(pepper.Processor):
         lepton = ak.unflatten(lepton, ak.num(electron) + ak.num(muon))
 
         # Sort leptons by pt
-        lepton = lepton[ak.argsort(lepton["pt"])]
+        lepton = lepton[ak.argsort(lepton["pt"], ascending=False)]
         return lepton
 
     def channel_masks(self, data):
@@ -920,6 +922,7 @@ class ProcessorTTbarLL(pepper.Processor):
 
     def lep_pt_requirement(self, data):
         n = np.zeros(len(data))
+        # This assumes leptons are ordered by pt highest first
         for i, pt_min in enumerate(self.config["lep_pt_min"]):
             mask = ak.num(data["Lepton"]) > i
             n[mask] += np.asarray(
@@ -944,9 +947,8 @@ class ProcessorTTbarLL(pepper.Processor):
         return self.config["num_jets_atleast"] <= ak.num(data["Jet"])
 
     def jet_pt_requirement(self, data):
-        if len(data) == 0:
-            return np.full(len(data), False)
         n = np.zeros(len(data))
+        # This assumes jets are ordered by pt highest first
         for i, pt_min in enumerate(self.config["jet_pt_min"]):
             mask = ak.num(data["Jet"]) > i
             n[mask] += np.asarray(pt_min < data["Jet"].pt[mask, i]).astype(int)

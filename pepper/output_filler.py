@@ -54,9 +54,11 @@ class OutputFiller:
         if cut not in accumulator["all"][self.dsname]:
             count = ak.sum(weight)
             accumulator["all"][self.dsname][cut] = count
+            rows = len(weight)
+            masked = ak.sum(ak.is_none(weight))
             logger.info(
-                "Filling cutflow. Current event count: {} ({} rows)".format(
-                    count, len(weight)))
+                "Filling cutflow. Current event count: {} ({} rows, {} "
+                "masked)".format(count, rows, masked))
         for ch in self.channels:
             if ch not in accumulator:
                 accumulator[ch] = coffea.processor.defaultdict_accumulator(
