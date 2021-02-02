@@ -12,6 +12,7 @@ import json
 from cycler import cycler
 
 from pepper import Config
+import pepper.plot
 
 
 mpl.use("Agg")
@@ -90,7 +91,7 @@ def plot(data_hist, bkgd_hist, sig_hist, sys, namebase, bkgd_cols={},
     fig, (ax1, ax2) = plt.subplots(
         nrows=2, sharex=True, gridspec_kw={"height_ratios": [3, 1]})
 
-    coffea.hist.plot1d(bkgd_hist,
+    pepper.plot.plot1d(bkgd_hist,
                        ax=ax1,
                        overlay="proc",
                        clear=False,
@@ -104,12 +105,12 @@ def plot(data_hist, bkgd_hist, sig_hist, sys, namebase, bkgd_cols={},
         sig_hist.scale(sig_scaling)
         if len(list(sig_cols.values())) > 0:
             ax1.set_prop_cycle(cycler(color=list(sig_cols.values())[::-1]))
-        coffea.hist.plot1d(sig_hist,
+        pepper.plot.plot1d(sig_hist,
                            ax=ax1,
                            clear=False,
                            overlay="proc",
                            stack=False)
-    coffea.hist.plot1d(data_hist,
+    pepper.plot.plot1d(data_hist,
                        ax=ax1,
                        overlay="proc",
                        clear=False,
@@ -117,7 +118,7 @@ def plot(data_hist, bkgd_hist, sig_hist, sys, namebase, bkgd_cols={},
                            "color": "black",
                            "marker": "o",
                            "markersize": 4})
-    coffea.hist.plotratio(data_hist.sum("proc"),
+    pepper.plot.plotratio(data_hist.sum("proc"),
                           bkgd_hist.sum("proc"),
                           ax=ax2,
                           error_opts={"fmt": "ok", "markersize": 4},
@@ -135,7 +136,7 @@ def plot(data_hist, bkgd_hist, sig_hist, sys, namebase, bkgd_cols={},
     ax2.set_ylim(0.75, 1.25)
     fig.subplots_adjust(hspace=0)
     if cmsyear is not None:
-        ax1 = hep.cms.cmslabel(
+        ax1 = hep.cms.label(
             ax=ax1, data=True, paper=False, year=cmsyear, lumi=LUMIS[cmsyear])
     if log:
         ax1.autoscale(axis="y")

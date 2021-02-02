@@ -71,6 +71,18 @@ def compute_systematic(nominal_hist, syshists, scales=None):
     return np.sqrt((uncerts ** 2).sum(axis=0))
 
 
+def set_limit_ratioplot(ax, data, center=1., points_out=0.8, minimum=0.25,
+                        margin_factor=1.2):
+    data = data[np.isfinite(data)]
+    if len(data) == 0:
+        q = minimum
+    else:
+        q = np.quantile(abs(data - center), points_out) * margin_factor
+    if q < minimum:
+        q = minimum
+    ax.set_ylim(center - q, center + q)
+
+
 def plot(data_hist, pred_hist, sys, namebase, colors={}, log=False,
          cmsyear=None, ext=".svg"):
     fig, (ax1, ax2) = plt.subplots(
@@ -214,6 +226,10 @@ for histfilename in histfiles:
     mc_dsnames = config["mc_datasets"].keys()
     if axis_labelmap is not None:
         pred_hist = hist.group(dsaxis, proc_axis, axis_labelmap)
+        used_datasets = [d for d2 in axis_labelmap.values() for d in d2[0]]
+        for key, syshist in syshists.items():
+            syshists[key] = [h.integrate(
+                "dataset", int_range=used_datasets) for h in syshist]
     else:
         mapping = {key: (key,) for key in mc_dsnames}
         pred_hist = hist.group(dsaxis, proc_axis, mapping)

@@ -4,6 +4,7 @@ import json
 import logging
 from argparse import ArgumentParser
 import os
+import shutil
 from functools import partial
 
 import numpy as np
@@ -129,7 +130,8 @@ class DYprocessor(pepper.ProcessorTTbarLL):
         return np.full(len(data), True)
 
 
-parser = ArgumentParser(description="Select events from nanoAODs")
+parser = ArgumentParser(description="Run the DY processor to get the numbers "
+                        "needed for DY SF calculation")
 parser.add_argument("config", help="Path to a configuration file")
 parser.add_argument(
     "--eventdir", help="Path to event destination output directory. If not "
@@ -138,9 +140,12 @@ parser.add_argument(
     "--histdir", help="Path to the histogram destination output directory. By "
     "default, ./hists will be used.", default="./hists")
 parser.add_argument(
-    "--dataset", nargs=2, action="append", metavar=("name", "path"),
+    "--file", nargs=2, action="append", metavar=("dataset_name", "path"),
     help="Can be specified multiple times. Ignore datasets given in "
     "config and instead process these")
+parser.add_argument(
+    "--dataset", action="append", help="Only process this dataset. Can be "
+    "specified multiple times.")
 parser.add_argument(
     "-c", "--condor", type=int, const=10, nargs="?", metavar="simul_jobs",
     help="Split and submit to HTCondor. By default 10 condor jobs are "
@@ -174,48 +179,37 @@ if args.debug:
 config = pepper.ConfigTTbarLL(args.config)
 store = config["store"]
 
+DY_ds = ["DYJetsToLL_M-10to50_TuneCP5_13TeV-madgraphMLM-pythia8",
+         "DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8",
+         "DYJetsToLL_M-50_TuneCP5_13TeV-amcatnloFXFX-pythia8"]
 
 datasets = {}
-if args.dataset is None:
-    datasets = {}
-    if not args.mc:
-        datasets.update(config["exp_datasets"])
-    duplicate = set(datasets.keys()) & set(config["mc_datasets"])
-    if len(duplicate) > 0:
-        print("Got duplicate dataset names: {}".format(", ".join(duplicate)))
-        exit(1)
-    DY_ds = ["DYJetsToLL_M-10to50_TuneCP5_13TeV-madgraphMLM-pythia8",
-             "DYJetsToLL_M-50_TuneCP5_13TeV-madgraphMLM-pythia8",
-             "DYJetsToLL_M-50_TuneCP5_13TeV-amcatnloFXFX-pythia8"]
-    if args.test:
-        mc_ds = config["mc_datasets"]
+if args.file is None:
+    if (not args.test and args.dataset is None):
+        include = DY_ds + list(config["exp_datasets"].keys())
+        exclude = None
+    elif not config["compute_systematics"]:
+        include = args.dataset
+        exclude = config["dataset_for_systematics"].keys()
     else:
-        mc_ds = {key: val for key, val in config["mc_datasets"].items()
-                 if key in DY_ds}
-    datasets.update(mc_ds)
+        include = args.dataset
+        exclude = None
+    datasets = config.get_datasets(
+        include, exclude, "mc" if args.mc else "any")
+
 else:
     datasets = {}
-    for dataset in args.dataset:
-        if dataset[0] in datasets:
-            datasets[dataset[0]].append(dataset[1])
+    for customfile in args.file:
+        if customfile[0] in datasets:
+            datasets[customfile[0]].append(customfile[1])
         else:
-            datasets[dataset[0]] = [dataset[1]]
-if not config["compute_systematics"]:
-    for sysds in config["dataset_for_systematics"].keys():
-        if sysds in datasets:
-            del datasets[sysds]
+            datasets[customfile[0]] = [customfile[1]]
 
-requested_datasets = datasets.keys()
-datasets, paths2dsname = pepper.datasets.expand_datasetdict(datasets, store)
-if args.dataset is None:
-    missing_datasets = requested_datasets - datasets.keys()
-    if len(missing_datasets) > 0:
-        print("Could not find files for: " + ", ".join(missing_datasets))
-        exit(1)
-    num_files = len(paths2dsname)
+if args.file is None:
+    num_files = sum(len(dsfiles) for dsfiles in datasets.values())
     num_mc_files = sum(len(datasets[dsname])
                        for dsname in config["mc_datasets"].keys()
-                       if dsname in requested_datasets)
+                       if dsname in datasets)
 
     print("Got a total of {} files of which {} are MC".format(num_files,
                                                               num_mc_files))
@@ -228,38 +222,45 @@ if len(datasets) == 0:
     print("No datasets found")
     exit(1)
 
-# Create histdir and in case of errors, raise them now (before processing)
-os.makedirs(args.histdir, exist_ok=True)
 
-if args.test:
-    for hist in config["hists"].values():
-        if hasattr(hist, "cats"):
-            hist.cats.extend([coffea.hist.Cat("Z_window", "Z_window"),
-                              coffea.hist.Cat("MET_bin", "MET_bin"),
-                              coffea.hist.Cat("At least 1 btag",
-                                              "At least 1 btag")])
-            hist.cat_fill_methods["Z_window"] = {"in": ["Z window",
-                                                        {"function": "not"}],
-                                                 "out": ["Z window"]}
-            hist.cat_fill_methods["MET_bin"] = {MET_bin: [MET_bin]
-                                                for MET_bin in MET_bins}
-            hist.cat_fill_methods["At least 1 btag"] = \
-                {"0b": ["At least 1 btag", {"function": "not"}],
-                 "1b": ["At least 1 btag"]}
-        else:
-            hist.cats = [coffea.hist.Cat("Z_window", "Z_window"),
-                         coffea.hist.Cat("MET_bin", "MET_bin"),
-                         coffea.hist.Cat("At least 1 btag", "At least 1 btag")]
-            hist.cat_fill_methods = \
-                {"Z_window": {"in": ["Z window"],
-                              "out": ["Z window", {"function": "not"}]},
-                 "MET_bin": {MET_bin: [MET_bin] for MET_bin in MET_bins},
-                 "At least 1 btag": {"0b": ["At least 1 btag",
-                                            {"function": "not"}],
-                                     "1b": ["At least 1 btag"]}}
-else:
+if not args.test:
     # Plotting hists is pointless if we're not running over the full mc:
     config["hists"] = {}
+
+if args.eventdir is not None:
+    # Check for non-empty subdirectories and remove them if wanted
+    nonempty = []
+    for dsname in datasets.keys():
+        try:
+            next(os.scandir(os.path.join(args.eventdir, dsname)))
+        except (FileNotFoundError, StopIteration):
+            pass
+        else:
+            nonempty.append(dsname)
+    if len(nonempty) != 0:
+        print("Non-empty output directories: {}".format(", ".join(nonempty)))
+        while True:
+            answer = input("Delete? y/n ")
+            if answer == "y":
+                for dsname in nonempty:
+                    shutil.rmtree(os.path.join(args.eventdir, dsname))
+                break
+            elif answer == "n":
+                break
+
+    if len(nonempty) != 0:
+        print("Non-empty output directories: {}".format(", ".join(nonempty)))
+        while True:
+            answer = input("Delete? y/n ")
+            if answer == "y":
+                for d in nonempty:
+                    shutil.rmtree(os.path.join(args.eventdir, d))
+                break
+            elif answer == "n":
+                break
+
+# Create histdir and in case of errors, raise them now (before processing)
+os.makedirs(args.histdir, exist_ok=True)
 
 processor = DYprocessor(config, args.eventdir)
 executor_args = {"schema": NanoAODSchema, "align_clusters": True}

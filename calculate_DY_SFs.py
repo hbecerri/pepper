@@ -62,7 +62,7 @@ class SFEquations():
             self.em_SFs[MET] = (self.ee_SFs[MET] * self.mm_SFs[MET]) ** 0.5
 
     def evaluate(self, values, cut):
-        out_dict = {}
+        ret_vals = [[], [], []]
         subs = {"N" + sym: sum([values[sym][ds][cut]
                                 for ds in self.config["Data"]])
                 for sym in self.symbols}
@@ -70,13 +70,13 @@ class SFEquations():
                                      for ds in self.config["DY_MC"]])
                      for sym in self.symbols})
         for MET in self.MET_bins:
-            out_dict["is_ee" + MET] = sympy.lambdify(list(subs.keys()),
-                                                     self.ee_SFs[MET])(**subs)
-            out_dict["is_em" + MET] = sympy.lambdify(list(subs.keys()),
-                                                     self.em_SFs[MET])(**subs)
-            out_dict["is_mm" + MET] = sympy.lambdify(list(subs.keys()),
-                                                     self.mm_SFs[MET])(**subs)
-        return out_dict
+            ret_vals[0].append(sympy.lambdify(list(subs.keys()),
+                                              self.ee_SFs[MET])(**subs))
+            ret_vals[1].append(sympy.lambdify(list(subs.keys()),
+                                              self.em_SFs[MET])(**subs))
+            ret_vals[2].append(sympy.lambdify(list(subs.keys()),
+                                              self.mm_SFs[MET])(**subs))
+        return ret_vals
 
     def calculate_errs(self):
         self.ee_SF_errs = {MET: 0 for MET in self.MET_bins}
@@ -95,7 +95,7 @@ class SFEquations():
                 err_dict[MET] = err_dict[MET] ** 0.5
 
     def evaluate_errs(self, values, errs, cut):
-        out_dict = {}
+        ret_vals = [[], [], []]
         subs = {"N" + sym: sum([values[sym][ds][cut]
                                 for ds in self.config["Data"]])
                 for sym in self.symbols}
@@ -109,13 +109,13 @@ class SFEquations():
                      sum([errs[sym][ds][cut] for ds in self.config["DY_MC"]])
                      for sym in self.symbols})
         for MET in self.MET_bins:
-            out_dict["is_ee" + MET] = sympy.lambdify(
-                list(subs.keys()), self.ee_SF_errs[MET])(**subs)
-            out_dict["is_em" + MET] = sympy.lambdify(
-                list(subs.keys()), self.em_SF_errs[MET])(**subs)
-            out_dict["is_mm" + MET] = sympy.lambdify(
-                list(subs.keys()), self.mm_SF_errs[MET])(**subs)
-        return out_dict
+            ret_vals[0].append(sympy.lambdify(
+                list(subs.keys()), self.ee_SF_errs[MET])(**subs))
+            ret_vals[1].append(sympy.lambdify(
+                list(subs.keys()), self.em_SF_errs[MET])(**subs))
+            ret_vals[2].append(sympy.lambdify(
+                list(subs.keys()), self.mm_SF_errs[MET])(**subs))
+        return ret_vals
 
 
 def rebin_met(cutflows, rebin_dict):
@@ -152,11 +152,15 @@ class MultiInputOptArg(argparse.Action):
 
 parser = argparse.ArgumentParser(description="Calculate DY scale factors from "
                                  "DY yields produced by produce_DY_numbers.py")
-parser.add_argument("config", help="Path to a config containing labels for "
-                    "which datsets correspond to DY, and which to data, as "
-                    "well as information about the binning to use")
+parser.add_argument(
+    "config", help="Path to a config containing labels for which datsets "
+    "correspond to DY, and which to data, as well as information about the "
+    "binning to use, which should be either 'Inclusive' or a dict with bins "
+    "(with names in the format <lower_lim>_to_<upper_lim> as keys, and lists "
+    "of the corresponding MET bins as values")
 parser.add_argument("cutflow", help="Path to a cutflow containing the numbers "
                     "required to calculate the SFs")
+parser.add_argument("output", help="Path to the output file")
 parser.add_argument(
     "-c", "--cutname", default="Jet pt req", help="Cut for which scale "
     "factors should be calculated- default 'Jet pt req'")
@@ -172,6 +176,14 @@ with open(args.config, "r") as f:
     config = json.load(f)
 cutflows = coffea.util.load(args.cutflow)
 met_bins, cutflow, errors = rebin_met(cutflows, config["rebin"])
+
+if config["rebin"] == "Inclusive":
+    met_edges = [0, 10000]  # Could altenatively use inf as upper limit, but
+    # if we've got events with more than 10TeV MET, we've got bigger problems
+else:
+    met_edges = [int(k.split("_")[0]) for k in config["rebin"].keys()]
+    met_edges.append(10000)
+out_dict = {"bins": {"met": met_edges, "channel": [0, 1, 2]}}
 
 sf_eq = SFEquations(met_bins, config)
 sfs = sf_eq.evaluate(cutflow, args.cutname)
@@ -190,14 +202,21 @@ if args.variation:
         var_cutflow = cutflow
         cutname = args.variation[0]
     var_sfs = sf_eq.evaluate(var_cutflow, cutname)
-    sys_errs = {k: np.abs(v - var_sfs[k]) for k, v in sfs.items()}
-    with open("DY_SFs.json", "w+") as f:
-        json.dump({"scale_factors": sfs,
-                   "stat_errors": stat_errs,
-                   "sys_errors": sys_errs},
-                  f, indent=4)
+    sys_errs = [[np.abs(sfs[ch_i][met_i] - var_sfs[ch_i][met_i])
+                 for met_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
+    tot_errs = [
+        [np.sqrt(sys_errs[ch_i][met_i] ** 2 + stat_errs[ch_i][met_i] ** 2)
+         for met_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
 else:
-    with open("DY_SFs.json", "w+") as f:
-        json.dump({"scale_factors": sfs,
-                   "stat_errors": stat_errs},
-                  f, indent=4)
+    tot_errs = stat_errs
+
+out_dict["factors"] = sfs
+out_dict["factors_up"] = [
+    [sfs[ch_i][met_i] + tot_errs[ch_i][met_i]
+     for met_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
+out_dict["factors_down"] = [
+    [sfs[ch_i][met_i] - tot_errs[ch_i][met_i]
+     for met_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
+
+with open(args.output, "w+") as f:
+    json.dump(out_dict, f, indent=4)

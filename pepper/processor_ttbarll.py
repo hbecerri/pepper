@@ -114,6 +114,10 @@ class ProcessorTTbarLL(pepper.Processor):
         else:
             logger.warning("No Drell-Yan scale factor specified")
             self.drellyan_sf = None
+        if "MET_xy_shifts" in self.config:
+            self.met_xy_shifts = self.config["MET_xy_shifts"]
+        else:
+            self.met_xy_shifts = None
 
     @staticmethod
     def _check_config_integrity(config):
@@ -283,8 +287,8 @@ class ProcessorTTbarLL(pepper.Processor):
         selector.set_column("OrigJet", selector.data["Jet"])
         selector.set_column("Jet", self.build_jet_column)
         selector.set_column(
-            "MET", partial(self.build_met_column, variation.junc,
-                           variation=variation.met))
+            "MET", partial(self.build_met_column, variation.junc, is_mc,
+                           dsname, variation=variation.met))
         selector.set_multiple_columns(
             partial(self.drellyan_sf_columns, filler))
         if self.drellyan_sf is not None and is_mc:
@@ -817,10 +821,22 @@ class ProcessorTTbarLL(pepper.Processor):
 
         return jets
 
-    def build_met_column(self, junc, data, variation="central"):
+    def build_met_column(self, junc, is_mc, dsname, data, variation="central"):
         met = data["MET"]
         metx = met.pt * np.cos(met.phi)
         mety = met.pt * np.sin(met.phi)
+        if self.met_xy_shifts:
+            if is_mc:
+                era = self.config["year"] + "MC"
+            else:
+                era = dsname[3:8]
+            metx += -(self.met_xy_shifts["METxcorr"][era][0]
+                      * data["Pileup_nTrueInt"]
+                      + self.met_xy_shifts["METxcorr"][era][1])
+            mety += -(self.met_xy_shifts["METycorr"][era][0]
+                      * data["Pileup_nTrueInt"]
+                      + self.met_xy_shifts["METycorr"][era][1])
+
         if variation == "up":
             metx = metx + met.MetUnclustEnUpDeltaX
             mety = mety + met.MetUnclustEnUpDeltaY
