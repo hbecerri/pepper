@@ -817,7 +817,7 @@ class ProcessorTTbarLL(pepper.Processor):
             jets["juncfac"] = ak.zeros_like(jets["pt"])
         jets["emef"] = jets["mass"] = ak.zeros_like(jets["pt"])
         jets.behavior = data["Jet"].behavior
-        jets = ak.with_parameter(jets, "__record__", "Jet")
+        jets = ak.with_name(jets, "Jet")
 
         return jets
 
@@ -860,13 +860,13 @@ class ProcessorTTbarLL(pepper.Processor):
             }, with_name="Jet", behavior=jets.behavior)
             lowptjets = self.build_lowptjet_column(junc, data)
             # Concatenating removes the type. Readd
-            jets = ak.with_parameter(jets, "__record__", "Jet")
+            jets = ak.with_name(jets, "Jet")
             # Cut according to MissingETRun2Corrections Twiki
             jets = jets[(jets["pt_nomuon"] > 15) & (jets["emef"] < 0.9)]
             lowptjets = lowptjets[(lowptjets["pt_nomuon"] > 15)
                                   & (lowptjets["emef"] < 0.9)]
             # lowptjets lose their type here. Probably a bug, workaround
-            lowptjets = ak.with_parameter(lowptjets, "__record__", "Jet")
+            lowptjets = ak.with_name(lowptjets, "Jet")
             metx = metx - (
                 ak.sum(jets.x * jets["juncfac"], axis=1)
                 + ak.sum(lowptjets.x * lowptjets["juncfac"], axis=1))
