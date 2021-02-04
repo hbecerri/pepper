@@ -1112,8 +1112,7 @@ class ProcessorTTbarLL(pepper.Processor):
                 energyfl=energyfl, energyfj=energyfj, alphal=alphal,
                 alphaj=alphaj, hist_mlb=mlb, num_smear=num_smear,
                 seed=self.reco_random_seed)
-            return ak.concatenate([ak.unflatten(top, 1),
-                                   ak.unflatten(antitop, 1)], axis=1)
+            return ak.concatenate([top, antitop], axis=1)
         elif reco_alg == "betchart":
             top, antitop = betchart(lep, antilep, b, antib, met)
             return ak.concatenate([top, antitop], axis=1)

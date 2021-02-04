@@ -362,19 +362,25 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     at = wm + ab
 
     # Reduce solution axis and pick the solution with the smallest mtt
-    has_solution = ak.any(is_real, axis=2)
+    # Note that there is a very small probability of having a weight of zero
+    # and a root that looks real, we don't want these
+    has_solution = ak.any(is_real, axis=2) & (weights != 0)
     min_mtt = ak.argmin((t + at).mass, axis=2, keepdims=True)
     t = ak.flatten(t[min_mtt][has_solution], axis=2)
     at = ak.flatten(at[min_mtt][has_solution], axis=2)
     weights = _from_regular(weights, axis=1)[has_solution]
 
-    # Undo smearing by averaging
+    # Undo smearing by averaging, slice with has_solution again to not get
+    # vectors with zeros if there is no solution
     sum_weights = ak.where(ak.num(weights) > 0, ak.sum(weights, axis=1), 1.)
+    has_solution = ak.any(has_solution, axis=1, keepdims=True)
     # Divide is currently not implemented for coffea vectors. Workaround
-    t = ak.with_name(ak.sum(t * weights, axis=1), "LorentzVector") * (
-        1 / sum_weights)
-    at = ak.with_name(ak.sum(at * weights, axis=1), "LorentzVector") * (
-        1 / sum_weights)
+    t = ak.with_name(
+        ak.sum(t * weights, axis=1, keepdims=True)[has_solution],
+        "LorentzVector") * (1 / sum_weights)
+    at = ak.with_name(
+        ak.sum(at * weights, axis=1, keepdims=True)[has_solution],
+        "LorentzVector") * (1 / sum_weights)
 
     return t, at
 
