@@ -4,9 +4,10 @@ A python framework for analyzing NanoAODs. Easy to use and highly configurable.
 Currently focusing on <img src="https://latex.codecogs.com/gif.latex?\mathrm{t\bar{t}}\rightarrow\mathrm{ll\nu\nu}" />.
 
 ## Installation
-Requires Python3 and the Python packages `coffea` version 0.7, `parsl` and `h5py`
+Requires Python3 and the Python packages `coffea` version 0.7, `awkward`
+version 1.1, `parsl` and `h5py`
 
-> pip3 install --user "coffea==0.7.0rc1" parsl h5py
+> pip3 install --user "coffea>=0.7.0" "awkward==1.1.0rc2" parsl h5py
 
 Pepper has been tested on and is recommended to be used with `CMSSW_11_1_0_pre5_PY3`.
 
