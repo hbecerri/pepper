@@ -55,6 +55,9 @@ func_dict = {
 
     "sum": lambda x: ak.sum(x, axis=1),
     "num": ak.num,
+    "zeros_like": ak.zeros_like,
+    "ones_like": ak.ones_like,
+    "full_like": ak.full_like,
 }
 
 
