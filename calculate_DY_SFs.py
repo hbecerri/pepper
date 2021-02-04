@@ -1,5 +1,5 @@
 import numpy as np
-import coffea
+import coffea.util
 import json
 import logging
 import argparse

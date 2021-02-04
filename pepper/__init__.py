@@ -1,8 +1,6 @@
-from pepper.accumulator import PackedSelectionAccumulator
-from pepper.accumulator import ArrayAccumulator
 from pepper.hist_defns import HistDefinition
 from pepper import datasets
-from pepper.lazytable import LazyTable
+from pepper.hdffile import HDF5File
 from pepper import misc
 from pepper.output_filler import DummyOutputFiller
 from pepper.output_filler import OutputFiller
@@ -16,11 +14,9 @@ from pepper.processor_ttbarll import ProcessorTTbarLL
 from pepper import scale_factors
 
 __all__ = [
-    "PackedSelectionAccumulator",
-    "ArrayAccumulator",
     "HistDefinition",
     "datasets",
-    "LazyTable",
+    "HDF5File",
     "misc",
     "DummyOutputFiller",
     "OutputFiller",

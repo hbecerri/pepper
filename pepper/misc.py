@@ -1,12 +1,8 @@
 import os
 import sys
 from glob import glob
-import h5py
-import uproot
-from collections import defaultdict
+import awkward as ak
 import coffea
-from coffea.analysis_objects import JaggedCandidateArray as Jca
-import awkward
 import numpy as np
 import parsl
 import parsl.addresses
@@ -15,81 +11,22 @@ import inspect
 import gc
 
 
-def concatenate(arrays, axis=0):
-    arraytype = None
-    for array in arrays:
-        if arraytype is not None and type(array) is not arraytype:
-            raise TypeError("All arrays need to have the same type")
-        else:
-            arraytype = type(array)
-    concated = awkward.concatenate(arrays, axis=axis)
-    if issubclass(arraytype, awkward.JaggedArray):
-        mixin = awkward.Methods.maybemixin(arraytype, awkward.JaggedArray)
-        concated = mixin.fromcounts(concated.counts, concated.flatten())
-    return concated
+def normalize_trigger_path(path):
+    if path.startswith("HLT_"):
+        path = path[4:]
+    return path
 
 
-def pairswhere(condition, x, y):
-    counts = np.where(condition, x.counts, y.counts)
-    pt0 = np.empty(counts.sum(), dtype=float)
-    eta0 = np.empty(counts.sum(), dtype=float)
-    phi0 = np.empty(counts.sum(), dtype=float)
-    mass0 = np.empty(counts.sum(), dtype=float)
-
-    pt1 = np.empty(counts.sum(), dtype=float)
-    eta1 = np.empty(counts.sum(), dtype=float)
-    phi1 = np.empty(counts.sum(), dtype=float)
-    mass1 = np.empty(counts.sum(), dtype=float)
-
-    offsets = awkward.JaggedArray.counts2offsets(counts)
-    starts, stops = offsets[:-1], offsets[1:]
-
-    working_array = \
-        np.zeros(counts.sum()+1, dtype=awkward.JaggedArray.INDEXTYPE)
-    xstarts = starts[condition]
-    xstops = stops[condition]
-    not_empty = xstarts != xstops
-    working_array[xstarts[not_empty]] += 1
-    working_array[xstops[not_empty]] -= 1
-    mask = np.array(np.cumsum(working_array)[:-1],
-                    dtype=awkward.JaggedArray.MASKTYPE)
-
-    pt0[mask] = x[condition].i0.pt.flatten()
-    pt0[~mask] = y[~condition].i0.pt.flatten()
-    eta0[mask] = x[condition].i0.eta.flatten()
-    eta0[~mask] = y[~condition].i0.eta.flatten()
-    phi0[mask] = x[condition].i0.phi.flatten()
-    phi0[~mask] = y[~condition].i0.phi.flatten()
-    mass0[mask] = x[condition].i0.mass.flatten()
-    mass0[~mask] = y[~condition].i0.mass.flatten()
-    out0 = Jca.candidatesfromcounts(
-            counts, pt=pt0, eta=eta0, phi=phi0, mass=mass0)
-
-    pt1[mask] = x[condition].i1.pt.flatten()
-    pt1[~mask] = y[~condition].i1.pt.flatten()
-    eta1[mask] = x[condition].i1.eta.flatten()
-    eta1[~mask] = y[~condition].i1.eta.flatten()
-    phi1[mask] = x[condition].i1.phi.flatten()
-    phi1[~mask] = y[~condition].i1.phi.flatten()
-    mass1[mask] = x[condition].i1.mass.flatten()
-    mass1[~mask] = y[~condition].i1.mass.flatten()
-    out1 = Jca.candidatesfromcounts(
-            counts, pt=pt1, eta=eta1, phi=phi1, mass=mass1)
-    return out0, out1
-
-
-def jaggedlike(j, content):
-    return awkward.JaggedArray(j.starts, j.stops, content)
-
-
-def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None):
+def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None,
+                          normalize=True):
     """Get trigger paths needed for the specific dataset.
 
     Arguments:
     dataset -- Name of the dataset
     trigger_paths -- dict mapping dataset names to their triggers
-    trigger_order -- List of datasets to define the order in which the triggers
+    trigger_order -- list of datasets to define the order in which the triggers
                      are applied.
+    normalize -- bool, whether to remove HLT_ from the beginning
 
     Returns a tuple of lists (pos_triggers, neg_triggers) describing trigger
     paths to include and to exclude respectively.
@@ -105,7 +42,12 @@ def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None):
                 break
             neg_triggers.extend(trigger_paths[dsname])
         pos_triggers = trigger_paths[dataset]
-    return list(dict.fromkeys(pos_triggers)), list(dict.fromkeys(neg_triggers))
+    pos_triggers = list(dict.fromkeys(pos_triggers))
+    neg_triggers = list(dict.fromkeys(neg_triggers))
+    if normalize:
+        pos_triggers = [normalize_trigger_path(t) for t in pos_triggers]
+        neg_triggers = [normalize_trigger_path(t) for t in neg_triggers]
+    return pos_triggers, neg_triggers
 
 
 def get_event_files(eventdir, eventext, datasets):
@@ -115,65 +57,8 @@ def get_event_files(eventdir, eventext, datasets):
     return out
 
 
-def treeopen(path, treepath, branches):
-    treedata = {}
-    if path.endswith(".root"):
-        f = uproot.open(path)
-        tree = f[treepath]
-        for branch in branches:
-            treedata[branch] = tree[branch].array()
-    elif path.endswith(".hdf5") or path.endswith(".h5"):
-        f = h5py.File(path, "r")
-        tree = awkward.hdf5(f)
-        for branch in branches:
-            treedata[branch] = tree[branch]
-    else:
-        raise RuntimeError("Cannot open {}. Unknown extension".format(path))
-    return awkward.Table(treedata)
-
-
-def montecarlo_iterate(datasets, factors, branches, treepath="Events"):
-    for group, group_paths in datasets.items():
-        chunks = defaultdict(list)
-        weight_chunks = []
-        for path in group_paths:
-            tree = treeopen(path, treepath, list(branches) + ["weight"])
-            for branch in branches:
-                if tree[branch].size == 0:
-                    continue
-                chunks[branch].append(tree[branch])
-            if factors is not None:
-                weight_chunks.append(tree["weight"] * factors[group])
-            else:
-                weight_chunks.append(tree["weight"])
-        if len(weight_chunks) == 0:
-            continue
-        data = {}
-        for branch in chunks.keys():
-            data[branch] = awkward.concatenate(chunks[branch])
-
-        yield group, np.concatenate(weight_chunks), awkward.Table(data)
-
-
-def expdata_iterate(datasets, branches, treepath="Events"):
-    for dsname, paths in datasets.items():
-        chunks = defaultdict(list)
-        for path in paths:
-            data = treeopen(path, treepath, branches)
-            if data.size == 0:
-                continue
-            for branch in branches:
-                chunks[branch].append(data[branch])
-        if len(chunks) == 0:
-            continue
-        data = {}
-        for branch in branches:
-            data[branch] = awkward.concatenate(chunks[branch])
-        yield dsname, awkward.Table(data)
-
-
 def export(hist):
-    """Export a one, two or three dimensional `Hist` to a ROOT histogram"""
+    """Export a one, two or three dimensional `Hist` to a uproot3 histogram"""
     d = hist.dense_dim()
     if d > 3:
         raise ValueError("export() only supports up to three dense dimensions")
@@ -183,11 +68,11 @@ def export(hist):
     axes = hist.axes()
 
     if d == 1:
-        from uproot_methods.classes.TH1 import Methods
+        from uproot3_methods.classes.TH1 import Methods
     elif d == 2:
-        from uproot_methods.classes.TH2 import Methods
+        from uproot3_methods.classes.TH2 import Methods
     else:
-        from uproot_methods.classes.TH3 import Methods
+        from uproot3_methods.classes.TH3 import Methods
 
     class TH(Methods, list):
         pass
@@ -267,7 +152,7 @@ def export_with_sparse(hist):
 
 
 def rootimport(uproothist, enconding="utf-8"):
-    """The inverse of export. Takes an uproot histogram and converts it to a
+    """The inverse of export. Takes an uproot3 histogram and converts it to a
     coffea histogram. `encoding` is the coding with which the labels of the
     uproot histogram are decoded."""
     axes = []
@@ -339,39 +224,6 @@ def hist_divide(num, denom):
     return hout
 
 
-def jcafromjagged(**fields):
-    """Create JaggedCandidateArray from JaggedArrays
-    This eliminates the need to flatten every JaggedArray.
-    """
-    counts = None
-    flattened = {}
-    for key, val in fields.items():
-        if counts is None:
-            counts = val.counts
-        elif (counts != val.counts).any():
-            raise ValueError("Got JaggedArrays of different sizes "
-                             "({counts} and {val.counts})")
-        flattened[key] = val.flatten()
-    return Jca.candidatesfromcounts(counts, **flattened)
-
-
-def jaggeddepth(arr):
-    """Get the number of jagged dimensions of a JaggedArray"""
-    depth = 0
-    while not isinstance(arr, (awkward.Table, np.ndarray)):
-        depth += 1
-        arr = arr.content
-    return depth
-
-
-def sortby(table, field, ascending=False):
-    """Sort a table by a field or attribute"""
-    try:
-        return table[table[field].argsort(ascending=ascending)]
-    except KeyError:
-        return table[getattr(table, field).argsort(ascending=ascending)]
-
-
 def hist_counts(hist):
     """Get the number of entries in a histogram, including all overflow and
     nan
@@ -423,11 +275,7 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
     if condor_init is None:
         condor_init = """
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-if lsb_release -r | grep -q 7\\.; then
-cd /cvmfs/cms.cern.ch/slc7_amd64_gcc700/cms/cmssw-patch/CMSSW_10_2_4_patch1/src
-else
-cd /cvmfs/cms.cern.ch/slc6_amd64_gcc700/cms/cmssw-patch/CMSSW_10_2_4_patch1/src
-fi
+cd /cvmfs/cms.cern.ch/slc7_amd64_gcc820/cms/cmssw/CMSSW_11_1_0_pre5_PY3/src
 eval `scramv1 runtime -sh`
 cd -
 """
@@ -484,19 +332,26 @@ def chunked_calls(array_param, chunksize, returns_multiple=False):
     returns_multiple -- Needs to be set to true if the function returns more
                         than one variable, e.g. as a tuple or list
     """
+
+    def concatenate(arrays):
+        if isinstance(arrays[0], np.ndarray):
+            return np.concatenate(arrays)
+        else:
+            return ak.concatenate(arrays)
+
     def decorator(func):
         sig = inspect.signature(func)
 
         @wraps(func)
         def wrapper(*args, **kwargs):
             kwargs = sig.bind(*args, **kwargs).arguments
-            rows = kwargs[array_param].shape[0]
+            rows = len(kwargs[array_param])
             if rows <= chunksize:
                 # Nothing to chunk, just return whatever func returns
                 return func(**kwargs)
             array_parameters = {array_param}
             for param, arg in kwargs.items():
-                if hasattr(arg, "shape") and arg.shape[0] == rows:
+                if hasattr(arg, "__len__") and len(arg) == rows:
                     array_parameters.add(param)
             starts = np.arange(0, rows, chunksize)
             stops = np.r_[starts[1:], rows]
@@ -509,7 +364,7 @@ def chunked_calls(array_param, chunksize, returns_multiple=False):
                 if ret_chunk is None:
                     return None
                 ret_chunks.append(ret_chunk)
-                # Force clean upof memory to keep usage low
+                # Force clean up of memory to keep usage low
                 gc.collect()
             if len(ret_chunks) == 1:
                 concated = ret_chunks[0]
@@ -526,3 +381,23 @@ def chunked_calls(array_param, chunksize, returns_multiple=False):
 
         return wrapper
     return decorator
+
+
+def akstriparray(array):
+    """Make an awkward array use as least memory as possible. This raises a
+    ValueError for record arrays"""
+    stripped = array
+    counts = []
+    for i in range(stripped.ndim - 1):
+        if isinstance(stripped.type.type, ak.types.RegularType):
+            counts.append(stripped.type.type.size)
+        else:
+            counts.append(ak.num(stripped))
+        stripped = ak.flatten(stripped)
+    stripped = ak.flatten(stripped, axis=None)
+    for count in reversed(counts):
+        stripped = ak.unflatten(stripped, count)
+    for name, val in ak.parameters(array):
+        stripped = ak.with_parameter(stripped, name, val)
+    stripped.behavior = array.behavior
+    return stripped

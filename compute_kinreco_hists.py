@@ -3,15 +3,19 @@
 import os
 import sys
 import numpy as np
-import awkward
-import uproot
+import awkward as ak
 import coffea
+from coffea.nanoevents import NanoAODSchema
 import parsl
 from argparse import ArgumentParser
 
 import pepper
-from pepper.misc import jcafromjagged, export
+from pepper.misc import export
 from pepper.datasets import expand_datasetdict
+
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+import uproot3  # noqa: E402
 
 
 class Processor(pepper.ProcessorTTbarLL):
@@ -20,6 +24,7 @@ class Processor(pepper.ProcessorTTbarLL):
         if "reco_info_file" in config:
             del config["reco_info_file"]
         config["blinding_denom"] = None
+        config["compute_systematics"] = False
         super().__init__(config, None)
 
     @property
@@ -48,7 +53,7 @@ class Processor(pepper.ProcessorTTbarLL):
             {"mlb": mlb, "mw": mw, "mt": mt, "alphal": alphal,
              "alphaj": alphaj, "energyfl": energyfl, "energyfj": energyfj})
 
-    def setup_outputfiller(self, data, dsname, is_mc):
+    def setup_outputfiller(self, data, dsname):
         return pepper.DummyOutputFiller(self.accumulator.identity())
 
     def setup_selection(self, data, dsname, is_mc, filler):
@@ -56,10 +61,10 @@ class Processor(pepper.ProcessorTTbarLL):
 
     def process_selection(self, selector, dsname, is_mc, filler):
         selector.set_multiple_columns(self.build_gen_columns)
-        selector.add_cut(self.has_gen_particles, "Has gen particles")
+        selector.add_cut("Has gen particles", self.has_gen_particles)
 
         self.fill_before_selection(
-            selector.masked, selector.masked_systematics, filler.output)
+            selector.data, selector.systematics, filler.output)
 
         super().process_selection(selector, dsname, is_mc, filler)
 
@@ -68,35 +73,21 @@ class Processor(pepper.ProcessorTTbarLL):
 
     @staticmethod
     def sortby(data, field):
-        try:
-            return data[data[field].argsort()]
-        except KeyError:
-            return data[getattr(data, field).argsort()]
+        return data[ak.argsort(data["pdgId"], ascending=False)]
 
     def build_gen_columns(self, data):
-        mass = data["GenPart_mass"]
+        part = data["GenPart"]
+        mass = np.asarray(ak.flatten(part.mass))
         # mass is only stored for masses greater than 10 GeV
         # this is a fudge to set the b mass to the right
         # value if not stored
-        mass[(mass == 0) & (abs(data["GenPart_pdgId"]) == 5)] = 4.18
-        mass[(mass == 0) & (abs(data["GenPart_pdgId"]) == 13)] = 0.102
-        motheridx = data["GenPart_genPartIdxMother"]
-        hasmother = ((0 <= motheridx) & (motheridx < mass.counts))
-        motherpdgId = motheridx.empty_like()
-        motherpdgId[hasmother] = data["GenPart_pdgId"][motheridx[hasmother]]
-        part = jcafromjagged(
-            pt=data["GenPart_pt"],
-            eta=data["GenPart_eta"],
-            phi=data["GenPart_phi"],
-            mass=mass,
-            pdgId=data["GenPart_pdgId"],
-            motherid=motherpdgId,
-            statusflags=data["GenPart_statusFlags"]
-        )
-        part = part[hasmother]
-        is_first_copy = part.statusflags >> 12 & 1 == 1
-        is_hard_process = part.statusflags >> 7 & 1 == 1
-        part = part[is_first_copy & is_hard_process]
+        mass[(mass == 0) & (abs(ak.flatten(part["pdgId"])) == 5)] = 4.18
+        mass[(mass == 0) & (abs(ak.flatten(part["pdgId"])) == 13)] = 0.102
+        part["mass"] = ak.unflatten(mass, ak.num(part))
+        # Fill none in order to not enter masked arrays regime
+        part["motherid"] = ak.fill_none(part.parent.pdgId, 0)
+        part = part[part["motherid"] != 0]
+        part = part[part.hasFlags("isFirstCopy", "isHardProcess")]
         abspdg = abs(part.pdgId)
         sgn = np.sign(part.pdgId)
 
@@ -117,10 +108,10 @@ class Processor(pepper.ProcessorTTbarLL):
         return cols
 
     def has_gen_particles(self, data):
-        return ((data["genlepton"].counts == 2)
-                & (data["genb"].counts == 2)
-                & (data["genw"].counts == 2)
-                & (data["gent"].counts == 2))
+        return ((ak.num(data["genlepton"]) == 2)
+                & (ak.num(data["genb"]) == 2)
+                & (ak.num(data["genw"]) == 2)
+                & (ak.num(data["gent"]) == 2))
 
     def fill_before_selection(self, data, sys, output):
         lep = data["genlepton"][:, 0]
@@ -129,46 +120,49 @@ class Processor(pepper.ProcessorTTbarLL):
         antib = data["genb"][:, 1]
         w = data["genw"]
         t = data["gent"]
-        weight = sys["weight"].flatten()
+        weight = np.asarray(sys["weight"])
 
-        mlbarb = (antilep["p4"] + b["p4"]).mass.flatten()
-        mlbbar = (lep["p4"] + antib["p4"]).mass.flatten()
+        mlbarb = (antilep + b).mass
+        mlbbar = (lep + antib).mass
         output["mlb"].fill(mlb=mlbarb, weight=weight)
         output["mlb"].fill(mlb=mlbbar, weight=weight)
-        output["mw"].fill(mw=w.mass.flatten(), weight=np.repeat(weight, 2))
-        output["mt"].fill(mt=t.mass.flatten(), weight=np.repeat(weight, 2))
+        output["mw"].fill(mw=ak.flatten(w.mass), weight=np.repeat(weight, 2))
+        output["mt"].fill(mt=ak.flatten(t.mass), weight=np.repeat(weight, 2))
 
     def match_leptons(self, data):
         recolep = self.sortby(data["Lepton"][:, :2], "pdgId")
         genlep = data["genlepton"]
         is_same_flavor = recolep.pdgId == genlep.pdgId
-        is_close = recolep.p4.delta_r(genlep.p4) < 0.3
+        is_close = recolep.delta_r(genlep) < 0.3
         is_matched = is_same_flavor & is_close
 
         return genlep[is_matched], recolep[is_matched]
 
     def match_jets(self, data):
-        recojet = data["Jet"]
-        genb = data["genb"]
-        c = genb.cross(recojet, nested=True)
-        is_close = c.i0.p4.delta_r(c.i1.p4) < 0.3
-        is_matched = is_close & (is_close.sum() == 1)
+        recojet = ak.with_name(data["Jet"][["pt", "eta", "phi", "mass"]],
+                               "PtEtaPhiMLorentzVector")
+        genb = ak.with_name(data["genb"][["pt", "eta", "phi", "mass"]],
+                            "PtEtaPhiMLorentzVector")
+        genbc, recojetc = ak.unzip(ak.cartesian([genb, recojet], nested=True))
+        is_close = genbc.delta_r(recojetc) < 0.3
+        is_matched = is_close & (ak.sum(is_close, axis=2) == 1)
 
-        mrecojet = (recojet[is_matched[:, i]] for i in range(2))
-        mrecojet = awkward.concatenate(list(mrecojet), axis=1)
-        return genb[is_matched.any()], mrecojet
+        mrecojet = [recojet[is_matched[:, i]] for i in range(2)]
+        mrecojet = ak.concatenate(mrecojet, axis=1)
+        return genb[ak.any(is_matched, axis=2)], mrecojet
 
     @staticmethod
     def fill_alpha_energyf(gen, reco, weight, alphahist, energyfhist):
-        deltaphi = gen.p4.delta_phi(reco.p4)
-        energyf = gen.p4.E / reco.p4.E
-        alphahist.fill(alpha=deltaphi.flatten(),
-                       weight=np.repeat(weight, deltaphi.counts))
-        energyfhist.fill(energyf=energyf.flatten(),
-                         weight=np.repeat(weight, energyf.counts))
+        deltaphi = gen.delta_phi(reco)
+        energyf = gen.energy / reco.energy
+        # axis=None to remove eventual masking
+        alphahist.fill(alpha=ak.flatten(deltaphi, axis=None),
+                       weight=np.repeat(weight, ak.num(deltaphi)))
+        energyfhist.fill(energyf=ak.flatten(energyf, axis=None),
+                         weight=np.repeat(weight, ak.num(energyf)))
 
     def fill_after_selection(self, data, sys, output):
-        weight = sys["weight"].flatten()
+        weight = np.asarray(sys["weight"])
 
         genlep, recolep = self.match_leptons(data)
         self.fill_alpha_energyf(
@@ -205,7 +199,7 @@ if os.path.exists(args.output):
     if a != "y":
         sys.exit(1)
 
-config = pepper.Config(args.config)
+config = pepper.ConfigTTbarLL(args.config)
 store = config["store"]
 
 
@@ -222,22 +216,21 @@ if args.debug:
 os.makedirs(os.path.dirname(os.path.realpath(args.output)), exist_ok=True)
 
 processor = Processor(config)
+executor_args = {"schema": NanoAODSchema}
 if args.condor is not None:
     executor = coffea.processor.parsl_executor
     # Load parsl config immediately instead of putting it into executor_args
     # to be able to use the same jobs for preprocessing and processing
     print("Spawning jobs. This can take a while")
     parsl.load(pepper.misc.get_parsl_config(args.condor))
-    executor_args = {}
 else:
     executor = coffea.processor.iterative_executor
-    executor_args = {}
 
 output = coffea.processor.run_uproot_job(
     datasets, "Events", processor, executor, executor_args,
     chunksize=args.chunksize)
 
-with uproot.recreate(args.output) as f:
+with uproot3.recreate(args.output) as f:
     items = ("mlb", "mw", "mt", "alphal", "energyfl", "alphaj", "energyfj")
     for key in items:
         f[key] = export(output[key])

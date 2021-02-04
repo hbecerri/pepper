@@ -3,7 +3,7 @@
 import numpy as np
 import coffea
 from coffea.lookup_tools.extractor import file_converters
-import awkward
+import awkward as ak
 from collections import namedtuple
 import warnings
 
@@ -40,18 +40,13 @@ class ScaleFactors:
 
     @classmethod
     def from_hist(cls, hist, dimlabels=None):
-        factors, edges = hist.allnumpy()
-        if isinstance(edges, list):
-            # In 2D and 3D case, edges are placed in a len 1 list
-            edges = edges[0]
-        if not isinstance(edges, tuple):
-            # In 1D case, edges aren't wrapped in a tuple
-            edges = (edges,)
+        edges = hist.to_numpy(flow=True)[1:]
         if dimlabels is None:
             dimlabels = []
-            for attr in ("_fXaxis", "_fYaxis", "_fZaxis")[:len(edges)]:
-                dimlabels.append(getattr(hist, attr)._fName)
-        sigmas = np.sqrt(hist.allvariances)
+            for member in ("fXaxis", "fYaxis", "fZaxis")[:len(edges)]:
+                dimlabels.append(hist.all_members[member].all_members["fName"])
+        factors = hist.values(flow=True)
+        sigmas = np.sqrt(hist.variances(flow=True))
         factors_up = factors + sigmas
         factors_down = factors - sigmas
         if len(edges) != len(dimlabels):
@@ -86,13 +81,17 @@ class ScaleFactors:
                 raise ValueError("Scale factor depends on \"{}\" but no such "
                                  "argument was not provided"
                                  .format(key))
-            if isinstance(val, awkward.JaggedArray):
-                counts = val.counts
-                val = val.flatten()
+            if isinstance(val, ak.Array):
+                counts = []
+                for i in range(val.ndim - 1):
+                    counts.append(ak.num(val))
+                    val = ak.flatten(val)
+                val = np.asarray(val)
             binIdxs.append(np.digitize(val, bins_for_key) - 1)
         ret = factors[tuple(binIdxs)]
         if counts is not None:
-            ret = awkward.JaggedArray.fromcounts(counts, ret)
+            for count in reversed(counts):
+                ret = ak.unflatten(ret, count)
         return ret
 
 
@@ -165,27 +164,31 @@ class BTagWeighter:
             else:
                 heavy_vari = direction
 
-        counts = pt.counts
-        jf = jf.flatten()
-        eta = eta.flatten()
-        pt = pt.flatten()
-        discr = discr.flatten()
+        counts = ak.num(pt)
+        jf = ak.flatten(jf)
+        eta = ak.flatten(eta)
+        pt = ak.flatten(pt)
+        discr = ak.flatten(discr)
 
-        sf = np.ones_like(eta)
-        sf[jf == 0] = self._sf_func(wp, light_vari, 2)(eta, pt, discr)[jf == 0]
-        sf[jf == 4] = self._sf_func(wp, heavy_vari, 1)(eta, pt, discr)[jf == 4]
-        sf[jf == 5] = self._sf_func(wp, heavy_vari, 0)(eta, pt, discr)[jf == 5]
-        sf = awkward.JaggedArray.fromcounts(counts, sf)
+        sf = np.ones(len(pt))
+        sf[jf == 0] = np.asarray(self._sf_func(wp, light_vari, 2)(
+            eta, pt, discr))[jf == 0]
+        sf[jf == 4] = np.asarray(self._sf_func(wp, heavy_vari, 1)(
+            eta, pt, discr))[jf == 4]
+        sf[jf == 5] = np.asarray(self._sf_func(wp, heavy_vari, 0)(
+            eta, pt, discr))[jf == 5]
+        sf = ak.unflatten(sf, counts)
 
         eff = self.eff_evaluator[efficiency](jf, pt, abs(eta))
-        eff = awkward.JaggedArray.fromcounts(counts, eff)
+        eff = ak.unflatten(eff, counts)
         sfeff = sf * eff
 
-        is_tagged = discr > self.wps[wp]
-        is_tagged = awkward.JaggedArray.fromcounts(counts, is_tagged)
+        is_tagged = ak.unflatten(discr > self.wps[wp], counts)
 
-        p_mc = eff[is_tagged].prod() * (1 - eff)[~is_tagged].prod()
-        p_data = sfeff[is_tagged].prod() * (1 - sfeff)[~is_tagged].prod()
+        p_mc = ak.prod(eff[is_tagged], axis=1) * ak.prod(
+            (1 - eff)[~is_tagged], axis=1)
+        p_data = ak.prod(sfeff[is_tagged], axis=1) * ak.prod(
+            (1 - sfeff)[~is_tagged], axis=1)
 
         # TODO: What if one runs into numerical problems here?
         return p_data / p_mc
@@ -204,7 +207,7 @@ class PileupWeighter:
         self.upsuffix = "_up"
         self.downsuffix = "_down"
         for key, hist in rootfile.items():
-            key = key.decode().rsplit(";", 1)[0]
+            key = key.rsplit(";", 1)[0]
             sf = ScaleFactors.from_hist(hist, ["ntrueint"])
             if key.endswith(self.upsuffix):
                 self.up[key[:-len(self.upsuffix)]] = sf

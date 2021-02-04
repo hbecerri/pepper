@@ -1,13 +1,12 @@
 import numpy as np
-from uproot_methods.classes.TLorentzVector import TLorentzVectorArray as LVa
-from coffea.analysis_objects import JaggedCandidateArray as Jca
 import math
-from awkward import JaggedArray
 from numba import njit
 from numba.experimental import jitclass
 from numba import float32, float64
 from functools import partial
 from scipy.optimize import leastsq
+from coffea.nanoevents.methods import vector
+import awkward as ak
 
 
 @njit(cache=True)
@@ -126,7 +125,7 @@ nss_spec = {"D2": float32,
             "x1": float32,
             "y1": float32,
             "Z": float32,
-            "mw2": float64}
+            "mw2": float32}
 
 
 @jitclass(nss_spec)
@@ -246,10 +245,10 @@ def test_func(es, met, params):
 def _run_kinreco(lep, alep, b, bbar, met_x, met_y,
                  mw2=80.385**2, mt2=172.5**2):
     nevents = len(lep)
-    nu = np.empty((3, 4 * nevents), dtype=np.float64)
-    nubar = np.empty((3, 4 * nevents), dtype=np.float64)
+    nu = np.empty((3, nevents, 4), dtype=np.float64)
+    nubar = np.empty((3, nevents, 4), dtype=np.float64)
     fails = 0
-    nsols = np.zeros(nevents, dtype=np.int64)
+    sols = np.zeros((nevents, 4), dtype=bool)
     for eventi in range(nevents):
         bs = (b[eventi], bbar[eventi])
         mus = (alep[eventi], lep[eventi])
@@ -279,93 +278,124 @@ def _run_kinreco(lep, alep, b, bbar, met_x, met_y,
                      for ss in solutionSets]
             for sol_i, s in enumerate(v):
                 for i in [0, 1, 2]:
-                    nu[i, 4 * eventi + sol_i] = K.dot(s)[i]
+                    nu[i, eventi, sol_i] = K.dot(s)[i]
+                    sols[eventi, sol_i] = True
             for sol_i, s_ in enumerate(v_):
                 for i in [0, 1, 2]:
-                    nubar[i, 4 * eventi + sol_i] = K_.dot(s_)[i]
-            nsols[eventi] = len(v)
+                    nubar[i, eventi, sol_i] = K_.dot(s_)[i]
         else:
             fails += 1
-    return nu, nubar, nsols
-
-
-def _make_jca(counts, lv):
-    return Jca.candidatesfromcounts(counts, px=lv.x, py=lv.y,
-                                    pz=lv.z, mass=lv.mass)
+    return nu, nubar, sols
 
 
 def _make_2d_array(lv):
-    return np.stack((lv.x, lv.y, lv.z, lv.E), axis=-1)
+    return np.stack((ak.to_numpy(lv.x), ak.to_numpy(lv.y),
+                     ak.to_numpy(lv.z), ak.to_numpy(lv.t)), axis=-1)
+
+
+def _lorvecfromnumpy(x, y, z, t, behavior, name="LorentzVector"):
+    x = ak.Array(x)
+    y = ak.Array(y)
+    z = ak.Array(z)
+    t = ak.Array(t)
+    # Make axes to outer layer
+    counts = []
+    for i in range(x.ndim - 1):
+        counts.append(ak.num(x))
+        x = ak.flatten(x)
+        y = ak.flatten(y)
+        z = ak.flatten(z)
+        t = ak.flatten(t)
+    v = ak.Array({"x": x, "y": y, "z": z, "t": t}, with_name=name,
+                 behavior=behavior)
+    for count in reversed(counts):
+        v = ak.unflatten(v, count)
+    return v
 
 
 def betchart(lep, antilep, b, antib, met, mw=80.385, mt=172.5):
     METx = met.pt * np.cos(met.phi)
     METy = met.pt * np.sin(met.phi)
-    # Currently, awkward doesn't seem to be surported in numba,
-    # so create a helper function with no awkward components
-    # which can be compiled. Awkward 1 should be fully numba
-    # compatible, so it may be possible to recombine these
-    # functions in future
-    v, vb, nsols = _run_kinreco(_make_2d_array(lep),
-                                _make_2d_array(antilep),
-                                _make_2d_array(b),
-                                _make_2d_array(antib),
-                                METx,
-                                METy)
-    starts = np.arange(0, 4*len(lep), 4)
-    stops = starts + nsols
-    vpx = JaggedArray(starts, stops, v[0]).flatten()
-    vpy = JaggedArray(starts, stops, v[1]).flatten()
-    vpz = JaggedArray(starts, stops, v[2]).flatten()
-    v = Jca.candidatesfromcounts(nsols, px=vpx, py=vpy, pz=vpz, mass=0)
-    vbpx = JaggedArray(starts, stops, vb[0]).flatten()
-    vbpy = JaggedArray(starts, stops, vb[1]).flatten()
-    vbpz = JaggedArray(starts, stops, vb[2]).flatten()
-    av = Jca.candidatesfromcounts(nsols, px=vbpx, py=vbpy, pz=vbpz, mass=0)
-    lep = _make_jca(np.ones(len(nsols)), lep)
-    alep = _make_jca(np.ones(len(nsols)), antilep)
-    b = _make_jca(np.ones(len(nsols)), b)
-    bbar = _make_jca(np.ones(len(nsols)), antib)
-    wp = v.cross(alep)
-    wm = av.cross(lep)
-    t = wp.cross(b)
-    at = wm.cross(bbar)
-    min_mtt = (t + at).p4.mass.argmin()
+
+    v, vb, sols = _run_kinreco(_make_2d_array(lep),
+                               _make_2d_array(antilep),
+                               _make_2d_array(b),
+                               _make_2d_array(antib),
+                               METx, METy)
+
+    vE = np.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
+    v = _lorvecfromnumpy(v[0], v[1], v[2], vE, vector.behavior)
+    v = v[ak.from_regular(sols, axis=1)]
+    vbE = np.sqrt(vb[0] ** 2 + vb[1] ** 2 + vb[2] ** 2)
+    vb = _lorvecfromnumpy(vb[0], vb[1], vb[2], vbE, vector.behavior)
+    vb = vb[ak.from_regular(sols, axis=1)]
+
+    wp = v + antilep
+    wm = vb + lep
+    t = wp + b
+    at = wm + antib
+    min_mtt = ak.argmin((t + at).mass, axis=1, keepdims=True)
     t = t[min_mtt]
     at = at[min_mtt]
     return t, at
 
 
 if __name__ == '__main__':
-    lep = LVa([26.923591, 86.3662048], [16.170616, -4.14978429],
-              [-162.3227, -125.30777765], [165.33320, 152.24451503])
-    antilep = LVa([-34.58441, -44.03565424], [-13.27824, 57.64460697],
-                  [-32.51431, -38.22008281], [49.290821, 81.99277149])
-    b = LVa([99.415420, 82.62186155], [-78.89404, 65.20115408],
-            [-161.6102, 21.07726162], [205.54469, 108.13159743])
-    antib = LVa([-49.87086, -24.91287065], [91.930526, -1.88888067],
-                [-347.3868, -8.14035951], [362.82086, 26.73045868])
-    nu = LVa([34.521587], [-51.23474], [-6.555319], [70.848953])
-    antinu = LVa([11.179965], [-3.844941], [7.0419898], [13.760989])
+    lep = _lorvecfromnumpy(
+        [26.923591, 86.3662048], [16.170616, -4.14978429],
+        [-162.3227, -125.30777765], [165.33320, 152.24451503], vector.behavior)
+    antilep = _lorvecfromnumpy(
+        [-34.58441, -44.03565424], [-13.27824, 57.64460697],
+        [-32.51431, -38.22008281], [49.290821, 81.99277149], vector.behavior)
+    b = _lorvecfromnumpy(
+        [99.415420, 82.62186155], [-78.89404, 65.20115408],
+        [-161.6102, 21.07726162], [205.54469, 108.13159743], vector.behavior)
+    antib = _lorvecfromnumpy(
+        [-49.87086, -24.91287065], [91.930526, -1.88888067],
+        [-347.3868, -8.14035951], [362.82086, 26.73045868], vector.behavior)
+    nu = _lorvecfromnumpy(
+        [34.521587], [-51.23474], [-6.555319], [70.848953], vector.behavior)
+    antinu = _lorvecfromnumpy(
+        [11.179965], [-3.844941], [7.0419898], [13.760989], vector.behavior)
     MET = nu + antinu
-    MET = LVa([MET[0].x, -40.12400817871094], [MET[0].y, -106.56241607666016],
-              [0., 0.], [0., 0.])
+    MET = _lorvecfromnumpy(
+        [MET[0].x, -40.12400817871094], [MET[0].y, -106.56241607666016],
+        [0., 0.], [0., 0.], vector.behavior)
     t, t_ = betchart(lep, antilep, b, antib, MET)
-    print(t.p4, t_.p4)
+    print(t, t_)
 
     import time
     n = 10000
-    lep = LVa(**{q: np.repeat(getattr(lep, q)[1], n)
-                 for q in ["x", "y", "z", "t"]})
-    antilep = LVa(**{q: np.repeat(getattr(antilep, q)[1], n)
-                     for q in ["x", "y", "z", "t"]})
-    b = LVa(**{q: np.repeat(getattr(b, q)[1], n)
-               for q in ["x", "y", "z", "t"]})
-    antib = LVa(**{q: np.repeat(getattr(antib, q)[1], n)
-                   for q in ["x", "y", "z", "t"]})
-    MET = LVa(**{q: np.repeat(getattr(MET, q)[1], n)
-                 for q in ["x", "y", "z", "t"]})
-    print(lep)
+    lep = ak.Array({
+        "t": np.full(n, 165.33320), "x": np.full(n, 26.923591),
+        "y": np.full(n, 16.170616), "z": np.full(n, -162.3227)},
+        with_name="LorentzVector", behavior=vector.behavior)
+    antilep = ak.Array({
+        "t": np.full(n, 49.290821), "x": np.full(n, -34.58441),
+        "y": np.full(n, -13.27824), "z": np.full(n, -32.51431)},
+        with_name="LorentzVector", behavior=vector.behavior)
+    b = ak.Array({
+        "t": np.full(n, 205.54469), "x": np.full(n, 99.415420),
+        "y": np.full(n, -78.89404), "z": np.full(n, -161.6102)},
+        with_name="LorentzVector", behavior=vector.behavior)
+    antib = ak.Array({
+        "t": np.full(n, 362.82086), "x": np.full(n, -49.87086),
+        "y": np.full(n, 91.930526), "z": np.full(n, -347.3868)},
+        with_name="LorentzVector", behavior=vector.behavior)
+    nu = ak.Array({
+        "t": np.full(n, 70.848953), "x": np.full(n, 34.521587),
+        "y": np.full(n, -51.23474), "z": np.full(n, -6.555319)},
+        with_name="LorentzVector", behavior=vector.behavior)
+    antinu = ak.Array({
+        "t": np.full(n, 13.760989), "x": np.full(n, 11.179965),
+        "y": np.full(n, -3.844941), "z": np.full(n, 7.0419898)},
+        with_name="LorentzVector", behavior=vector.behavior)
+    sump4 = nu + antinu
+    met = ak.Array({
+        "pt": sump4.pt, "eta": np.zeros(n), "phi": sump4.phi,
+        "mass": np.zeros(n)}, with_name="PtEtaPhiMLorentzVector",
+        behavior=vector.behavior)
+
     t = time.time()
-    betchart(lep, antilep, b, antib, MET)
+    betchart(lep, antilep, b, antib, met)
     print("Took {} s for {} events".format(time.time() - t, n))
