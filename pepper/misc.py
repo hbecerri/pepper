@@ -407,3 +407,54 @@ def akstriparray(array):
     if len(ak.fields(array)) != 0:
         raise ValueError("Can not strip recard array")
     return onedimeval(lambda a: ak.flatten(a, axis=None), array, False)
+
+
+def vecdot(a, b):
+    return a.x * b.x + a.y * b.y + a.z * b.z
+
+
+def lorvecp3unit(lv):
+    rho = lv.rho
+    mask = rho == 0
+    rho = ak.where(mask, 1, rho)
+    v = ak.zip({
+        "x": ak.where(mask, 0, lv.x / rho),
+        "y": ak.where(mask, 0, lv.y / rho),
+        "z": ak.where(mask, 0, lv.z / rho),
+    })
+    v.behavior = lv.behavior
+    v = ak.with_name(v, "ThreeVector")
+    return v
+
+
+def lorvecboost(lv, boost):
+    # Compute boost three vector
+    mask = boost.t == 0
+    t = ak.where(mask, 1, boost.t)
+    boost = ak.zip({
+        "x": ak.where(mask, 0, - boost.x / t),
+        "y": ak.where(mask, 0, - boost.y / t),
+        "z": ak.where(mask, 0, - boost.z / t)})
+    boost.behavior = lv.behavior
+    boost = ak.with_name(boost, "ThreeVector")
+
+    # Apply boost
+    b2 = boost.rho2
+    gamma = (1 - b2) ** (-0.5)
+    mask = b2 == 0
+    b2 = ak.where(mask, 1, b2)
+    gamma2 = ak.where(mask, 0, (gamma - 1) / b2)
+    del mask
+
+    bp = lv.x * boost.x + lv.y * boost.y + lv.z * boost.z
+    v = gamma2 * bp * boost + lv.t * gamma * boost
+
+    out = ak.with_name(ak.zip({
+        "x": lv.x + v.x,
+        "y": lv.y + v.y,
+        "z": lv.z + v.z,
+        "t": gamma * (lv.t + bp)}),
+        "LorentzVector")
+    out.behavior = lv.behavior
+
+    return out
