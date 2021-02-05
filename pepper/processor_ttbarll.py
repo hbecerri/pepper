@@ -314,6 +314,8 @@ class ProcessorTTbarLL(pepper.Processor):
             selector.set_column("reconu", self.build_nu_column, all_cuts=True)
             selector.set_column("dark_pt", self.calculate_dark_pt,
                                 all_cuts=True, lazy=True)
+            selector.set_column("chel", self.calculate_chel, all_cuts=True,
+                                lazy=True)
 
     def gentop(self, data):
         part = data["GenPart"]
@@ -1139,3 +1141,18 @@ class ProcessorTTbarLL(pepper.Processor):
         antinu = data["reconu"][:, 1]
         met = data["MET"]
         return met - nu - antinu
+
+    def calculate_chel(self, data):
+        top = data["recot"]
+        lep = data["recolepton"]
+        ttbar = top.sum()
+        top = pepper.misc.lorvecboost(top, ttbar)
+        lep = pepper.misc.lorvecboost(lep, ttbar)
+
+        lep_ZMFtbar = pepper.misc.lorvecboost(lep[:, 0], top[:, 1])
+        lbar_ZMFtop = pepper.misc.lorvecboost(lep[:, 1], top[:, 0])
+        chel = (lep_ZMFtbar.x * lbar_ZMFtop.x
+                + lep_ZMFtbar.y * lbar_ZMFtop.y
+                + lep_ZMFtbar.z * lbar_ZMFtop.z) / (
+                lep_ZMFtbar.rho * lbar_ZMFtop.rho)
+        return chel
