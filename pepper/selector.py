@@ -341,7 +341,7 @@ class Selector:
             else:
                 data = self.data
                 mask = None
-            columns = columns(self.final if all_cuts else self.data)
+            columns = columns(data)
         else:
             mask = None
         if isinstance(columns, ak.Array):
