@@ -279,6 +279,12 @@ class Selector:
             if cut is not None:
                 self.cut_systematic_map[cut].append(name)
 
+    def _mask(self, column, mask):
+        if len(column) > 0:
+            return ak.mask(column[np.cumsum(np.asarray(mask)) - 1], mask)
+        else:
+            return ak.pad_none(column, len(mask), axis=0)
+
     def set_column(self, column_name, column, all_cuts=False,
                    no_callback=False, lazy=False):
         """Sets a column of `self.data`.
@@ -311,7 +317,7 @@ class Selector:
                 mask = None
             column = column(data)
             if mask is not None:
-                column = ak.mask(column[np.cumsum(np.asarray(mask)) - 1], mask)
+                column = self._mask(column, mask)
         self.data[column_name] = column
         self.done_steps.add("column:" + column_name)
         if not no_callback:
@@ -348,11 +354,12 @@ class Selector:
             for name in ak.fields(columns):
                 column = columns[name]
                 if mask is not None:
-                    column = ak.mask(
-                        column[np.cumsum(np.asarray(mask)) - 1], mask)
+                    column = self._mask(column, mask)
                 self.set_column(name, column, no_callback=True, lazy=lazy)
         else:
             for name, column in columns.items():
+                if mask is not None:
+                    column = self._mask(column, mask)
                 self.set_column(name, column, no_callback=True, lazy=lazy)
         if not no_callback:
             self._invoke_callbacks()
