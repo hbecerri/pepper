@@ -1,31 +1,30 @@
 # This file illustrates how to implement a processor, realizing the selection
 # steps and outputting histograms and a cutflow with efficiencies.
 # Here we create a very simplified version of the ttbar-to-dilep processor.
+# One can run this processor using
+# 'python3 -m pepper.runproc --debug example_processor.py'
 
 import pepper
 import numpy as np
 import awkward as ak
-import coffea
 import coffea.lumi_tools
-from coffea.nanoevents import NanoAODSchema
 from functools import partial
-import argparse
-import parsl
 import awkward
-import os
-import logging
-import warnings
-warnings.filterwarnings("ignore", category=FutureWarning)
-import uproot3  # noqa: E402
 
 
 # All processors should inherit from pepper.Processor
-class MyProcessor(pepper.Processor):
-    def __init__(self, config):
+class Processor(pepper.Processor):
+    # We use the ConfigTTbarLL instead of its base Config, to use some of its
+    # predefined extras
+    config_class = pepper.ConfigTTbarLL
+
+    def __init__(self, config, eventdir):
         # Initialize the class, maybe overwrite some config variables and
         # load additional files if needed
+        # Can set and modify configuration here as well
+        config["histogram_format"] = "root"
         # Need to call parent init to make histograms and such ready
-        super().__init__(config, None)
+        super().__init__(config, eventdir)
 
         self.lumimask = self.config["lumimask"]
         self.trigger_paths = config["dataset_trigger_map"]
@@ -133,49 +132,3 @@ class MyProcessor(pepper.Processor):
         # event indexing, e.g. you would compare charges from event 0 and 1 if
         # you do charge[0] != charge[1]
         return charge[:, 0] != charge[:, 1]
-
-
-parser = argparse.ArgumentParser(description="Run MyProcessor")
-parser.add_argument("config", help="Configuration file in JSON format")
-parser.add_argument("--condor", action="store_true", help="Run on HTCondor")
-args = parser.parse_args()
-
-# Enable verbose output
-logger = logging.getLogger("pepper")
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.DEBUG)
-
-# Here we use the ConfigTTbarLL instead of its base Config, to use some of its
-# predefined extras
-config = pepper.ConfigTTbarLL(args.config)
-processor = MyProcessor(config)
-datasets = config.get_datasets()
-
-# In order for this to not take hours, only use one file and skip the rest
-datasets = {
-    next(iter(datasets.keys())): [datasets[next(iter(datasets.keys()))][0]]}
-
-if args.condor:
-    executor = coffea.processor.parsl_executor
-    parsl_config = pepper.misc.get_parsl_config(num_jobs=10, retries=1)
-    parsl.load(parsl_config)
-else:
-    executor = coffea.processor.iterative_executor
-
-output = coffea.processor.run_uproot_job(
-    datasets, "Events", processor, executor, {"schema": NanoAODSchema})
-
-# Save cutflows
-coffea.util.save(output["cutflows"], "cutflows.coffea")
-
-# Save histograms
-os.makedirs("hists", exist_ok=True)
-for cut, hist in output["hists"].items():
-    fname = '_'.join(cut).replace('/', '_') + ".root"
-    roothists = pepper.misc.export_with_sparse(hist)
-    if len(roothists) == 0:
-        continue
-    with uproot3.recreate(os.path.join("hists", fname)) as f:
-        for key, subhist in roothists.items():
-            key = "_".join(key).replace("/", "_")
-            f[key] = subhist

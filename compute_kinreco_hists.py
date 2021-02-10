@@ -1,31 +1,31 @@
 #!/usr/bin/env python3
 
 import os
-import sys
 import numpy as np
 import awkward as ak
 import coffea
-from coffea.nanoevents import NanoAODSchema
-import parsl
-from argparse import ArgumentParser
 
 import pepper
 from pepper.misc import export
-from pepper.datasets import expand_datasetdict
 
 import warnings
-warnings.filterwarnings("ignore", category=FutureWarning)
-import uproot3  # noqa: E402
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import uproot3
 
 
 class Processor(pepper.ProcessorTTbarLL):
-    def __init__(self, config):
+    def __init__(self, config, destdir):
         config["reco_algorithm"] = None
         if "reco_info_file" in config:
             del config["reco_info_file"]
         config["blinding_denom"] = None
         config["compute_systematics"] = False
         super().__init__(config, None)
+
+    def preprocess(self, datasets):
+        return {"TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8":
+                datasets["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]}
 
     @property
     def accumulator(self):
@@ -73,7 +73,8 @@ class Processor(pepper.ProcessorTTbarLL):
 
     @staticmethod
     def sortby(data, field):
-        return data[ak.argsort(data["pdgId"], ascending=False)]
+        sorting = ak.argsort(data[field], ascending=False)
+        return data[sorting]
 
     def build_gen_columns(self, data):
         part = data["GenPart"]
@@ -156,13 +157,15 @@ class Processor(pepper.ProcessorTTbarLL):
         deltaphi = gen.delta_phi(reco)
         energyf = gen.energy / reco.energy
         # axis=None to remove eventual masking
+        rep = ak.fill_none(ak.num(deltaphi[~ak.is_none(deltaphi)]), 0)
         alphahist.fill(alpha=ak.flatten(deltaphi, axis=None),
-                       weight=np.repeat(weight, ak.num(deltaphi)))
+                       weight=np.repeat(weight, rep))
+        rep = ak.fill_none(ak.num(energyf[~ak.is_none(energyf)]), 0)
         energyfhist.fill(energyf=ak.flatten(energyf, axis=None),
                          weight=np.repeat(weight, ak.num(energyf)))
 
     def fill_after_selection(self, data, sys, output):
-        weight = np.asarray(sys["weight"])
+        weight = np.asarray(ak.flatten(sys["weight"], axis=None))
 
         genlep, recolep = self.match_leptons(data)
         self.fill_alpha_energyf(
@@ -172,65 +175,14 @@ class Processor(pepper.ProcessorTTbarLL):
         self.fill_alpha_energyf(
             genjet, recojet, weight, output["alphaj"], output["energyfj"])
 
-    def postprocess(self, accumulator):
-        return accumulator
+    def save_output(self, output, dest):
+        with uproot3.recreate(os.path.join(dest, "kinreco.root")) as f:
+            items = ("mlb", "mw", "mt", "alphal", "energyfl", "alphaj",
+                     "energyfj")
+            for key in items:
+                f[key] = export(output[key])
 
 
-parser = ArgumentParser(
-    description="Create histograms needed for kinematic reconstruction")
-parser.add_argument("config", help="Path to a configuration file")
-parser.add_argument(
-    "-o", "--output", help="Name of the output file. Defaults to kinreco.root",
-    default="kinreco.root")
-parser.add_argument(
-    "-c", "--condor", type=int, const=10, nargs="?", metavar="simul_jobs",
-    help="Split and submit to HTCondor. By default 10 condor jobs are "
-    "submitted. The number can be changed by supplying it to this option")
-parser.add_argument(
-    "--chunksize", type=int, default=500000, help="Number of events to "
-    "process at once. Defaults to 5*10^5")
-parser.add_argument(
-    "-d", "--debug", action="store_true", help="Only process a small amount "
-    "of files to make debugging feasible")
-args = parser.parse_args()
-
-if os.path.exists(args.output):
-    a = input(f"Overwrite {args.output}? y/n ")
-    if a != "y":
-        sys.exit(1)
-
-config = pepper.ConfigTTbarLL(args.config)
-store = config["store"]
-
-
-datasets = {
-    "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8":
-        config["mc_datasets"]["TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"]
-}
-datasets, paths2dsname = expand_datasetdict(datasets, store)
-if args.debug:
-    print("Processing only one file because of --debug")
-    key = next(iter(datasets.keys()))
-    datasets = {key: datasets[key][:1]}
-
-os.makedirs(os.path.dirname(os.path.realpath(args.output)), exist_ok=True)
-
-processor = Processor(config)
-executor_args = {"schema": NanoAODSchema}
-if args.condor is not None:
-    executor = coffea.processor.parsl_executor
-    # Load parsl config immediately instead of putting it into executor_args
-    # to be able to use the same jobs for preprocessing and processing
-    print("Spawning jobs. This can take a while")
-    parsl.load(pepper.misc.get_parsl_config(args.condor))
-else:
-    executor = coffea.processor.iterative_executor
-
-output = coffea.processor.run_uproot_job(
-    datasets, "Events", processor, executor, executor_args,
-    chunksize=args.chunksize)
-
-with uproot3.recreate(args.output) as f:
-    items = ("mlb", "mw", "mt", "alphal", "energyfl", "alphaj", "energyfj")
-    for key in items:
-        f[key] = export(output[key])
+if __name__ == "__main__":
+    from pepper import runproc
+    runproc.run_processor(Processor, mconly=True)

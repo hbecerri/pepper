@@ -77,7 +77,7 @@ class ConfigTTbarLL(pepper.Config):
 
     @staticmethod
     def _get_top_pt_reweighting(value):
-        return TopPtWeigter(*value)
+        return TopPtWeigter(**value)
 
     def _get_pileup_reweighting(self, value):
         with uproot.open(self._get_path(value)) as f:

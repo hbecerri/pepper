@@ -2,7 +2,9 @@ import os
 from functools import partial
 import awkward as ak
 import coffea
+from coffea.nanoevents import NanoAODSchema
 import h5py
+import json
 import logging
 from copy import copy
 from time import time
@@ -12,26 +14,34 @@ import pepper
 from pepper import Selector, OutputFiller, HDF5File
 import pepper.config
 
+import warnings
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import uproot3
+
 
 logger = logging.getLogger(__name__)
 
 
 class Processor(coffea.processor.ProcessorABC):
-    def __init__(self, config, destdir):
+    config_class = pepper.Config
+    schema_class = NanoAODSchema
+
+    def __init__(self, config, eventdir):
         """Create a new Processor
 
         Arguments:
         config -- A Config instance, defining the configuration to use
-        destdir -- Destination directory, where the event HDF5s are saved.
-                   Every chunk will be saved in its own file. If `None`,
-                   nothing will be saved.
+        eventdir -- Destination directory, where the event HDF5s are saved.
+                    Every chunk will be saved in its own file. If `None`,
+                    nothing will be saved.
         """
         self._check_config_integrity(config)
         self.config = config
-        if destdir is not None:
-            self.destdir = os.path.realpath(destdir)
+        if eventdir is not None:
+            self.eventdir = os.path.realpath(eventdir)
         else:
-            self.destdir = None
+            self.eventdir = None
         self.hists = self._get_hists_from_config(
             self.config, "hists", "hists_to_do")
 
@@ -88,12 +98,15 @@ class Processor(coffea.processor.ProcessorABC):
         })
         return self._accumulator
 
+    def preprocess(self, datasets):
+        return datasets
+
     def postprocess(self, accumulator):
         return accumulator
 
     def _open_output(self, dsname):
         dsname = dsname.replace("/", "_")
-        dsdir = os.path.join(self.destdir, dsname)
+        dsdir = os.path.join(self.eventdir, dsname)
         os.makedirs(dsdir, exist_ok=True)
         i = 0
         while True:
@@ -170,7 +183,7 @@ class Processor(coffea.processor.ProcessorABC):
         selector = self.setup_selection(data, dsname, is_mc, filler)
         self.process_selection(selector, dsname, is_mc, filler)
 
-        if self.destdir is not None:
+        if self.eventdir is not None:
             logger.debug("Saving per event info")
             self._save_per_event_info(
                 dsname, selector, self.get_identifier(selector))
@@ -195,7 +208,7 @@ class Processor(coffea.processor.ProcessorABC):
                              "Select scan point", no_callback=True)
             self.process_selection(selector, dsname, is_mc, filler)
             output += filler.output
-            if self.destdir is not None:
+            if self.eventdir is not None:
                 logger.debug("Saving per event info")
                 self._save_per_event_info(
                     dsname, selector, (filename, entrystart, entrystop))
@@ -248,3 +261,52 @@ class Processor(coffea.processor.ProcessorABC):
         filler -- pepper.OutputFiller object to controll how the output is
                   structured if needed
         """
+
+    def save_output(self, output, dest):
+        # Save cutflows
+        with open(os.path.join(dest, "cutflows.json"), "w") as f:
+            json.dump(output["cutflows"], f, indent=4)
+
+        if "histogram_format" in self.config:
+            hform = self.config["histogram_format"].lower()
+        else:
+            hform = "coffea"
+        if hform not in ["coffea", "root"]:
+            logger.warning(
+                f"Invalid histogram format: {hform}. Saving as coffea")
+            hform = "coffea"
+
+        hists = output["hists"]
+        os.makedirs(os.path.join(dest, "hists"), exist_ok=True)
+        if hform == "coffea":
+            # Save histograms with a hist.json describing the hist files
+            jsonname = "hists.json"
+            hists_forjson = {}
+            for key, hist in hists.items():
+                if hist.values() == {}:
+                    continue
+                cuts = next(iter(output["cutflows"]["all"].values())).keys()
+                cutnum = list(cuts).index(key[0])
+                fname = "Cut {:03} {}.coffea".format(cutnum, "_".join(key))
+                fname = fname.replace("/", "")
+                coffea.util.save(hist, os.path.join(dest, "hists", fname))
+                hists_forjson[key] = fname
+            with open(os.path.join(dest, "hists", jsonname), "a+") as f:
+                try:
+                    hists_injson = {tuple(k): v for k, v in zip(*json.load(f))}
+                except json.decoder.JSONDecodeError:
+                    hists_injson = {}
+            hists_injson.update(hists_forjson)
+            with open(os.path.join(dest, "hists", jsonname), "w") as f:
+                json.dump([[tuple(k) for k in hists_injson.keys()],
+                           list(hists_injson.values())], f, indent=4)
+        elif hform == "root":
+            for cut, hist in output["hists"].items():
+                fname = '_'.join(cut).replace('/', '_') + ".root"
+                roothists = pepper.misc.export_with_sparse(hist)
+                if len(roothists) == 0:
+                    continue
+                with uproot3.recreate(os.path.join(dest, "hists", fname)) as f:
+                    for key, subhist in roothists.items():
+                        key = "_".join(key).replace("/", "_")
+                        f[key] = subhist

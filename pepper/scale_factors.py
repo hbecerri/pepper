@@ -240,12 +240,24 @@ class PileupWeighter:
 class TopPtWeigter:
     # Top pt reweighting according to
     # https://twiki.cern.ch/twiki/bin/viewauth/CMS/TopPtReweighting
-    def __init__(self, scale, a, b):
+    def __init__(self, method, scale, **kwargs):
+        if method.lower() == "datanlo":
+            self.sffunc = self.datanlo_sf
+        elif method.lower() == "theory":
+            self.sffunc = self.theory_sf
+        else:
+            raise ValueError(f"Invalid method: {method}")
         self.scale = scale
-        self.a = a
-        self.b = b
+        self.kwargs = kwargs
+
+    def datanlo_sf(self, pt):
+        return np.exp(self.kwargs["a"] + self.kwargs["b"] * pt)
+
+    def theory_sf(self, pt):
+        arg = self.kwargs
+        return arg["a"] * np.exp(arg["b"] * pt) + arg["c"] * pt + arg["d"]
 
     def __call__(self, toppt, antitoppt):
-        sf = np.exp(self.a + self.b * toppt)
-        antisf = np.exp(self.a + self.b * antitoppt)
+        sf = self.sffunc(toppt)
+        antisf = self.sffunc(antitoppt)
         return np.sqrt(sf ** 2 * antisf ** 2) * self.scale
