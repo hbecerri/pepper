@@ -10,7 +10,7 @@ from pepper.betchart_kinreco import betchart
 from pepper.config import Config
 from pepper.config_ttbarll import ConfigTTbarLL
 from pepper.processor import Processor
-from pepper.processor_ttbarll import ProcessorTTbarLL
+from pepper.processor_ttbarll import Processor as ProcessorTTbarLL
 from pepper import scale_factors
 
 __all__ = [

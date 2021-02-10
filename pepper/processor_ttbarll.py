@@ -31,19 +31,21 @@ else:
 logger = logging.getLogger(__name__)
 
 
-class ProcessorTTbarLL(pepper.Processor):
+class Processor(pepper.Processor):
     """Processor for the Top-pair with dileptonic decay selection"""
 
-    def __init__(self, config, destdir):
+    config_class = pepper.ConfigTTbarLL
+
+    def __init__(self, config, eventdir):
         """Create a new Processor
 
         Arguments:
         config -- A Config instance, defining the configuration to use
-        destdir -- Destination directory, where the event HDF5s are saved.
-                   Every chunk will be saved in its own file. If `None`,
-                   nothing will be saved.
+        eventdir -- Destination directory, where the event HDF5s are saved.
+                    Every chunk will be saved in its own file. If `None`,
+                    nothing will be saved.
         """
-        super().__init__(config, destdir)
+        super().__init__(config, eventdir)
 
         if "top_pt_reweighting" in self.config:
             self.topptweighter = self.config["top_pt_reweighting"]
@@ -119,10 +121,8 @@ class ProcessorTTbarLL(pepper.Processor):
         else:
             self.met_xy_shifts = None
 
-    @staticmethod
-    def _check_config_integrity(config):
-        cls = ProcessorTTbarLL
-        super(cls, cls)._check_config_integrity(config)
+    def _check_config_integrity(self, config):
+        super()._check_config_integrity(config)
 
         # Skip if no systematics, as currently only checking syst configs
         if not config["compute_systematics"]:
@@ -229,7 +229,7 @@ class ProcessorTTbarLL(pepper.Processor):
                 filler.sys_overwrite = variarg.name
                 self.process_selection_jet_part(selector_copy, is_mc,
                                                 variarg, dsname, filler)
-                if self.destdir is not None:
+                if self.eventdir is not None:
                     logger.debug(f"Saving per event info for variation"
                                  f" {variarg.name}")
                     self._save_per_event_info(
