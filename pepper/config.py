@@ -49,7 +49,10 @@ class Config(collections.MutableMapping):
 
         logger.debug("Configuration read")
         if "datadir" in self._config:
-            logger.debug(f"datadir: {self._config['datadir']}")
+            datadir = self._config['datadir']
+            if not os.path.exists(datadir):
+                raise ConfigError(f"datadir does not exist: {datadir}")
+            logger.debug(f"datadir: {datadir}")
         if "configdir" in self._config:
             logger.debug(f"configdir: {self._config['configdir']}")
         if "store" in self._config:
