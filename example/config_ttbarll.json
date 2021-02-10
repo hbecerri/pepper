@@ -4,7 +4,12 @@
     "store": "/pnfs/desy.de/cms/tier2/store",
     "blinding_denom": null,
     "compute_systematics": false,
-    "top_pt_reweighting": [0.997175, 0.0615, -0.0005],
+    "top_pt_reweighting": {
+        "method": "datanlo",
+        "scale": 0.997175,
+        "a": 0.0615,
+        "b": -0.0005
+    },
     "lumimask": "$DATADIR/Cert_314472-325175_13TeV_17SeptEarlyReReco2018ABC_PromptEraD_Collisions18_JSON.txt",
     "pileup_reweighting": "$DATADIR/scale_factors/pileup.root",
     "drellyan_sf": "$DATADIR/scale_factors/dy_lo_inclusive.json",
