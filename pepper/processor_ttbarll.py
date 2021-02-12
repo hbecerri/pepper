@@ -120,6 +120,11 @@ class Processor(pepper.Processor):
             self.met_xy_shifts = self.config["MET_xy_shifts"]
         else:
             self.met_xy_shifts = None
+        if "trigger_sfs" in self.config:
+            self.trigger_sfs = self.config["trigger_sfs"]
+        else:
+            logger.warning("No trigger scale factors specified")
+            self.trigger_sfs = None
 
     def _check_config_integrity(self, config):
         super()._check_config_integrity(config)
@@ -216,6 +221,9 @@ class Processor(pepper.Processor):
         selector.add_cut("No add leps",
                          partial(self.no_additional_leptons, is_mc))
         selector.add_cut("Chn trig match", self.channel_trigger_matching)
+        if self.trigger_sfs is not None and is_mc:
+            selector.add_cut(
+                "Trigger SFs", partial(self.apply_trigger_sfs, dsname))
         selector.add_cut("Req lep pT", self.lep_pt_requirement)
         selector.add_cut("m_ll", self.good_mll)
         selector.add_cut("Z window", self.z_window)
@@ -878,6 +886,15 @@ class Processor(pepper.Processor):
         met["pt"] = np.hypot(metx, mety)
         met["phi"] = np.arctan2(mety, metx)
         return met
+
+    def apply_trigger_sfs(self, dsname, data):
+        channel = ak.where(data["is_ee"], 0, ak.where(data["is_em"], 1, 2))
+        central = self.trigger_sfs(channel=channel)
+        if self.config["compute_systematics"]:
+            up = self.trigger_sfs(channel=channel, variation="up")
+            down = self.trigger_sfs(channel=channel, variation="down")
+            return central, {"Trigger_SFs": (up / central, down / central)}
+        return central
 
     def apply_dy_sfs(self, dsname, data):
         if dsname.startswith("DY"):

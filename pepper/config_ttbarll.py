@@ -53,6 +53,7 @@ class ConfigTTbarLL(pepper.Config):
             "store": self._get_path,
             "lumimask": self._get_path,
             "reco_seed_file": self._get_path,
+            "trigger_sfs": self._get_trigger_sfs
         })
 
     def _get_scalefactors(self, value, dimlabels):
@@ -126,3 +127,28 @@ class ConfigTTbarLL(pepper.Config):
                 factors_up=np.array(data["factors_up"]),
                 factors_down=np.array(data["factors_down"]))
         return dy_sf
+
+    def _get_trigger_sfs(self, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            with open(self._get_path(value)) as f:
+                value = json.load(f)
+        if "bins" in value:
+            bins = value["bins"]
+        else:
+            bins = {"channel": [0, 1, 2, 3]}
+        if "factors_up" in value:
+            factors_up = np.array(value["factors_up"])
+            factors_down = np.array(value["factors_down"])
+        elif "errors" in value:
+            factors_up = np.array(value["factors"]) + np.array(value["errors"])
+            factors_down = (np.array(value["factors"])
+                            - np.array(value["errors"]))
+        else:
+            raise pepper.config.ConfigError(
+                "trigger_sfs must contain one of 'factors_up' or 'errors'")
+        return ScaleFactors(factors=np.array(value["factors"]),
+                            factors_up=factors_up,
+                            factors_down=factors_down,
+                            bins=bins)
