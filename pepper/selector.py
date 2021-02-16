@@ -137,7 +137,7 @@ class Selector:
         if len(self.unapplied_cuts) == 0:
             return self.num
         else:
-            return (self.unapplied_product != 0).sum()
+            return ak.sum(self.unapplied_product != 0)
 
     def _invoke_callbacks(self):
         data = self.final
@@ -280,6 +280,10 @@ class Selector:
                 self.cut_systematic_map[cut].append(name)
 
     def _mask(self, column, mask):
+        num_events = ak.sum(mask)
+        if len(column) != num_events:
+            raise ValueError(f"Column length exptected to be {num_events} but "
+                             f"got {len(column)}")
         if len(column) > 0:
             return ak.mask(column[np.cumsum(np.asarray(mask)) - 1], mask)
         else:
@@ -304,27 +308,27 @@ class Selector:
 
         logger.info(
             f"Setting column {column_name}" + (" lazily" if lazy else ""))
-        if lazy:
-            column = ak.virtual(column, (self.data,), cache={},
-                                length=self.num)
-        elif callable(column):
-            if all_cuts:
-                data = self.final
-                mask = ~ak.is_none(data)
-                data = ak.flatten(self.final, axis=0)
+        if all_cuts:
+            data = self.final
+            mask = ~ak.is_none(data)
+            data = ak.flatten(self.final, axis=0)
+        else:
+            data = self.data
+            mask = None
+        if callable(column):
+            if lazy:
+                column = ak.virtual(column, (data,), cache={},
+                                    length=len(data))
             else:
-                data = self.data
-                mask = None
-            column = column(data)
-            if mask is not None:
-                column = self._mask(column, mask)
+                column = column(data)
+        if mask is not None:
+            column = self._mask(column, mask)
         self.data[column_name] = column
         self.done_steps.add("column:" + column_name)
         if not no_callback:
             self._invoke_callbacks()
 
-    def set_multiple_columns(self, columns, all_cuts=False, no_callback=False,
-                             lazy=False):
+    def set_multiple_columns(self, columns, all_cuts=False, no_callback=False):
         """Sets multiple columns of `self.data` at once.
 
         Arguments:
@@ -335,9 +339,6 @@ class Selector:
                     all cuts (including unapplied ones).
         no_callback -- A bool whether not to call the callbacks, which usually
                        fill histograms etc.
-        lazy -- If True, columns data must be callables and the columns will be
-                inserted as a virtual arrays, making the callables only called
-                when the data array determines it has to.
         """
         if callable(columns):
             if all_cuts:
@@ -351,16 +352,11 @@ class Selector:
         else:
             mask = None
         if isinstance(columns, ak.Array):
-            for name in ak.fields(columns):
-                column = columns[name]
-                if mask is not None:
-                    column = self._mask(column, mask)
-                self.set_column(name, column, no_callback=True, lazy=lazy)
-        else:
-            for name, column in columns.items():
-                if mask is not None:
-                    column = self._mask(column, mask)
-                self.set_column(name, column, no_callback=True, lazy=lazy)
+            columns = {k: columns[k] for k in ak.fields(columns)}
+        for name, column in columns.items():
+            if mask is not None:
+                column = self._mask(column, mask)
+            self.set_column(name, column, no_callback=True)
         if not no_callback:
             self._invoke_callbacks()
 
