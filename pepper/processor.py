@@ -130,11 +130,7 @@ class Processor(coffea.processor.ProcessorABC):
                 logger.info("Skipping to save column because it is not "
                             f"present: {specifier}")
                 continue
-            try:
-                item = pepper.misc.akstriparray(item)
-            except ValueError:
-                # Hoping for awkward to provide an actual way to stip arrays
-                pass
+            item = pepper.misc.akstriparray(item)
             key = datapicker.name
             if key in columns:
                 raise pepper.config.ConfigError(

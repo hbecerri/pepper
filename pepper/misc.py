@@ -402,11 +402,23 @@ def onedimeval(func, array, tonumpy=True):
 
 
 def akstriparray(array):
-    """Make an awkward array use as least memory as possible. This raises a
-    ValueError for record arrays"""
+    """Make an awkward array use as little memory as possible.
+
+    This is a workaround until ak.packed in implemented"""
     if len(ak.fields(array)) != 0:
-        raise ValueError("Can not strip recard array")
-    return onedimeval(lambda a: ak.flatten(a, axis=None), array, False)
+        values = {f: akstriparray(array[f]) for f in ak.fields(array)}
+        parameters = ak.parameters(array)
+        behavior = array.behavior
+        try:
+            res = ak.zip(values, parameters=parameters, behavior=behavior)
+        except ValueError:
+            # Can not be broadcasted, values have differing offsets
+            res = ak.Array(values, behavior=behavior)
+            for name, val in ak.parameters(array):
+                res = ak.with_parameter(res, name, val)
+    else:
+        res = onedimeval(lambda a: ak.flatten(a, axis=None), array, False)
+    return res
 
 
 def vecdot(a, b):
