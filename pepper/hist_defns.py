@@ -214,6 +214,11 @@ class DataPicker:
                     data = data()
                 if data is None:
                     break
+            elif isinstance(sel, list):
+                try:
+                    data = data[sel]
+                except (ValueError, KeyError):
+                    break
             elif isinstance(sel, dict):
                 if "function" in sel:
                     data = self._pick_data_from_function(
@@ -251,7 +256,7 @@ class DataPicker:
                     data = data[:, start:end]
             else:
                 raise HistDefinitionError("Fill constains invalid type, must "
-                                          f"be str or dict: {type(sel)}")
+                                          f"be str, list or dict: {sel}")
         else:
             return data
         return None
@@ -294,6 +299,8 @@ class DataPicker:
         for sel in self._method:
             if isinstance(sel, str):
                 name += sel.replace("/", "")
+            elif isinstance(sel, list):
+                name += ",".join(sel)
             elif isinstance(sel, dict):
                 if "function" in sel:
                     name += sel["function"].replace("/", "")
@@ -319,8 +326,8 @@ class DataPicker:
                     raise HistDefinitionError(
                         f"Dict without any recognized keys: {sel}")
             else:
-                raise HistDefinitionError("Fill constains invalid type, must "
-                                          f"be str or dict: {type(sel)}")
+                raise HistDefinitionError("Selection constains invalid type, "
+                                          f"must be str, list or dict: {sel}")
             name += "_"
         name = name[:-1]  # Remove last underscore
         return name
