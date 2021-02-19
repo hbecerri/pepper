@@ -109,8 +109,8 @@ class DYprocessor(pepper.ProcessorTTbarLL):
                    "em": data["is_em"],
                    "mm": data["is_mm"]}
         Z_w = {"in": Z_window, "out": ~Z_window}
-        btags = {"0b": (ak.sum(data["Jet"]["btagged"]) == 0),
-                 "1b": (ak.sum(data["Jet"]["btagged"]) > 0)}
+        btags = {"0b": (ak.sum(data["Jet"]["btagged"], axis=1) == 0),
+                 "1b": (ak.sum(data["Jet"]["btagged"], axis=1) > 0)}
         MET_bins = {"0_to_40": (MET < 40),
                     "40_to_70": (MET > 40) & (MET < 70),
                     "70_to_100": (MET > 70) & (MET < 100),
