@@ -222,7 +222,8 @@ class Processor(coffea.processor.ProcessorABC):
         if dsname in self.config["dataset_for_systematics"]:
             dsname_in_hist = self.config["dataset_for_systematics"][dsname][0]
             sys_overwrite = self.config["dataset_for_systematics"][dsname][1]
-        elif dsname in self.config["datsets_to_group"]:
+        elif ("datsets_to_group" in self.config
+              and dsname in self.config["datsets_to_group"]):
             dsname_in_hist = self.config["datsets_to_group"][dsname]
             sys_overwrite = None
         else:
