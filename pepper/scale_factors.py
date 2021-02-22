@@ -62,6 +62,48 @@ class ScaleFactors:
         bins = dict(zip(dimlabels, edges))
         return cls(factors, factors_up, factors_down, bins)
 
+    @classmethod
+    def from_hist_per_bin(cls, hists, dimlabels=None, **kwargs):
+        def get_factors(depth, hists):
+            if depth == 0:
+                factors = hists.values(flow=True)
+                cls._setoverflow(factors, 1)
+                return factors
+            else:
+                return [get_factors(depth-1, h) for h in hists]
+
+        def get_sigmas(depth, hists):
+            if depth == 0:
+                sigmas = np.sqrt(hists.variances(flow=True))
+                cls._setoverflow(sigmas, 0)
+                return sigmas
+            else:
+                return [get_factors(depth-1, h) for h in hists]
+
+        tmp_hists = hists
+        for i, k in enumerate(kwargs):
+            tmp_hists = tmp_hists[0]
+        hist_edges = list(tmp_hists.to_numpy(flow=True)[1:])
+        edges = list(kwargs.values()) + hist_edges
+
+        if dimlabels is None:
+            dimlabels = list(kwargs.keys())
+            for member in ("fXaxis", "fYaxis", "fZaxis")[:len(hist_edges)]:
+                dimlabels.append(
+                    tmp_hists.all_members[member].all_members["fName"])
+        else:
+            dimlabels = list(kwargs.keys()) + dimlabels
+
+        factors = ak.from_iter(get_factors(len(kwargs), hists))
+        sigmas = ak.from_iter(get_sigmas(len(kwargs), hists))
+        factors_up = factors + sigmas
+        factors_down = factors - sigmas
+        if len(edges) != len(dimlabels):
+            raise ValueError("Got {} dimenions but {} labels"
+                             .format(len(edges), len(dimlabels)))
+        bins = dict(zip(dimlabels, edges))
+        return cls(factors, factors_up, factors_down, bins)
+
     def __call__(self, variation="central", **kwargs):
         if variation not in ("central", "up", "down"):
             raise ValueError("variation must be one of 'central', 'up', "

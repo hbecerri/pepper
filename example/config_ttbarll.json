@@ -13,10 +13,12 @@
     "lumimask": "$DATADIR/Cert_314472-325175_13TeV_17SeptEarlyReReco2018ABC_PromptEraD_Collisions18_JSON.txt",
     "pileup_reweighting": "$DATADIR/scale_factors/pileup.root",
     "drellyan_sf": "$DATADIR/scale_factors/dy_lo_inclusive.json",
-    "trigger_sfs": {
-        "factors": [0.989, 0.991, 0.99],
-        "errors": [0.004, 0.002, 0.003]
-    },
+    "trigger_sfs": [
+        "$DATADIR/scale_factors/TriggerSF_2018.root",
+        [["h2D_SF_ee_lepABpt_eeOut_FullError", "h2D_SF_ee_lepABpt_eeSplit_FullError", "h2D_SF_ee_lepABpt_eeIn_FullError"],
+         ["h2D_SF_emu_lepABpt_emuOut_FullError", "h2D_SF_emu_lepABpt_emuIn_FullError"],
+         ["h2D_SF_mumu_lepABpt_FullError"]]
+    ],
     "electron_sf": [
         [
             "$DATADIR/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root",

@@ -670,9 +670,12 @@ class Processor(pepper.Processor):
         return lepton
 
     def channel_masks(self, data):
+        leps = data["Lepton"]
         channels = {}
-        channels["is_ee"] = ak.num(data["Electron"]) == 2
-        channels["is_mm"] = ak.num(data["Muon"]) == 2
+        channels["is_ee"] = ((abs(leps[:, 0].pdgId) == 11)
+                             & (abs(leps[:, 1].pdgId) == 11))
+        channels["is_mm"] = ((abs(leps[:, 0].pdgId) == 13)
+                             & (abs(leps[:, 1].pdgId) == 13))
         channels["is_em"] = (~channels["is_ee"]) & (~channels["is_mm"])
         return channels
 
@@ -950,8 +953,14 @@ class Processor(pepper.Processor):
         return met
 
     def apply_trigger_sfs(self, dsname, data):
+        leps = data["Lepton"][:, :2]
         channel = ak.where(data["is_ee"], 0, ak.where(data["is_em"], 1, 2))
-        central = self.trigger_sfs(channel=channel)
+        e_in_barrel = ak.sum((abs(leps.eta) < 1.444)
+                             & (abs(leps.pdgId) == 11), axis=1)
+        central = self.trigger_sfs(channel=channel,
+                                   e_in_barrel=e_in_barrel,
+                                   lep1_pt=leps[:, 0].pt,
+                                   lep2_pt=leps[:, 1].pt)
         if self.config["compute_systematics"]:
             up = self.trigger_sfs(channel=channel, variation="up")
             down = self.trigger_sfs(channel=channel, variation="down")
