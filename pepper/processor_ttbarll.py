@@ -328,7 +328,8 @@ class Processor(pepper.Processor):
                 "recot", partial(self.ttbar_system, reco_alg.lower()),
                 all_cuts=True, no_callback=True)
             selector.add_cut("Reco", self.passing_reco)
-            selector.set_column("reconu", self.build_nu_column, all_cuts=True)
+            selector.set_column("reconu", self.build_nu_column, all_cuts=True,
+                                lazy=True)
             selector.set_column("dark_pt", self.calculate_dark_pt,
                                 all_cuts=True, lazy=True)
             selector.set_column("chel", self.calculate_chel, all_cuts=True,
@@ -1229,9 +1230,8 @@ class Processor(pepper.Processor):
         antib = data["recob"][:, 1:2]
         top = data["recot"][:, 0:1]
         antitop = data["recot"][:, 1:2]
-        # Substract is currently not implemented for coffea vectors. Workaround
-        nu = top + -1 * (b + antilep)
-        antinu = antitop + -1 * (antib + lep)
+        nu = top - b - antilep
+        antinu = antitop - antib - lep
         return ak.concatenate([nu, antinu], axis=1)
 
     def calculate_dark_pt(self, data):
@@ -1243,14 +1243,13 @@ class Processor(pepper.Processor):
     def calculate_chel(self, data):
         top = data["recot"]
         lep = data["recolepton"]
-        ttbar = top.sum()
-        top = pepper.misc.lorvecboost(top, ttbar)
-        lep = pepper.misc.lorvecboost(lep, ttbar)
+        ttbar_boost = -top.sum().boostvec
+        top = top.boost(ttbar_boost)
+        lep = lep.boost(ttbar_boost)
 
-        lep_ZMFtbar = pepper.misc.lorvecboost(lep[:, 0], top[:, 1])
-        lbar_ZMFtop = pepper.misc.lorvecboost(lep[:, 1], top[:, 0])
-        chel = (lep_ZMFtbar.x * lbar_ZMFtop.x
-                + lep_ZMFtbar.y * lbar_ZMFtop.y
-                + lep_ZMFtbar.z * lbar_ZMFtop.z) / (
-                lep_ZMFtbar.rho * lbar_ZMFtop.rho)
+        top_boost = -top.boostvec
+        lep_ZMFtbar = lep[:, 0].boost(top_boost[:, 1])
+        lbar_ZMFtop = lep[:, 1].boost(top_boost[:, 0])
+
+        chel = lep_ZMFtbar.dot(lbar_ZMFtop) / lep_ZMFtbar.rho / lbar_ZMFtop.rho
         return chel
