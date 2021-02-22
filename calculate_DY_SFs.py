@@ -178,12 +178,12 @@ cutflows = coffea.util.load(args.cutflow)
 met_bins, cutflow, errors = rebin_met(cutflows, config["rebin"])
 
 if config["rebin"] == "Inclusive":
-    met_edges = [0, 10000]  # Could altenatively use inf as upper limit, but
-    # if we've got events with more than 10TeV MET, we've got bigger problems
+    bins = {"channel": [0, 1, 2, 3]}
 else:
     met_edges = [int(k.split("_")[0]) for k in config["rebin"].keys()]
     met_edges.append(10000)
-out_dict = {"bins": {"met": met_edges, "channel": [0, 1, 2]}}
+    bins = {"met": met_edges, "channel": [0, 1, 2, 3]}
+out_dict = {"bins": bins}
 
 sf_eq = SFEquations(met_bins, config)
 sfs = sf_eq.evaluate(cutflow, args.cutname)
@@ -217,6 +217,11 @@ out_dict["factors_up"] = [
 out_dict["factors_down"] = [
     [sfs[ch_i][met_i] - tot_errs[ch_i][met_i]
      for met_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
+
+if config["rebin"] == "Inclusive":
+    out_dict["factors"] = [sf[0] for sf in out_dict["factors"]]
+    out_dict["factors_up"] = [sf[0] for sf in out_dict["factors_up"]]
+    out_dict["factors_down"] = [sf[0] for sf in out_dict["factors_down"]]
 
 with open(args.output, "w+") as f:
     json.dump(out_dict, f, indent=4)
