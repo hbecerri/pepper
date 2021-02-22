@@ -19,6 +19,10 @@
          ["h2D_SF_emu_lepABpt_emuOut_FullError", "h2D_SF_emu_lepABpt_emuIn_FullError"],
          ["h2D_SF_mumu_lepABpt_FullError"]]
     ],
+    "pdf_types": {
+        "91400": "Hessian",
+        "306000": "MC"
+    },
     "electron_sf": [
         [
             "$DATADIR/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root",

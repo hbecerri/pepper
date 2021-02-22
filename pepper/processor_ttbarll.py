@@ -125,15 +125,15 @@ class Processor(pepper.Processor):
         else:
             logger.warning("No trigger scale factors specified")
             self.trigger_sfs = None
-        if "pdf_type" in config:
-            self.pdf_type = config["pdf_type"].lower()
+        if "pdf_types" in config:
+            self.pdf_types = config["pdf_types"]
         else:
             if config["compute_systematics"]:
                 logger.warning(
                     "pdf_type not specified; will not compute pdf "
                     "uncertainties. (Options are 'Hessian', 'MC' and "
                     "'MC_Gaussian')")
-            self.pdf_type = None
+            self.pdf_types = None
 
     def _check_config_integrity(self, config):
         super()._check_config_integrity(config)
@@ -391,8 +391,14 @@ class Processor(pepper.Processor):
         if "split_pdf_uncs" in self.config:
             if self.config["split_pdf_uncs"]:
                 split_pdf_uncs = True
+        if (("LHEPdfWeight" not in data.fields) or (self.pdf_types is None)):
+            return
         pdfs = data["LHEPdfWeight"]
-        if self.pdf_type == "hessian":
+        pdf_type = None
+        for LHA_ID, _type in self.pdf_types:
+            if LHA_ID in pdfs.__doc__:
+                pdf_type = _type.lower()
+        if pdf_type == "hessian":
             variations = (pdfs[:, 1:-2] - pdfs[:, 0]) / data["genWeight"]
             if split_pdf_uncs:
                 selector.set_systematic("PDF",
@@ -403,7 +409,7 @@ class Processor(pepper.Processor):
                 tot_unc = np.sqrt(ak.sum(variations ** 2, axis=1))
                 selector.set_systematic(
                     "PDF", 1 + tot_unc, 1 - tot_unc)
-        elif self.pdf_type == "mc":
+        elif pdf_type == "mc":
             if split_pdf_uncs:
                 # Just output variations normalised by genweight - user
                 # will need to combine these for limit setting
@@ -418,7 +424,7 @@ class Processor(pepper.Processor):
                 tot_unc = (variations[:, int(round(0.841344746*nvar))]
                            - variations[:, int(round(0.158655254*nvar))]) / 2
                 selector.set_systematic("PDF", 1 + tot_unc, 1 - tot_unc)
-        elif self.pdf_type == "mc_gaussian":
+        elif pdf_type == "mc_gaussian":
             if split_pdf_uncs:
                 # Just output variations normalised by genweight - user
                 # will need to combine these for limit setting
@@ -431,9 +437,13 @@ class Processor(pepper.Processor):
                 tot_unc = np.sqrt((ak.sum(pdfs[:, 1:-2] - mean) ** 2)
                                   / (ak.num(pdfs)[0] - 3)) / data["genWeight"]
                 selector.set_systematic("PDF", 1 + tot_unc, 1 - tot_unc)
-        elif self.pdf_type is not None:
+        elif pdf_type is None:
             raise pepper.config.ConfigError(
-                f"PDF type {self.pdf_type} not recognised. Valid options "
+                "PDF LHA Id not included in config. PDF docstring is: "
+                + pdfs.__doc__)
+        else:
+            raise pepper.config.ConfigError(
+                f"PDF type {pdf_type} not recognised. Valid options "
                 "are 'Hessian', 'MC' and 'MC_Gaussian'")
         # Add PDF alpha_s uncertainties
         unc = (pdfs[:, -1] - pdfs[:, -2]) / (2 * data["genWeight"])
