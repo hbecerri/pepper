@@ -3,6 +3,7 @@
 import numpy as np
 import coffea
 from coffea.lookup_tools.extractor import file_converters
+from coffea.btag_tools import BTagScaleFactor
 import awkward as ak
 from collections import namedtuple
 import warnings
@@ -155,26 +156,18 @@ BTAG_WP_CUTS = {
 
 
 class BTagWeighter:
-    def __init__(self, sf_filename, eff_filename, tagger, year):
+    def __init__(self, sf_filename, eff_filename, tagger, year,
+                 meastype="mujets"):
         self.eff_evaluator = get_evaluator(eff_filename)
-        # Suppress RuntimeWarning that Coffea raises for 2018 scale factors
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            self.sf_evaluator = get_evaluator(sf_filename)
 
-        # Tagger name of CSV is unknown, have not API for it. Workaround
-        somekey = next(iter(self.sf_evaluator.keys()))
-        self.csvtaggername = somekey.split("_")[0]
+        self.sf = []
+        for i in range(3):
+            # Note that for light flavor normally only inclusive is available,
+            # thus we fix it to 'incl' here
+            self.sf.append(BTagScaleFactor(
+                sf_filename, i, f"{meastype},{meastype},incl"))
 
         self.wps = BTAG_WP_CUTS[tagger][year]
-
-    def _sf_func(self, wp, sys, jf_num):
-        for measurement in ("mujets", "comb", "incl"):
-            key = "{}_{}_{}_{}_{}".format(
-                self.csvtaggername, wp, measurement, sys, jf_num)
-            if key in self.sf_evaluator:
-                return self.sf_evaluator[key]
-        return None
 
     def __call__(
             self, wp, jf, eta, pt, discr, variation="central",
@@ -192,6 +185,9 @@ class BTagWeighter:
                                  "'medium' or 'tight'")
         elif not isinstance(wp, int):
             raise TypeError("Expected int or str for wp, got {}".format(wp))
+        elif wp > 2:
+            raise ValueError(
+                f"Expected value between 0 and 2 for wp, got {wp}")
         possible_variations = (
             "central", "light up", "light down", "heavy up", "heavy down")
         if variation not in possible_variations:
@@ -206,26 +202,15 @@ class BTagWeighter:
             else:
                 heavy_vari = direction
 
-        counts = ak.num(pt)
-        jf = ak.flatten(jf)
-        eta = ak.flatten(eta)
-        pt = ak.flatten(pt)
-        discr = ak.flatten(discr)
-
-        sf = np.ones(len(pt))
-        sf[jf == 0] = np.asarray(self._sf_func(wp, light_vari, 2)(
-            eta, pt, discr))[jf == 0]
-        sf[jf == 4] = np.asarray(self._sf_func(wp, heavy_vari, 1)(
-            eta, pt, discr))[jf == 4]
-        sf[jf == 5] = np.asarray(self._sf_func(wp, heavy_vari, 0)(
-            eta, pt, discr))[jf == 5]
-        sf = ak.unflatten(sf, counts)
+        sf = self.sf[wp].eval(heavy_vari, jf, eta, pt, discr)
+        if light_vari != heavy_vari:
+            sf = ak.where(
+                jf >= 4, sf,
+                self.sf[wp].eval(light_vari, jf, eta, pt, discr))
 
         eff = self.eff_evaluator[efficiency](jf, pt, abs(eta))
-        eff = ak.unflatten(eff, counts)
         sfeff = sf * eff
-
-        is_tagged = ak.unflatten(discr > self.wps[wp], counts)
+        is_tagged = discr > self.wps[wp]
 
         p_mc = ak.prod(eff[is_tagged], axis=1) * ak.prod(
             (1 - eff)[~is_tagged], axis=1)
