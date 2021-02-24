@@ -107,23 +107,9 @@ def _roots_vectorized(poly, axis=-1):
 
 
 def _lorvecfromnumpy(x, y, z, t, behavior, name="LorentzVector"):
-    x = ak.Array(x)
-    y = ak.Array(y)
-    z = ak.Array(z)
-    t = ak.Array(t)
-    # Make axes to outer layer
-    counts = []
-    for i in range(x.ndim - 1):
-        counts.append(ak.num(x))
-        x = ak.flatten(x)
-        y = ak.flatten(y)
-        z = ak.flatten(z)
-        t = ak.flatten(t)
-    v = ak.Array({"x": x, "y": y, "z": z, "t": t}, with_name=name,
-                 behavior=behavior)
-    for count in reversed(counts):
-        v = ak.unflatten(v, count)
-    return v
+    return ak.zip(
+        {"x": x, "y": y, "z": z, "t": t}, with_name="LorentzVector",
+        behavior=behavior)
 
 
 def _from_regular(array, axis=1, highlevel=True):

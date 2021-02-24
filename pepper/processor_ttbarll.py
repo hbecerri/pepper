@@ -670,11 +670,12 @@ class Processor(pepper.Processor):
         electron = data["Electron"]
         muon = data["Muon"]
         columns = ["pt", "eta", "phi", "mass", "pdgId"]
-        lepton = ak.Array({}, with_name="PtEtaPhiMLorentzVector")
+        lepton = {}
         for column in columns:
-            lepton[column] = ak.flatten(ak.concatenate(
-                [electron[column], muon[column]], axis=1))
-        lepton = ak.unflatten(lepton, ak.num(electron) + ak.num(muon))
+            lepton[column] = ak.concatenate([electron[column], muon[column]],
+                                            axis=1)
+        lepton = ak.zip(lepton, with_name="PtEtaPhiMLorentzVector",
+                        behavior=data.behavior)
 
         # Sort leptons by pt
         lepton = lepton[ak.argsort(lepton["pt"], ascending=False)]
@@ -935,7 +936,7 @@ class Processor(pepper.Processor):
         if "juncfac" in ak.fields(data) and ak.any(data["juncfac"] != 1):
             # Do MET type-1 corrections
             jets = data["OrigJet"]
-            jets = ak.Array({
+            jets = ak.zip({
                 "pt": jets.pt,
                 "pt_nomuon": jets.pt * (1 - jets.muonSubtrFactor),
                 "juncfac": data["juncfac"] - 1,
@@ -945,8 +946,6 @@ class Processor(pepper.Processor):
                 "emef": jets.neEmEF + jets.chEmEF
             }, with_name="Jet", behavior=jets.behavior)
             lowptjets = self.build_lowptjet_column(junc, data)
-            # Concatenating removes the type. Readd
-            jets = ak.with_name(jets, "Jet")
             # Cut according to MissingETRun2Corrections Twiki
             jets = jets[(jets["pt_nomuon"] > 15) & (jets["emef"] < 0.9)]
             lowptjets = lowptjets[(lowptjets["pt_nomuon"] > 15)
