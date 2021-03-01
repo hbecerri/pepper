@@ -401,10 +401,30 @@ def onedimeval(func, array, tonumpy=True):
     return res
 
 
+def akremask(array, mask):
+    if ak.sum(mask) != len(array):
+        raise ValueError(f"Got array of length {len(array)} but mask needs "
+                         f"{ak.sum(mask)}")
+    if len(array) == 0:
+        return ak.pad_none(array, len(mask), axis=0)
+    offsets = np.cumsum(np.asarray(mask)) - 1
+    return ak.mask(array[offsets], mask)
+
+
 def akstriparray(array):
     """Make an awkward array use as little memory as possible.
 
     This is a workaround until ak.packed in implemented"""
+    def strip_inner(array):
+        if isinstance(array.type.type, ak.types.OptionType):
+            mask = ~ak.is_none(array)
+        else:
+            mask = None
+        array = ak.flatten(array, axis=None)
+        if mask is not None:
+            array = akremask(array, mask)
+        return array
+
     if len(ak.fields(array)) != 0:
         values = {f: akstriparray(array[f]) for f in ak.fields(array)}
         parameters = ak.parameters(array)
@@ -417,5 +437,5 @@ def akstriparray(array):
             for name, val in ak.parameters(array):
                 res = ak.with_parameter(res, name, val)
     else:
-        res = onedimeval(lambda a: ak.flatten(a, axis=None), array, False)
+        res = onedimeval(strip_inner, array, False)
     return res
