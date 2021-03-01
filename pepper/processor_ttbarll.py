@@ -396,7 +396,7 @@ class Processor(pepper.Processor):
             return
         pdfs = data["LHEPdfWeight"]
         pdf_type = None
-        for LHA_ID, _type in self.pdf_types:
+        for LHA_ID, _type in self.pdf_types.items():
             if LHA_ID in pdfs.__doc__:
                 pdf_type = _type.lower()
         if pdf_type == "hessian":
@@ -972,8 +972,16 @@ class Processor(pepper.Processor):
                                    lep1_pt=leps[:, 0].pt,
                                    lep2_pt=leps[:, 1].pt)
         if self.config["compute_systematics"]:
-            up = self.trigger_sfs(channel=channel, variation="up")
-            down = self.trigger_sfs(channel=channel, variation="down")
+            up = self.trigger_sfs(channel=channel,
+                                  e_in_barrel=e_in_barrel,
+                                  lep1_pt=leps[:, 0].pt,
+                                  lep2_pt=leps[:, 1].pt,
+                                  variation="up")
+            down = self.trigger_sfs(channel=channel,
+                                    e_in_barrel=e_in_barrel,
+                                    lep1_pt=leps[:, 0].pt,
+                                    lep2_pt=leps[:, 1].pt,
+                                    variation="down")
             return central, {"Trigger_SFs": (up / central, down / central)}
         return central
 
