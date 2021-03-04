@@ -14,6 +14,12 @@ class CompressionWrapper:
         self.compression_opts = compression_opts
 
     def __setitem__(self, name, obj):
+        if np.asarray(obj).nbytes < 16:
+            # If the object size is very small, compression won't have much
+            # effect. In fact the Blosc implementation raises warnings for
+            # sizes < 16 bytes. Skip compression in this case
+            self.group[name] = obj
+            return
         ds = self.group.create_dataset(None, data=obj,
                                        compression=self.compression,
                                        compression_opts=self.compression_opts)
