@@ -1,12 +1,40 @@
 import h5py
+import hdf5plugin
+from collections.abc import Mapping
 from collections import MutableMapping
 import numpy as np
 import awkward as ak
 import json
 
 
+class CompressionWrapper:
+    def __init__(self, group, compression, compression_opts=None):
+        self.group = group
+        self.compression = compression
+        self.compression_opts = compression_opts
+
+    def __setitem__(self, name, obj):
+        ds = self.group.create_dataset(None, data=obj,
+                                       compression=self.compression,
+                                       compression_opts=self.compression_opts)
+        self.group[name] = ds
+
+
 class HDF5File(MutableMapping):
-    def __init__(self, file, mode=None, lazy=False):
+    def __init__(self, file, mode=None, compression=hdf5plugin.Blosc()):
+        """Create or open an HDF5 file storing awkward arrays
+
+        Arguments:
+        file -- Filename as string or Python file object or h5py file object
+        mode -- Determines whether to read ('r') or to write ('w') in case
+                `file` is a string
+        compression -- If the file is opened for writing, determines the
+                       compression used for writing. If None, compression
+                       is disabled. Either the value for `compression` in
+                       `h5py.Group.create_dataset` or a mapping with keys
+                       `compression` and `compression_opts`. See
+                       `h5py.Group.create_dataset` for details.
+        """
         if isinstance(file, str):
             if mode is None:
                 raise ValueError("If file is a str, mode can not be None")
@@ -15,7 +43,7 @@ class HDF5File(MutableMapping):
         else:
             self._should_close = False
         self._file = file
-        self.lazy = lazy
+        self.compression = compression
 
     def __setitem__(self, key, value):
         if isinstance(value, dict):
@@ -42,7 +70,14 @@ class HDF5File(MutableMapping):
         else:
             convertto = "None"
         group = self._file.create_group(key)
-        form, length, container = ak.to_buffers(value, container=group)
+        if self.compression is not None:
+            if isinstance(self.compression, Mapping):
+                container = CompressionWrapper(group, **self.compression)
+            else:
+                container = CompressionWrapper(group, self.compression)
+        else:
+            container = group
+        form, length, container = ak.to_buffers(value, container=container)
         group.attrs["form"] = form.tojson()
         group.attrs["length"] = json.dumps(length)
         group.attrs["parameters"] = json.dumps(ak.parameters(value))
