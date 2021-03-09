@@ -18,7 +18,7 @@ def normalize_trigger_path(path):
 
 
 def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None,
-                          normalize=True):
+                          era=None, normalize=True):
     """Get trigger paths needed for the specific dataset.
 
     Arguments:
@@ -33,15 +33,23 @@ def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None,
     """
     pos_triggers = []
     neg_triggers = []
+    if isinstance(trigger_order, dict):
+        if era in trigger_order.keys():
+            trigger_order = trigger_order[era]
+        else:
+            trigger_order = trigger_order["other"]
     if is_mc:
         for paths in trigger_paths.values():
             pos_triggers.extend(paths)
     else:
         for dsname in trigger_order:
             if dsname == dataset:
+                pos_triggers = trigger_paths[dataset]
+                break
+            if dsname == (dataset + "_" + era):
+                pos_triggers = trigger_paths[dataset + "_" + era]
                 break
             neg_triggers.extend(trigger_paths[dsname])
-        pos_triggers = trigger_paths[dataset]
     pos_triggers = list(dict.fromkeys(pos_triggers))
     neg_triggers = list(dict.fromkeys(neg_triggers))
     if normalize:

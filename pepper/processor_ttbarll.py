@@ -207,7 +207,8 @@ class Processor(pepper.Processor):
         selector.add_cut("Lumi", partial(self.good_lumimask, is_mc, dsname))
 
         pos_triggers, neg_triggers = pepper.misc.get_trigger_paths_for(
-            dsname, is_mc, self.trigger_paths, self.trigger_order)
+            dsname, is_mc, self.trigger_paths, self.trigger_order,
+            self.get_era(selector.data, is_mc))
         selector.add_cut("Trigger", partial(
             self.passing_trigger, pos_triggers, neg_triggers))
 
@@ -512,13 +513,20 @@ class Processor(pepper.Processor):
             lumimask = coffea.lumi_tools.LumiMask(self.lumimask)
             return lumimask(run, luminosity_block)
 
+    def get_era(self, data, is_mc):
+        if is_mc:
+            return self.config["year"] + "MC"
+        else:
+            filename = data.metadata["filename"]
+            return filename.split("Run")[1][:5]
+
     def passing_trigger(self, pos_triggers, neg_triggers, data):
         hlt = data["HLT"]
         trigger = (
-            np.any([hlt[trigger_path] for trigger_path in pos_triggers],
-                   axis=0)
-            & ~np.any([hlt[trigger_path] for trigger_path in neg_triggers],
-                      axis=0)
+            np.any([hlt[trigger_path] for trigger_path in pos_triggers
+                    if trigger_path in ak.fields(hlt)], axis=0)
+            & ~np.any([hlt[trigger_path] for trigger_path in neg_triggers
+                       if trigger_path in ak.fields(hlt)], axis=0)
         )
         return trigger
 
@@ -913,10 +921,7 @@ class Processor(pepper.Processor):
         metx = met.pt * np.cos(met.phi)
         mety = met.pt * np.sin(met.phi)
         if self.met_xy_shifts:
-            if is_mc:
-                era = self.config["year"] + "MC"
-            else:
-                era = dsname[3:8]
+            era = self.get_era(data, is_mc)
             metx += -(self.met_xy_shifts["METxcorr"][era][0]
                       * data["Pileup_nTrueInt"]
                       + self.met_xy_shifts["METxcorr"][era][1])
