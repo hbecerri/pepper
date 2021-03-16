@@ -519,8 +519,12 @@ class Processor(pepper.Processor):
         if is_mc:
             return self.config["year"] + "MC"
         else:
-            filename = data.metadata["filename"]
-            return filename.split("Run")[1][:5]
+            run = np.array(data["run"])[0]
+            # Assumes all runs in file come from same era
+            for era, startstop in self.config["data_eras"].items():
+                if ((run >= startstop[0]) & (run <= startstop[1])):
+                    return era
+            raise ValueError(f"Run {run} does not correspond to any era")
 
     def passing_trigger(self, pos_triggers, neg_triggers, data):
         hlt = data["HLT"]
