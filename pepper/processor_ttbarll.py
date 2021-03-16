@@ -206,9 +206,9 @@ class Processor(pepper.Processor):
             selector.add_cut("Blinding", partial(self.blinding, is_mc))
         selector.add_cut("Lumi", partial(self.good_lumimask, is_mc, dsname))
 
+        era = self.get_era(selector.data, is_mc)
         pos_triggers, neg_triggers = pepper.misc.get_trigger_paths_for(
-            dsname, is_mc, self.trigger_paths, self.trigger_order,
-            self.get_era(selector.data, is_mc))
+            dsname, is_mc, self.trigger_paths, self.trigger_order, era)
         selector.add_cut("Trigger", partial(
             self.passing_trigger, pos_triggers, neg_triggers))
         if (self.config["year"] == "2016" or self.config["year"] == "2017"):
@@ -232,7 +232,8 @@ class Processor(pepper.Processor):
         selector.add_cut("Opposite sign", self.opposite_sign_lepton_pair)
         selector.add_cut("No add leps",
                          partial(self.no_additional_leptons, is_mc))
-        selector.add_cut("Chn trig match", self.channel_trigger_matching)
+        selector.add_cut("Chn trig match",
+                         partial(self.channel_trigger_matching, era))
         if self.trigger_sfs is not None and is_mc:
             selector.add_cut(
                 "Trigger SFs", partial(self.apply_trigger_sfs, dsname))
@@ -529,10 +530,10 @@ class Processor(pepper.Processor):
     def passing_trigger(self, pos_triggers, neg_triggers, data):
         hlt = data["HLT"]
         trigger = (
-            np.any([hlt[trigger_path] for trigger_path in pos_triggers
-                    if trigger_path in ak.fields(hlt)], axis=0)
-            & ~np.any([hlt[trigger_path] for trigger_path in neg_triggers
-                       if trigger_path in ak.fields(hlt)], axis=0)
+            np.any([hlt[trigger_path] for trigger_path in pos_triggers],
+                   axis=0)
+            & ~np.any([hlt[trigger_path] for trigger_path in neg_triggers],
+                      axis=0)
         )
         return trigger
 
@@ -1043,7 +1044,7 @@ class Processor(pepper.Processor):
             keep = keep & (~self.in_hem1516(jet.phi, jet.eta).any())
         return keep
 
-    def channel_trigger_matching(self, data):
+    def channel_trigger_matching(self, era, data):
         is_ee = data["is_ee"]
         is_mm = data["is_mm"]
         is_em = data["is_em"]
@@ -1054,7 +1055,12 @@ class Processor(pepper.Processor):
             (is_ee, "ee"), (is_mm, "mumu"), (is_em, "emu"),
             (is_ee | is_em, "e"), (is_mm | is_em, "mu")]
         for mask, trigname in check:
-            if trigname in triggers:
+            if (trigname + "_" + era) in triggers:
+                trigger = [pepper.misc.normalize_trigger_path(t)
+                           for t in triggers[trigname + "_" + era]]
+                ret = ret | (
+                    mask & self.passing_trigger(trigger, [], data, True))
+            elif trigname in triggers:
                 trigger = [pepper.misc.normalize_trigger_path(t)
                            for t in triggers[trigname]]
                 ret = ret | (
