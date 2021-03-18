@@ -208,7 +208,7 @@ class Processor(pepper.Processor):
 
         era = self.get_era(selector.data, is_mc)
         pos_triggers, neg_triggers = pepper.misc.get_trigger_paths_for(
-            dsname, is_mc, self.trigger_paths, self.trigger_order, era)
+            dsname, is_mc, self.trigger_paths, self.trigger_order, era=era)
         selector.add_cut("Trigger", partial(
             self.passing_trigger, pos_triggers, neg_triggers))
         if (self.config["year"] == "2016" or self.config["year"] == "2017"):

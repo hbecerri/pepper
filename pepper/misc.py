@@ -18,7 +18,7 @@ def normalize_trigger_path(path):
 
 
 def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None,
-                          era=None, normalize=True):
+                          normalize=True, era=None):
     """Get trigger paths needed for the specific dataset.
 
     Arguments:
@@ -27,6 +27,9 @@ def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None,
     trigger_order -- list of datasets to define the order in which the triggers
                      are applied.
     normalize -- bool, whether to remove HLT_ from the beginning
+    era -- None or a string. If not None and if <name>_era, where name is any
+           dataset name, is present in `trigger_paths`, it will be used over
+           just <name>. This can be used to define per era triggers.
 
     Returns a tuple of lists (pos_triggers, neg_triggers) describing trigger
     paths to include and to exclude respectively.
@@ -38,13 +41,16 @@ def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None,
             pos_triggers.extend(paths)
     else:
         for dsname in trigger_order:
+            if era is not None and (dsname + "_" + era) in trigger_paths:
+                key = dsname + "_" + era
+            else:
+                key = dsname
             if dsname == dataset:
-                if (dataset + "_" + era) in trigger_paths:
-                    pos_triggers = trigger_paths[dataset + "_" + era]
-                else:
-                    pos_triggers = trigger_paths[dataset]
                 break
-            neg_triggers.extend(trigger_paths[dsname])
+            neg_triggers.extend(trigger_paths[key])
+        else:
+            raise ValueError(f"Dataset {dataset} not in trigger_order")
+        pos_triggers = trigger_paths[key]
     pos_triggers = list(dict.fromkeys(pos_triggers))
     neg_triggers = list(dict.fromkeys(neg_triggers))
     if normalize:
