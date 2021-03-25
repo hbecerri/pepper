@@ -948,10 +948,10 @@ class Processor(pepper.Processor):
         mety = met.pt * np.sin(met.phi)
         if self.met_xy_shifts:
             metx += -(self.met_xy_shifts["METxcorr"][era][0]
-                      * data["Pileup_nTrueInt"]
+                      * data["PV"]["npvs"]
                       + self.met_xy_shifts["METxcorr"][era][1])
             mety += -(self.met_xy_shifts["METycorr"][era][0]
-                      * data["Pileup_nTrueInt"]
+                      * data["PV"]["npvs"]
                       + self.met_xy_shifts["METycorr"][era][1])
 
         if variation == "up":
