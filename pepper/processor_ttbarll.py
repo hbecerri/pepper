@@ -540,10 +540,10 @@ class Processor(pepper.Processor):
     def passing_trigger(self, pos_triggers, neg_triggers, data):
         hlt = data["HLT"]
         trigger = (
-            np.any([hlt[trigger_path] for trigger_path in pos_triggers],
-                   axis=0)
-            & ~np.any([hlt[trigger_path] for trigger_path in neg_triggers],
-                      axis=0)
+            np.any([np.asarray(hlt[trigger_path])
+                    for trigger_path in pos_triggers], axis=0)
+            & ~np.any([np.asarray(hlt[trigger_path])
+                       for trigger_path in neg_triggers], axis=0)
         )
         return trigger
 
