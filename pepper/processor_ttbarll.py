@@ -190,6 +190,7 @@ class Processor(pepper.Processor):
         return reco_random_seed
 
     def process_selection(self, selector, dsname, is_mc, filler):
+        era = self.get_era(selector.data, is_mc)
         if dsname.startswith("TTTo"):
             selector.set_column("gent_lc", self.gentop, lazy=True)
             if self.topptweighter is not None:
@@ -206,7 +207,6 @@ class Processor(pepper.Processor):
             selector.add_cut("Blinding", partial(self.blinding, is_mc))
         selector.add_cut("Lumi", partial(self.good_lumimask, is_mc, dsname))
 
-        era = self.get_era(selector.data, is_mc)
         pos_triggers, neg_triggers = pepper.misc.get_trigger_paths_for(
             dsname, is_mc, self.trigger_paths, self.trigger_order, era=era)
         selector.add_cut("Trigger", partial(
@@ -249,7 +249,7 @@ class Processor(pepper.Processor):
                 selector_copy = copy(selector)
                 filler.sys_overwrite = variarg.name
                 self.process_selection_jet_part(selector_copy, is_mc,
-                                                variarg, dsname, filler)
+                                                variarg, dsname, filler, era)
                 if self.eventdir is not None:
                     logger.debug(f"Saving per event info for variation"
                                  f" {variarg.name}")
@@ -259,8 +259,9 @@ class Processor(pepper.Processor):
             filler.sys_overwrite = None
 
         # Do normal, no-variation run
-        self.process_selection_jet_part(
-            selector, is_mc, self.get_jetmet_nominal_arg(), dsname, filler)
+        self.process_selection_jet_part(selector, is_mc,
+                                        self.get_jetmet_nominal_arg(),
+                                        dsname, filler, era)
         logger.debug("Selection done")
 
     def get_jetmet_variation_args(self):
@@ -300,7 +301,7 @@ class Processor(pepper.Processor):
             return VariationArg(None, jer=None)
 
     def process_selection_jet_part(self, selector, is_mc, variation, dsname,
-                                   filler):
+                                   filler, era):
         logger.debug(f"Running jet_part with variation {variation.name}")
         if is_mc:
             selector.set_multiple_columns(partial(
@@ -309,7 +310,7 @@ class Processor(pepper.Processor):
         selector.set_column("Jet", self.build_jet_column)
         selector.set_column(
             "MET", partial(self.build_met_column, variation.junc, is_mc,
-                           dsname, variation=variation.met))
+                           dsname, era, variation=variation.met))
         selector.set_multiple_columns(
             partial(self.drellyan_sf_columns, filler))
         if self.drellyan_sf is not None and is_mc:
@@ -940,12 +941,12 @@ class Processor(pepper.Processor):
 
         return jets
 
-    def build_met_column(self, junc, is_mc, dsname, data, variation="central"):
+    def build_met_column(self, junc, is_mc, dsname, era,
+                         data, variation="central"):
         met = data["MET"]
         metx = met.pt * np.cos(met.phi)
         mety = met.pt * np.sin(met.phi)
         if self.met_xy_shifts:
-            era = self.get_era(data, is_mc)
             metx += -(self.met_xy_shifts["METxcorr"][era][0]
                       * data["Pileup_nTrueInt"]
                       + self.met_xy_shifts["METxcorr"][era][1])
