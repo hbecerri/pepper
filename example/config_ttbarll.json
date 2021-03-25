@@ -83,6 +83,12 @@
             "/EGamma/Run2018D-02Apr2020-v1/NANOAOD"
         ]
     },
+    "data_eras": {
+        "2018A": [315252, 316995],
+        "2018B": [316998, 319312],
+        "2018C": [319313, 320393],
+        "2018D": [320394, 325273]
+    },
     "mc_datasets": {
         "DYJetsToLL_M-10to50_TuneCP5_13TeV-madgraphMLM-pythia8": [
             "/DYJetsToLL_M-10to50_TuneCP5_13TeV-madgraphMLM-pythia8/RunIIAutumn18NanoAODv7-Nano02Apr2020_102X_upgrade2018_realistic_v21-v1/NANOAODSIM",
