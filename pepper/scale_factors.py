@@ -267,7 +267,7 @@ class PileupWeighter:
 class TopPtWeigter:
     # Top pt reweighting according to
     # https://twiki.cern.ch/twiki/bin/viewauth/CMS/TopPtReweighting
-    def __init__(self, method, scale, **kwargs):
+    def __init__(self, method, scale, sys_only=False, **kwargs):
         if method.lower() == "datanlo":
             self.sffunc = self.datanlo_sf
         elif method.lower() == "theory":
@@ -275,6 +275,7 @@ class TopPtWeigter:
         else:
             raise ValueError(f"Invalid method: {method}")
         self.scale = scale
+        self.sys_only = sys_only
         self.kwargs = kwargs
 
     def datanlo_sf(self, pt):

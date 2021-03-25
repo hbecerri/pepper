@@ -349,7 +349,17 @@ class Processor(pepper.Processor):
 
     def do_top_pt_reweighting(self, data):
         pt = data["gent_lc"].pt
-        return self.topptweighter(pt[:, 0], pt[:, 1])
+        rwght = self.topptweighter(pt[:, 0], pt[:, 1])
+        if self.topptweighter.sys_only:
+            if self.config["compute_systematics"]:
+                return np.full(len(data), True), {"Top_pt_reweighting": rwght}
+            else:
+                return np.full(len(data), True)
+        else:
+            if self.config["compute_systematics"]:
+                return rwght, {"Top_pt_reweighting": 1/rwght}
+            else:
+                return rwght
 
     def add_generator_uncertainies(self, dsname, selector):
         # Matrix-element renormalization and factorization scale
