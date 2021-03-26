@@ -531,6 +531,8 @@ class Processor(pepper.Processor):
         if is_mc:
             return self.config["year"] + "MC"
         else:
+            if len(data) == 0:
+                return "no_events"
             run = np.array(data["run"])[0]
             # Assumes all runs in file come from same era
             for era, startstop in self.config["data_eras"].items():
@@ -946,7 +948,7 @@ class Processor(pepper.Processor):
         met = data["MET"]
         metx = met.pt * np.cos(met.phi)
         mety = met.pt * np.sin(met.phi)
-        if self.met_xy_shifts:
+        if (self.met_xy_shifts and era != "no_events"):
             metx += -(self.met_xy_shifts["METxcorr"][era][0]
                       * data["PV"]["npvs"]
                       + self.met_xy_shifts["METxcorr"][era][1])
