@@ -1,4 +1,3 @@
-import os
 import sys
 from functools import partial, reduce
 from collections import namedtuple
@@ -104,7 +103,6 @@ class Processor(pepper.Processor):
 
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
-        self.reco_random_seed = self._load_reco_seed()
         if "reco_info_file" in self.config:
             self.reco_info_filepath = self.config["reco_info_file"]
         elif self.config["reco_algorithm"] is not None:
@@ -175,19 +173,6 @@ class Processor(pepper.Processor):
                         "crosssection_uncertainty")
 
         # TODO: Check other config variables if necessary
-
-    def _load_reco_seed(self):
-        if ("reco_seed_file" in self.config
-                and os.path.exists(self.config["reco_seed_file"])):
-            with open(self.config["reco_seed_file"]) as f:
-                entropy = int(f.read())
-                reco_random_seed = np.random.SeedSequence(entropy)
-        else:
-            reco_random_seed = np.random.SeedSequence()
-            if "reco_seed_file" in self.config:
-                with open(self.config["reco_seed_file"], "w") as f:
-                    f.write(str(reco_random_seed.entropy))
-        return reco_random_seed
 
     def process_selection(self, selector, dsname, is_mc, filler):
         era = self.get_era(selector.data, is_mc)
@@ -305,7 +290,8 @@ class Processor(pepper.Processor):
         logger.debug(f"Running jet_part with variation {variation.name}")
         if is_mc:
             selector.set_multiple_columns(partial(
-                self.compute_jet_factors, variation.junc, variation.jer))
+                self.compute_jet_factors, variation.junc, variation.jer,
+                selector.rng))
         selector.set_column("OrigJet", selector.data["Jet"])
         selector.set_column("Jet", self.build_jet_column)
         selector.set_column(
@@ -329,8 +315,8 @@ class Processor(pepper.Processor):
         if reco_alg is not None:
             selector.set_column("recolepton", self.pick_leps, all_cuts=True)
             selector.set_column("recob", self.pick_bs, all_cuts=True)
-            selector.set_column(
-                "recot", partial(self.ttbar_system, reco_alg.lower()),
+            selector.set_column("recot", partial(
+                self.ttbar_system, reco_alg.lower(), selector.rng),
                 all_cuts=True, no_callback=True)
             selector.add_cut("Reco", self.passing_reco)
             selector.set_column("reconu", self.build_nu_column, all_cuts=True,
@@ -802,7 +788,7 @@ class Processor(pepper.Processor):
         else:
             return junc[:, :, 1]
 
-    def compute_jer_factor(self, data, variation="central"):
+    def compute_jer_factor(self, data, rng, variation="central"):
         # Coffea offers a class named JetTransformer for this. Unfortunately
         # it is more inconvinient and bugged than useful.
         counts = ak.num(data["Jet"])
@@ -814,7 +800,7 @@ class Processor(pepper.Processor):
         jersf = self._jersf.getScaleFactor(
             JetPt=data["Jet"].pt, JetEta=data["Jet"].eta,
             Rho=data["fixedGridRhoFastjetAll"])
-        jersmear = jer * np.random.normal(size=len(jer))
+        jersmear = jer * rng.normal(size=len(jer))
         if variation == "central":
             jersf = jersf[:, :, 0]
         elif variation == "up":
@@ -833,13 +819,13 @@ class Processor(pepper.Processor):
             ak.is_none(genpt, axis=1), factor_stoch, factor_scale)
         return factor
 
-    def compute_jet_factors(self, junc, jer, data):
+    def compute_jet_factors(self, junc, jer, rng, data):
         if junc is not None:
             juncfac = self.compute_junc_factor(data, *junc)
         else:
             juncfac = ak.ones_like(data["Jet"].pt)
         if jer is not None:
-            jerfac = self.compute_jer_factor(data, jer)
+            jerfac = self.compute_jer_factor(data, rng, jer)
         else:
             jerfac = ak.ones_like(data["Jet"].pt)
         factor = juncfac * jerfac
@@ -1221,7 +1207,7 @@ class Processor(pepper.Processor):
         return ak.concatenate([bs[bestbpair_mlb], bs_rev[bestbpair_mlb]],
                               axis=1)
 
-    def ttbar_system(self, reco_alg, data):
+    def ttbar_system(self, reco_alg, rng, data):
         lep = data["recolepton"][:, 0]
         antilep = data["recolepton"][:, 1]
         b = data["recob"][:, 0]
@@ -1253,8 +1239,7 @@ class Processor(pepper.Processor):
             top, antitop = sonnenschein(
                 lep, antilep, b, antib, met, mwp=mw, mwm=mw, mt=mt, mat=mt,
                 energyfl=energyfl, energyfj=energyfj, alphal=alphal,
-                alphaj=alphaj, hist_mlb=mlb, num_smear=num_smear,
-                seed=self.reco_random_seed)
+                alphaj=alphaj, hist_mlb=mlb, num_smear=num_smear, rng=rng)
             return ak.concatenate([top, antitop], axis=1)
         elif reco_alg == "betchart":
             top, antitop = betchart(lep, antilep, b, antib, met)
