@@ -46,7 +46,8 @@ class Selection:
 class Selector:
     """Keeps track of the current event selection and data"""
 
-    def __init__(self, data, weight=None, on_update=None, applying_cuts=True):
+    def __init__(self, data, weight=None, on_update=None, applying_cuts=True,
+                 rng_seed=None):
         """Create a new Selector
 
         Arguments:
@@ -58,6 +59,9 @@ class Selector:
                      accept the keyword argument data, systematics and cut.
         applying_cuts -- bool, wether to apply cuts added with `add_cut`. If
                          False, cuts will be kept at `unapplied_cuts`
+        rng_seed -- int or tuple of ints to seed the random number generator
+                    with. If None, a random seed will be used. For defailts
+                    see the parameter of numpy.random.default_rng().
         """
         self.data = data
         if hasattr(self.data, "metadata"):
@@ -78,6 +82,8 @@ class Selector:
         self.unapplied_cuts = Selection()
         self.cut_systematic_map = defaultdict(list)
         self.done_steps = set()
+
+        self.rng = np.random.default_rng(rng_seed)
 
         self._applying_cuts = True
         self.add_cut("Before cuts", np.full(self.num, True))

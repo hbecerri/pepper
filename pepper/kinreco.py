@@ -124,7 +124,7 @@ def _from_regular(array, axis=1, highlevel=True):
 @chunked_calls("lep", 10000, True)
 def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
                  mat=172.5, num_smear=None, energyfl=None, energyfj=None,
-                 alphal=None, alphaj=None, hist_mlb=None, seed=None):
+                 alphal=None, alphaj=None, hist_mlb=None, rng=None):
     """Full kinematic reconstruction for dileptonic ttbar using Sonnenschein's
     method https://arxiv.org/pdf/hep-ph/0603011.pdf
     Arguments:
@@ -149,11 +149,11 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     alphaj -- Same as alphal for bottom quarks
     hist_mlb -- uproot histogram of the lepton-bottom-quark-mass distribution.
                 Is needed, if num_smear is not None
-    seed -- Seed in the random number generator. If None, a random seed will be
-            used. For defailts see the parameter of numpy.random.default_rng().
+    rng -- A numpy.random.BitGenerator, if None a new one will be used
     """
 
-    rng = np.random.default_rng(seed)
+    if rng is None:
+        rng = np.random.default_rng()
 
     if lep.ndim > 1:
         # Get rid of jagged dimension, as we have one particle per row and

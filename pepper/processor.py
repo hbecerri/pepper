@@ -1,5 +1,6 @@
 import os
 from functools import partial
+import numpy as np
 import awkward as ak
 import coffea
 from coffea.nanoevents import NanoAODSchema
@@ -9,6 +10,7 @@ import logging
 from copy import copy
 from time import time
 import abc
+import uuid
 
 import pepper
 from pepper import Selector, OutputFiller, HDF5File
@@ -44,6 +46,8 @@ class Processor(coffea.processor.ProcessorABC):
             self.eventdir = None
         self.hists = self._get_hists_from_config(
             self.config, "hists", "hists_to_do")
+
+        self.rng_seed = self._load_rng_seed()
 
         # Construct a dict of datasets for which we are not processing the
         # relevant dedicated systematic datasets, and so the nominal histograms
@@ -89,6 +93,24 @@ class Processor(coffea.processor.ProcessorABC):
             logger.info("Doing only the histograms: " +
                         ", ".join(hists.keys()))
         return hists
+
+    def _load_rng_seed(self):
+        seed_file = self.config["rng_seed_file"]
+        if (seed_file is not None and os.path.exists(seed_file)):
+            with open(seed_file) as f:
+                try:
+                    seed = int(f.read())
+                except ValueError as e:
+                    raise pepper.config.ConfigError(
+                        f"Not an int in rng_seed_file '{seed_file}'")\
+                        from e
+                return seed
+        else:
+            rng_seed = np.random.SeedSequence().entropy
+            if seed_file is not None:
+                with open(seed_file, "w") as f:
+                    f.write(str(rng_seed))
+            return rng_seed
 
     @property
     def accumulator(self):
@@ -247,7 +269,11 @@ class Processor(coffea.processor.ProcessorABC):
             genweight = data["genWeight"]
         else:
             genweight = None
-        selector = Selector(data, genweight, filler.get_callbacks())
+        # Use a different seed for every chunk in a reproducable way
+        seed = (self.rng_seed, uuid.UUID(data.metadata["fileuuid"]).int,
+                data.metadata["entrystart"])
+        selector = Selector(data, genweight, filler.get_callbacks(),
+                            rng_seed=seed)
         return selector
 
     @abc.abstractmethod
