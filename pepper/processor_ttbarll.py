@@ -400,55 +400,48 @@ class Processor(pepper.Processor):
         for LHA_ID, _type in self.pdf_types.items():
             if LHA_ID in pdfs.__doc__:
                 pdf_type = _type.lower()
-        if pdf_type == "hessian":
-            variations = (pdfs[:, 1:-2] - pdfs[:, 0]) / data["genWeight"]
-            if split_pdf_uncs:
-                selector.set_systematic("PDF",
-                                        *[1 + variations[:, i] for i
-                                          in range(ak.num(variations)[0])],
-                                        scheme="numeric")
-            else:
-                tot_unc = np.sqrt(ak.sum(variations ** 2, axis=1))
-                selector.set_systematic(
-                    "PDF", 1 + tot_unc, 1 - tot_unc)
-        elif pdf_type == "mc":
-            if split_pdf_uncs:
-                # Just output variations normalised by genweight - user
-                # will need to combine these for limit setting
-                selector.set_systematic("PDF",
-                                        *[pdfs[:, i] / data["genWeight"] for i
-                                          in range(1, ak.num(pdfs)[0] - 2)],
-                                        scheme="numeric")
-            else:
-                # ak.sort produce an error here. Work-around:
+        if split_pdf_uncs:
+            # Just output variations - user
+            # will need to combine these for limit setting
+            selector.set_systematic("PDF",
+                                    *[pdfs[:, i] for i
+                                      in range(1, ak.num(pdfs)[0] - 2)],
+                                    scheme="numeric")
+        else:
+            if pdf_type == "hessian":
+                eigen_vals = np.reshape(ak.to_numpy(pdfs[:, 1:-2]),
+                                        (len(pdfs), -1, 2))
+                central, eigenvals = ak.broadcast_arrays(
+                    pdfs[:, 0, None, None], eigen_vals)
+                var_up = ak.max((eigen_vals - central), axis=2)
+                var_up = ak.where(var_up > 0, var_up, 0)
+                var_up = np.sqrt(ak.sum(var_up ** 2, axis=1))
+                var_down = ak.max((central - eigen_vals), axis=2)
+                var_down = ak.where(var_down > 0, var_down, 0)
+                var_down = np.sqrt(ak.sum(var_down ** 2, axis=1))
+                selector.set_systematic("PDF", 1 + var_up, 1 - var_down)
+            elif pdf_type == "mc":
+                # ak.sort produces an error here. Work-around:
                 variations = np.sort(ak.to_numpy(pdfs[:, 1:-2]))
                 nvar = ak.num(variations)[0]
                 tot_unc = (variations[:, int(round(0.841344746*nvar))]
                            - variations[:, int(round(0.158655254*nvar))]) / 2
                 selector.set_systematic("PDF", 1 + tot_unc, 1 - tot_unc)
-        elif pdf_type == "mc_gaussian":
-            if split_pdf_uncs:
-                # Just output variations normalised by genweight - user
-                # will need to combine these for limit setting
-                selector.set_systematic("PDF",
-                                        *[pdfs[:, i] / data["genWeight"] for i
-                                          in range(1, ak.num(pdfs)[0] - 2)],
-                                        scheme="numeric")
-            else:
+            elif pdf_type == "mc_gaussian":
                 mean = ak.mean(pdfs[:, 1:-2], axis=1)
                 tot_unc = np.sqrt((ak.sum(pdfs[:, 1:-2] - mean) ** 2)
-                                  / (ak.num(pdfs)[0] - 3)) / data["genWeight"]
+                                  / (ak.num(pdfs)[0] - 3))
                 selector.set_systematic("PDF", 1 + tot_unc, 1 - tot_unc)
-        elif pdf_type is None:
-            raise pepper.config.ConfigError(
-                "PDF LHA Id not included in config. PDF docstring is: "
-                + pdfs.__doc__)
-        else:
-            raise pepper.config.ConfigError(
-                f"PDF type {pdf_type} not recognised. Valid options "
-                "are 'Hessian', 'MC' and 'MC_Gaussian'")
+            elif pdf_type is None:
+                raise pepper.config.ConfigError(
+                    "PDF LHA Id not included in config. PDF docstring is: "
+                    + pdfs.__doc__)
+            else:
+                raise pepper.config.ConfigError(
+                    f"PDF type {pdf_type} not recognised. Valid options "
+                    "are 'Hessian', 'MC' and 'MC_Gaussian'")
         # Add PDF alpha_s uncertainties
-        unc = (pdfs[:, -1] - pdfs[:, -2]) / (2 * data["genWeight"])
+        unc = (pdfs[:, -1] - pdfs[:, -2]) / 2
         selector.set_systematic("PDF_alpha_s", 1 + unc, 1 - unc)
 
     def crosssection_scale(self, dsname, data):
