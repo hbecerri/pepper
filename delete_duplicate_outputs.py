@@ -12,8 +12,7 @@ import pepper
 
 @python_app
 def process_dir(dir, delete=False):
-    import awkward
-    import h5py
+    import pepper
     import glob
     import os
     duplicate_files = []
@@ -21,9 +20,8 @@ def process_dir(dir, delete=False):
     processed_chunks = set()
     for in_file in glob.glob(os.path.join(dir, "*.hdf5")):
         try:
-            with h5py.File(in_file, "r") as f:
-                g = awkward.hdf5(f)
-                identifier = g["identifier"]
+            with pepper.HDF5File(in_file, "r") as f:
+                identifier = f["identifier"]
         except OSError:
             if delete:
                 os.remove(in_file)
