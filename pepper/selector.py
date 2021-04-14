@@ -303,8 +303,8 @@ class Selector:
         column_name -- The name of the column to set
         column -- Column data or a callable that returns it.
                   The callable that will be called with `self.data` as argument
-        all_cuts -- The column callable will be called only on events passing
-                    all cuts (including unapplied ones).
+        all_cuts -- The callable from `column` will be called only on events
+                    passing all cuts (including unapplied cuts).
         no_callback -- A bool whether not to call the callbacks, which usually
                        fill histograms etc.
         lazy -- If True, column must be a callable and the column will be
@@ -314,7 +314,7 @@ class Selector:
 
         logger.info(
             f"Setting column {column_name}" + (" lazily" if lazy else ""))
-        if all_cuts:
+        if all_cuts and not self.applying_cuts:
             data = self.final
             mask = ~ak.is_none(data)
             data = ak.flatten(self.final, axis=0)
@@ -341,13 +341,13 @@ class Selector:
         columns -- A dict of column names and data or a callable returning
                    the former. The callable will be called with `self.data`
                    as argument.
-        all_cuts -- The column callable will be called only on events passing
-                    all cuts (including unapplied ones).
+        all_cuts -- The callables from `columns` will be called only on events
+                    passing all cuts (including unapplied cuts).
         no_callback -- A bool whether not to call the callbacks, which usually
                        fill histograms etc.
         """
         if callable(columns):
-            if all_cuts:
+            if all_cuts and not self.applying_cuts:
                 data = self.final
                 mask = ~ak.is_none(data)
                 data = ak.flatten(self.final, axis=0)
