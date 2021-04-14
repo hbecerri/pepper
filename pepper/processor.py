@@ -145,7 +145,12 @@ class Processor(coffea.processor.ProcessorABC):
 
     def _prepare_saved_columns(self, selector):
         columns = {}
-        for specifier in self.config["columns_to_save"]:
+        to_save = self.config["columns_to_save"]
+        if isinstance(to_save, dict):
+            spec = to_save.items()
+        else:
+            spec = zip([None] * len(to_save), to_save)
+        for key, specifier in spec:
             datapicker = pepper.hist_defns.DataPicker(specifier)
             item = datapicker(selector.data)
             if item is None:
@@ -153,7 +158,8 @@ class Processor(coffea.processor.ProcessorABC):
                             f"present: {specifier}")
                 continue
             item = pepper.misc.akstriparray(item)
-            key = datapicker.name
+            if key is None:
+                key = datapicker.name
             if key in columns:
                 raise pepper.config.ConfigError(
                     f"Ambiguous column to save '{key}', (from {specifier})")
