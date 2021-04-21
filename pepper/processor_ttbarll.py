@@ -105,7 +105,7 @@ class Processor(pepper.Processor):
         self.trigger_order = config["dataset_trigger_order"]
         if "reco_info_file" in self.config:
             self.reco_info_filepath = self.config["reco_info_file"]
-        elif self.config["reco_algorithm"] is not None:
+        elif "reco_algorithm" in self.config:
             raise pepper.config.ConfigError(
                 "Need reco_info_file for kinematic reconstruction")
         self.mc_lumifactors = config["mc_lumifactors"]
@@ -188,7 +188,7 @@ class Processor(pepper.Processor):
             selector.add_cut(
                 "Cross section", partial(self.crosssection_scale, dsname))
 
-        if self.config["blinding_denom"] is not None:
+        if "blinding_denom" in self.config:
             selector.add_cut("Blinding", partial(self.blinding, is_mc))
         selector.add_cut("Lumi", partial(self.good_lumimask, is_mc, dsname))
 
@@ -311,8 +311,8 @@ class Processor(pepper.Processor):
         selector.add_cut("Has btag(s)", partial(self.btag_cut, is_mc))
         selector.add_cut("Req MET", self.met_requirement)
 
-        reco_alg = self.config["reco_algorithm"]
-        if reco_alg is not None:
+        if "reco_algorithm" in self.config:
+            reco_alg = self.config["reco_algorithm"]
             selector.set_column("recolepton", self.pick_leps, all_cuts=True)
             selector.set_column("recob", self.pick_bs, all_cuts=True)
             selector.set_column("recot", partial(
@@ -500,6 +500,8 @@ class Processor(pepper.Processor):
                 return weight, sys
             else:
                 return weight
+        elif self.lumimask is None:
+            return np.full(len(data), True)
         else:
             run = np.array(data["run"])
             luminosity_block = np.array(data["luminosityBlock"])
@@ -633,7 +635,9 @@ class Processor(pepper.Processor):
         return has_id
 
     def muon_iso(self, iso, muon):
-        if iso == "cut:very_loose":
+        if iso == "skip":
+            return True
+        elif iso == "cut:very_loose":
             return muon["pfIsoId"] > 0
         elif iso == "cut:loose":
             return muon["pfIsoId"] > 1
@@ -1222,14 +1226,15 @@ class Processor(pepper.Processor):
                 alphaj = f["alphaj"]
                 mlb = f["mlb"]
                 num_smear = self.config["reco_num_smear"]
-            if isinstance(self.config["reco_w_mass"], (int, float)):
-                mw = self.config["reco_w_mass"]
-            else:
-                mw = f[self.config["reco_w_mass"]]
-            if isinstance(self.config["reco_t_mass"], (int, float)):
-                mt = self.config["reco_t_mass"]
-            else:
-                mt = f[self.config["reco_t_mass"]]
+            if reco_alg == "sonnenschein":
+                if isinstance(self.config["reco_w_mass"], (int, float)):
+                    mw = self.config["reco_w_mass"]
+                else:
+                    mw = f[self.config["reco_w_mass"]]
+                if isinstance(self.config["reco_t_mass"], (int, float)):
+                    mt = self.config["reco_t_mass"]
+                else:
+                    mt = f[self.config["reco_t_mass"]]
         if reco_alg == "sonnenschein":
             top, antitop = sonnenschein(
                 lep, antilep, b, antib, met, mwp=mw, mwm=mw, mt=mt, mat=mt,

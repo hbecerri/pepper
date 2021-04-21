@@ -95,8 +95,10 @@ class Processor(coffea.processor.ProcessorABC):
         return hists
 
     def _load_rng_seed(self):
+        if "rng_seed_file" not in self.config:
+            return np.random.SeedSequence().entropy
         seed_file = self.config["rng_seed_file"]
-        if (seed_file is not None and os.path.exists(seed_file)):
+        if os.path.exists(seed_file):
             with open(seed_file) as f:
                 try:
                     seed = int(f.read())
@@ -107,9 +109,8 @@ class Processor(coffea.processor.ProcessorABC):
                 return seed
         else:
             rng_seed = np.random.SeedSequence().entropy
-            if seed_file is not None:
-                with open(seed_file, "w") as f:
-                    f.write(str(rng_seed))
+            with open(seed_file, "w") as f:
+                f.write(str(rng_seed))
             return rng_seed
 
     @property
@@ -145,7 +146,10 @@ class Processor(coffea.processor.ProcessorABC):
 
     def _prepare_saved_columns(self, selector):
         columns = {}
-        to_save = self.config["columns_to_save"]
+        if "columns_to_save" in self.config:
+            to_save = self.config["columns_to_save"]
+        else:
+            to_save = []
         if isinstance(to_save, dict):
             spec = to_save.items()
         else:
@@ -250,9 +254,9 @@ class Processor(coffea.processor.ProcessorABC):
         if dsname in self.config["dataset_for_systematics"]:
             dsname_in_hist = self.config["dataset_for_systematics"][dsname][0]
             sys_overwrite = self.config["dataset_for_systematics"][dsname][1]
-        elif ("datsets_to_group" in self.config
-              and dsname in self.config["datsets_to_group"]):
-            dsname_in_hist = self.config["datsets_to_group"][dsname]
+        elif ("datasets_to_group" in self.config
+              and dsname in self.config["datasets_to_group"]):
+            dsname_in_hist = self.config["datasets_to_group"][dsname]
             sys_overwrite = None
         else:
             dsname_in_hist = dsname

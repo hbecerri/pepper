@@ -99,7 +99,7 @@ class Config(collections.MutableMapping):
         if key in self._cache:
             return self._cache[key]
 
-        if key not in self._config:
+        if key not in self._config or self._config[key] is None:
             raise KeyError(key)
 
         if key in self.behaviors:
@@ -116,7 +116,8 @@ class Config(collections.MutableMapping):
             return self._get(key)
 
     def __contains__(self, key):
-        return key in self._config
+        return key in self._overwritten or (
+            key in self._config and self._config[key] is not None)
 
     def __setitem__(self, key, value):
         self._config[key] = value
