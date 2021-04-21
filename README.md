@@ -16,8 +16,8 @@ Pepper has been tested on and is recommended to be used with `CMSSW_11_1_0_pre5_
 The features of the framework are implemented as a Python package, which is inside the `pepper` directory. To use it, you can add the path to where you downloaded the repository to the `PYTHONPATH` variable
 
 ```sh
-git clone \<repository url\> pepper
-export PYTHONPATH=\`pwd\`/pepper:$PYTHONPATH
+git clone <repository url> pepper
+export PYTHONPATH=`pwd`/pepper:$PYTHONPATH
 ```
 
 
