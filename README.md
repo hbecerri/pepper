@@ -6,7 +6,8 @@ Currently focusing on <img src="https://latex.codecogs.com/gif.latex?\mathrm{t\b
 ## Installation
 Requires Python3 and the Python packages `coffea`, `awkward`, `parsl`, `h5py` and `hdf5plugin`
 
-> pip3 install --user coffea awkward parsl h5py hdf5plugin
+> python3 -m pip install --user --upgrade pip
+> python3 -m pip install --user coffea awkward parsl h5py hdf5plugin
 
 Pepper has been tested on and is recommended to be used with `CMSSW_11_1_0_pre5_PY3`.
 
@@ -35,4 +36,5 @@ The main directory contains numerous scripts that can be evoked:
 
 ## Configuration
 Configuration is done via JSON files. Examples can be found in the `example` directory. Additional data needed for configuration, for example scale factors and cross sections, can be found in a separate data repository here https://gitlab.cern.ch/desy-ttbarbsm-coffea/data
-After downloading it, make sure to set the config variable "datadir" to the path where the data repository was downloaded.
+After downloading it, make sure to set the configuration variable "datadir" to the path where the data repository was downloaded.
+For a detailed explanation on the configuration variables, see `config_ttbarll_documentation.md`.
