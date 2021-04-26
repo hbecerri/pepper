@@ -377,7 +377,7 @@ class Processor(pepper.Processor):
                 "MEfac", np.ones(len(data)), np.ones(len(data)))
         # Parton shower scale
         psweight = data["PSWeight"]
-        if ak.num(psweight)[0] != 1:
+        if len(psweight) > 0 and ak.num(psweight)[0] != 1:
             # NanoAOD containts one 1.0 per event in PSWeight if there are no
             # PS weights available, otherwise all counts > 1.
             selector.set_systematic("PSisr", psweight[:, 2], psweight[:, 0])
