@@ -86,22 +86,25 @@ class OutputFiller:
                 # But only if we want to compute systematics
                 if do_systematics:
                     if (cut, histname, sysname) in accumulator:
-                        hist = accumulator[(cut, histname, sysname)]
-                        if pepper.misc.hist_counts(hist) > 0:
-                            continue
-                    sys_hist = fill_func(
-                        data=data, channels=channels,
-                        dsname=self.dsname_in_hist, is_mc=self.is_mc,
-                        weight=weight)
+                        continue
+                    try:
+                        sys_hist = fill_func(
+                            data=data, channels=channels,
+                            dsname=self.dsname_in_hist, is_mc=self.is_mc,
+                            weight=weight)
+                    except pepper.hist_defns.HistFillError:
+                        continue
                     accumulator[(cut, histname, sysname)] = sys_hist
             else:
                 if (cut, histname) in accumulator:
-                    hist = accumulator[(cut, histname)]
-                    if pepper.misc.hist_counts(hist) > 0:
-                        continue
-                accumulator[(cut, histname)] = fill_func(
-                    data=data, channels=channels, dsname=self.dsname_in_hist,
-                    is_mc=self.is_mc, weight=weight)
+                    continue
+                try:
+                    accumulator[(cut, histname)] = fill_func(
+                        data=data, channels=channels,
+                        dsname=self.dsname_in_hist, is_mc=self.is_mc,
+                        weight=weight)
+                except pepper.hist_defns.HistFillError:
+                    continue
 
                 if do_systematics:
                     for syscol in ak.fields(systematics):

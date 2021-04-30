@@ -65,6 +65,10 @@ class HistDefinitionError(Exception):
     pass
 
 
+class HistFillError(ValueError):
+    pass
+
+
 class HistDefinition:
     def __init__(self, config):
         self.ylabel = "Counts"
@@ -108,6 +112,11 @@ class HistDefinition:
         """This checks for length consistency across the fill_vals,
         removes events where counts do not agree (in case of 2 dims), applies
         the given mask and flattens everything into numpy arrays"""
+        if mask is not None:
+            mask = ak.fill_none(mask, False)
+            if mask.ndim == 1:
+                # Raw numpy has better performance here
+                mask = np.asarray(mask)
         size = None
         counts = None
         jagged_example = None
@@ -126,7 +135,11 @@ class HistDefinition:
             if mask is None:
                 mask = ak.Array(np.full(size, True))
             # Make sure all fills have the same mask originating from ak.mask
-            mask = mask & ~ak.is_none(data)
+            if data.ndim == 1:
+                # Performance
+                mask = mask & ~np.asarray(ak.is_none(data))
+            else:
+                mask = mask & ~ak.is_none(data)
             # Make sure all counts agree
             if data.ndim == 2:
                 if counts is None:
@@ -141,24 +154,30 @@ class HistDefinition:
         return prepared
 
     def __call__(self, data, channels, dsname, is_mc, weight):
-        fill_vals = {name: DataPicker(method)(data)
-                     for name, method in self.bin_fills.items()}
-        cat_masks = {name: {cat: DataPicker(method)(data)
-                            for cat, method in val.items()}
-                     for name, val in self.cat_fills.items()}
-        if self.weight is not None:
-            fill_vals["weight"] = DataPicker(self.weight)(data)
-        elif weight is not None:
-            fill_vals["weight"] = weight
-        cat_present = {name: (val if any(mask is not None
-                                         for mask in val.values())
-                              else {"All": np.full(len(data), True)})
-                       for name, val in cat_masks.items()}
         axes = self.axes.copy()
+        cat_present = {}
         if channels is not None and len(channels) > 0:
             axes.append(self.channel_axis)
             cat_present["channel"] = {ch: data[ch] for ch in channels}
         hist = coffea.hist.Hist(self.ylabel, self.dataset_axis, *axes)
+
+        fill_vals = {name: DataPicker(method)(data)
+                     for name, method in self.bin_fills.items()}
+        if self.weight is not None:
+            fill_vals["weight"] = DataPicker(self.weight)(data)
+        elif weight is not None:
+            fill_vals["weight"] = weight
+        if any(val is None for val in fill_vals.values()):
+            none_keys = [k for k, v in fill_vals.items() if v is None]
+            raise HistFillError(f"No fill for axes: {', '.join(none_keys)}")
+        cat_masks = {name: {cat: DataPicker(method)(data)
+                            for cat, method in val.items()}
+                     for name, val in self.cat_fills.items()}
+
+        cat_present.update(cat_masks)
+        for name, val in cat_masks.items():
+            if any(mask is None for mask in val.values()):
+                cat_present[name] = {"All": np.full(len(data), True)}
         if len(cat_present) == 0:
             prepared = self._prepare_fills(fill_vals)
 
