@@ -119,7 +119,7 @@ class ConfigTTbarLL(pepper.Config):
                 hist = f[histname]
             dy_sf = ScaleFactors.from_hist(hist)
         else:
-            with open(self._get_path(value)) as f:
+            with open(self._get_maybe_external(value)) as f:
                 data = hjson.load(f)
             dy_sf = ScaleFactors(
                 bins=data["bins"],
