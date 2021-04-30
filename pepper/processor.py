@@ -1,5 +1,4 @@
 import os
-from functools import partial
 import numpy as np
 import awkward as ak
 import coffea
@@ -7,7 +6,6 @@ from coffea.nanoevents import NanoAODSchema
 import h5py
 import json
 import logging
-from copy import copy
 from time import time
 import abc
 import uuid
@@ -67,11 +65,6 @@ class Processor(coffea.processor.ProcessorABC):
                 self.copy_nominal[sysname].remove(replaced)
             except ValueError:
                 pass
-
-        if "randomised_parameter_scan_datasets" in config:
-            self.rps_datasets = config["randomised_parameter_scan_datasets"]
-        else:
-            self.rps_datasets = []
 
     @staticmethod
     def _check_config_integrity(config):
@@ -202,9 +195,6 @@ class Processor(coffea.processor.ProcessorABC):
         entrystop = data.metadata["entrystop"]
         logger.debug(f"Started processing {filename} from event "
                      f"{entrystart} to {entrystop - 1} for dataset {dsname}")
-        if dsname in self.rps_datasets:
-            return self.process_rps(
-                data, dsname, filename, entrystart, entrystop)
         is_mc = (dsname in self.config["mc_datasets"].keys())
 
         filler = self.setup_outputfiller(dsname, is_mc)
@@ -219,33 +209,6 @@ class Processor(coffea.processor.ProcessorABC):
         timetaken = time() - starttime
         logger.debug(f"Processing finished. Took {timetaken:.3f} s.")
         return filler.output
-
-    def process_rps(self, data, dsname, filename, entrystart, entrystop):
-        logger.debug("This is a randomised parameter signal sample- processing"
-                     " each scan point separately")
-        is_mc = (dsname in self.config["mc_datasets"].keys())
-        scanpoints = [key for key in data.columns
-                      if key.startswith("GenModel_")]
-        output = self.accumulator.identity()
-        for sp in scanpoints:
-            logger.debug(f"Processing scan point {sp}")
-            dsname = sp[9:]
-            filler = self.setup_outputfiller(dsname, is_mc)
-            selector = self.setup_selection(copy(data), dsname, is_mc, filler)
-            selector.add_cut(partial(self.pick_scan_point, sp),
-                             "Select scan point", no_callback=True)
-            self.process_selection(selector, dsname, is_mc, filler)
-            output += filler.output
-            if self.eventdir is not None:
-                logger.debug("Saving per event info")
-                self._save_per_event_info(
-                    dsname, selector, (filename, entrystart, entrystop))
-
-        logger.debug("Processing finished")
-        return output
-
-    def pick_scan_point(self, sp, data):
-        return data[sp]
 
     def setup_outputfiller(self, dsname, is_mc):
         output = self.accumulator.identity()

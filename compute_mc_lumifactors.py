@@ -51,43 +51,27 @@ if "dataset_for_systematics" in config:
     dsforsys = config["dataset_for_systematics"]
 else:
     dsforsys = {}
-if "randomised_parameter_scan_datasets" in config:
-    rps_datasets = config["randomised_parameter_scan_datasets"]
-else:
-    rps_datasets = {}
 crosssections = json.load(open(args.crosssections))
 counts = defaultdict(int)
 num_files = len(list(chain(*datasets.values())))
 i = 0
 for process_name, proc_datasets in tqdm(datasets.items(), desc="Total"):
-    if (process_name not in crosssections and process_name not in dsforsys
-            and process_name not in rps_datasets):
+    if process_name not in crosssections and process_name not in dsforsys:
         print("Could not find crosssection for {}".format(process_name))
         continue
     for path in tqdm(proc_datasets, desc="Per dataset"):
         f = uproot.open(path)
-        if process_name in rps_datasets:
-            scanpoints = [key.decode("utf-8").split("_", 1)[1]
-                          for key in f["Runs"].iterkeys()
-                          if key.decode("utf-8").startswith("genEventSumw_")]
-            for sp in scanpoints:
-                geskey = "genEventSumw_" + sp
-                lhesskey = "LHEScaleSumw_" + sp
-                lhepdfskey = "LHEPdfSumw_" + sp
-                counts = update_counts(f, counts, sp,
-                                       geskey, lhesskey, lhepdfskey)
+        if "genEventSumw_" in f["Runs"]:
+            # inconsistent naming in NanoAODv6
+            geskey = "genEventSumw_"
+            lhesskey = "LHEScaleSumw_"
+            lhepdfskey = "LHEPdfSumw_"
         else:
-            if "genEventSumw_" in f["Runs"]:
-                # inconsistent naming in NanoAODv6
-                geskey = "genEventSumw_"
-                lhesskey = "LHEScaleSumw_"
-                lhepdfskey = "LHEPdfSumw_"
-            else:
-                geskey = "genEventSumw"
-                lhesskey = "LHEScaleSumw"
-                lhepdfskey = "LHEPdfSumw"
-            counts = update_counts(f, counts, process_name,
-                                   geskey, lhesskey, lhepdfskey)
+            geskey = "genEventSumw"
+            lhesskey = "LHEScaleSumw"
+            lhepdfskey = "LHEPdfSumw"
+        counts = update_counts(f, counts, process_name,
+                               geskey, lhesskey, lhepdfskey)
         i += 1
     print("\033[F\033[F")  # Workaround for tqdm adding a new line
 print("")
