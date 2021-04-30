@@ -1,5 +1,5 @@
 import os
-import json
+import hjson
 from argparse import ArgumentParser
 from tqdm import tqdm
 from pprint import pprint
@@ -69,7 +69,7 @@ sample_dir = os.path.realpath(args.event_dir)
 
 if args.parsl_config is not None:
     with open(args.parsl_config) as f:
-        parsl_config = json.load(f)
+        parsl_config = hjson.load(f)
     parsl_config = pepper.misc.get_parsl_config(
         args.condor,
         condor_submit=parsl_config["condor_config"],

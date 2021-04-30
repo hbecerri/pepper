@@ -2,7 +2,7 @@
 
 import numpy as np
 import uproot
-import json
+import hjson
 import coffea
 from functools import partial
 
@@ -13,7 +13,7 @@ from pepper import HistDefinition
 
 
 class ConfigTTbarLL(pepper.Config):
-    def __init__(self, path_or_file, textparser=json.load, cwd="."):
+    def __init__(self, path_or_file, textparser=hjson.load, cwd="."):
         """Initialize the configuration.
 
         Arguments:
@@ -120,7 +120,7 @@ class ConfigTTbarLL(pepper.Config):
             dy_sf = ScaleFactors.from_hist(hist)
         else:
             with open(self._get_path(value)) as f:
-                data = json.load(f)
+                data = hjson.load(f)
             dy_sf = ScaleFactors(
                 bins=data["bins"],
                 factors=np.array(data["factors"]),
@@ -133,7 +133,7 @@ class ConfigTTbarLL(pepper.Config):
             return None
         if isinstance(value, str):
             with open(self._get_path(value)) as f:
-                value = json.load(f)
+                value = hjson.load(f)
         if isinstance(value, list):
             path, histnames = value
             if isinstance(histnames, str):

@@ -6,7 +6,7 @@ import importlib
 import coffea
 import shutil
 import parsl
-import json
+import hjson
 from argparse import ArgumentParser
 import logging
 
@@ -161,7 +161,7 @@ def run_processor(processor_class=None, description=None, mconly=False):
         print("Spawning jobs. This can take a while")
         if args.parsl_config is not None:
             with open(args.parsl_config) as f:
-                parsl_config = json.load(f)
+                parsl_config = hjson.load(f)
             parsl_config = pepper.misc.get_parsl_config(
                 args.condor,
                 condor_submit=parsl_config["condor_config"],

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import json
+import hjson
 import os
 import logging
 import collections
@@ -16,7 +16,7 @@ class ConfigError(RuntimeError):
 
 
 class Config(collections.MutableMapping):
-    def __init__(self, path_or_file, textparser=json.load, cwd="."):
+    def __init__(self, path_or_file, textparser=hjson.load, cwd="."):
         """Initialize the configuration.
 
         Arguments:
