@@ -46,7 +46,7 @@ def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None,
             pos_triggers.extend(paths)
     else:
         for key in trigger_order:
-            if (key == dataset or key == dataset  + "_" + era):
+            if (key == dataset or key == dataset + "_" + era):
                 break
             neg_triggers.extend(trigger_paths[key])
         else:
