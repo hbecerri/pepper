@@ -1055,7 +1055,7 @@ class Processor(pepper.Processor):
                 trigger = [pepper.misc.normalize_trigger_path(t)
                            for t in triggers[trigname + "_" + era]]
                 ret = ret | (
-                    mask & self.passing_trigger(trigger, [], data, True))
+                    mask & self.passing_trigger(trigger, [], data))
             elif trigname in triggers:
                 trigger = [pepper.misc.normalize_trigger_path(t)
                            for t in triggers[trigname]]

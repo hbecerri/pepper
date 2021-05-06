@@ -34,18 +34,19 @@ def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None,
     Returns a tuple of lists (pos_triggers, neg_triggers) describing trigger
     paths to include and to exclude respectively.
     """
+    if isinstance(trigger_order, dict):
+        if era in trigger_order.keys():
+            trigger_order = trigger_order[era]
+        else:
+            trigger_order = trigger_order["other"]
     pos_triggers = []
     neg_triggers = []
     if is_mc:
         for paths in trigger_paths.values():
             pos_triggers.extend(paths)
     else:
-        for dsname in trigger_order:
-            if era is not None and (dsname + "_" + era) in trigger_paths:
-                key = dsname + "_" + era
-            else:
-                key = dsname
-            if dsname == dataset:
+        for key in trigger_order:
+            if (key == dataset or key == dataset  + "_" + era):
                 break
             neg_triggers.extend(trigger_paths[key])
         else:
