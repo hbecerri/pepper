@@ -25,7 +25,7 @@ Alternatively, Pepper can be installed as a python package as follows:
 ```sh
 git clone <repository url> pepper
 cd pepper
-pip3 install . --user
+python3 -m pip install . --user
 ```
 Use the option `-e` to make the installed package editable.
 Now, `pepper` can be imported as any other python package from any location.
