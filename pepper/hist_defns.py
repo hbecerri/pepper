@@ -237,7 +237,28 @@ class DataPicker:
                 try:
                     data = data[sel]
                 except (ValueError, KeyError):
-                    break
+                    try:
+                        data_proc = {}
+                        counts = None
+                        can_zip = True
+                        for attr in sel:
+                            data_proc[attr] = getattr(data, attr)
+                            if (can_zip
+                                    and isinstance(data_proc[attr], ak.Array)
+                                    and data_proc[attr].ndim > 1):
+                                if counts is None:
+                                    counts = ak.num(data_proc[attr])
+                                else:
+                                    can_zip = ak.all(
+                                        counts == ak.num(data_proc[attr]))
+                            else:
+                                can_zip = False
+                        if can_zip:
+                            data = ak.zip(data_proc)
+                        else:
+                            data = ak.Array(data_proc)
+                    except AttributeError:
+                        break
             elif isinstance(sel, dict):
                 if "function" in sel:
                     data = self._pick_data_from_function(
