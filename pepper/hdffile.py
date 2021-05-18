@@ -135,3 +135,6 @@ class HDF5File(MutableMapping):
 
     def keys(self):
         return self._file.keys()
+
+    def close(self):
+        self._file.close()
