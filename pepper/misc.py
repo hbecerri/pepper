@@ -405,7 +405,7 @@ def onedimeval(func, array, tonumpy=True):
     res = func(np.asarray(flattened) if tonumpy else flattened)
     for count in reversed(counts):
         res = ak.unflatten(res, count)
-    for name, val in ak.parameters(array):
+    for name, val in ak.parameters(array).items():
         res = ak.with_parameter(res, name, val)
     res.behavior = array.behavior
     return res
