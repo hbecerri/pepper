@@ -49,6 +49,6 @@ The main directory contains numerous scripts that can be evoked:
 
 
 ## Configuration
-Configuration is done via JSON files. Examples can be found in the `example` directory. Additional data needed for configuration, for example scale factors and cross sections, can be found in a separate data repository here https://gitlab.cern.ch/desy-ttbarbsm-coffea/data
+Configuration is done via JSON files. Examples can be found in the `example` directory. Additional data needed for configuration, for example scale factors and cross sections, can be found in a separate data repository here https://gitlab.cern.ch/pepper/data
 After downloading it, make sure to set the configuration variable "datadir" to the path where the data repository was downloaded.
 For a detailed explanation on the configuration variables, see `config_ttbarll_documentation.md`.

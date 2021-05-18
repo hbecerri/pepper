@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="pepper",
     version="0.0.1",
-    url="https://gitlab.cern.ch/desy-ttbarbsm-coffea/pepper/",
+    url="https://gitlab.cern.ch/pepper/pepper/",
     description="""
 A python framework for analyzing NanoAODs.
 Easy to use and highly configurable.
