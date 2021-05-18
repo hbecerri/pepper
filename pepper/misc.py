@@ -6,9 +6,10 @@ import coffea
 import numpy as np
 import parsl
 import parsl.addresses
-from functools import wraps
+from functools import wraps, partial
 import inspect
 import gc
+from concurrent.futures import ThreadPoolExecutor
 
 
 def normalize_trigger_path(path):
@@ -329,18 +330,30 @@ cd -
     return parsl_config
 
 
-def chunked_calls(array_param, chunksize, returns_multiple=False):
+def chunked_calls(array_param, returns_multiple=False, chunksize=10000,
+                  num_threads=1):
     """A decorator that will split a function call into multiple calls on
-    smaller chunks of data. Only arguments that have the attribute shape and
-    have the same size in their first dimension as the value of the parameter
-    named by array_param will get chunked.
+    smaller chunks of data. This can be used to reduce peak memory usage or
+    to paralellzie the call.
+    Only arguments that have the attribute shape and have the same size in
+    their first dimension as the value of the parameter named by array_param
+    will get chunked.
     The return values of each call will be concatenated.
+    The resulting functions will have two additional parameters, chunksize and
+    num_threads. For a description see below.
 
     Arguments:
     array_param -- Parameter that will defninitely be a chunkable argument
-    chunksize -- Maximum chunk size to call the function on
     returns_multiple -- Needs to be set to true if the function returns more
                         than one variable, e.g. as a tuple or list
+    chunksize -- Default maximum chunk size to call the function on. The
+                 chunksize can be adjusted by using the keyword argument
+                 `chunksize` of the resulting function.
+    num_threads -- Number of simultaneous threads. Each thread processes one
+                   chunk at a time, allowing to process multiple chunks in
+                   parallel and on multiple cores. The number of threads can be
+                   adjusted by using the keyword argument `num_threads` of the
+                   resulting function.
     """
 
     def concatenate(arrays):
@@ -352,30 +365,48 @@ def chunked_calls(array_param, chunksize, returns_multiple=False):
     def decorator(func):
         sig = inspect.signature(func)
 
+        def do_work(kwargs, array_parameters, start, stop):
+            chunked_kwargs = kwargs.copy()
+            for param in array_parameters:
+                chunked_kwargs[param] = kwargs[param][start:stop]
+            return func(**chunked_kwargs)
+
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, chunksize=chunksize, num_threads=num_threads,
+                    **kwargs):
             kwargs = sig.bind(*args, **kwargs).arguments
             rows = len(kwargs[array_param])
             if rows <= chunksize:
                 # Nothing to chunk, just return whatever func returns
                 return func(**kwargs)
+            if num_threads > 1:
+                pool = ThreadPoolExecutor(max_workers=num_threads)
             array_parameters = {array_param}
             for param, arg in kwargs.items():
                 if hasattr(arg, "__len__") and len(arg) == rows:
                     array_parameters.add(param)
             starts = np.arange(0, rows, chunksize)
             stops = np.r_[starts[1:], rows]
-            ret_chunks = []
+            result_funcs = []
             for start, stop in zip(starts, stops):
-                chunked_kwargs = kwargs.copy()
-                for param in array_parameters:
-                    chunked_kwargs[param] = kwargs[param][start:stop]
-                ret_chunk = func(**chunked_kwargs)
+                if num_threads > 1:
+                    result_funcs.append(pool.submit(
+                        do_work, kwargs, array_parameters, start, stop).result)
+                else:
+                    result_funcs.append(partial(
+                        do_work, kwargs, array_parameters, start, stop))
+            ret_chunks = []
+            for result_func in result_funcs:
+                ret_chunk = result_func()
                 if ret_chunk is None:
+                    if num_threads > 1:
+                        pool.shutdown(cancel_futures=True)
                     return None
                 ret_chunks.append(ret_chunk)
                 # Force clean up of memory to keep usage low
                 gc.collect()
+            if num_threads > 1:
+                pool.shutdown()
             if len(ret_chunks) == 1:
                 concated = ret_chunks[0]
             elif returns_multiple:
