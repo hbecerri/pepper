@@ -223,7 +223,7 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     a1 = ((bE + alE) * (mwp ** 2 - mal ** 2)
           - alE * (mt ** 2 - mb ** 2 - mal ** 2) + 2 * bE * alE ** 2
           - 2 * alE * (bx * alx + by * aly + bz * alz))
-    del mt, mb
+    del mb
     a2 = 2 * (bE * alx - alE * bx)
     a3 = 2 * (bE * aly - alE * by)
     a4 = 2 * (bE * alz - alE * bz)
@@ -231,7 +231,7 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     b1 = ((abE + lE) * (mwm ** 2 - ml ** 2)
           - lE * (mat ** 2 - mab ** 2 - ml ** 2) + 2 * abE * lE ** 2
           - 2 * lE * (abx * lx + aby * ly + abz * lz))
-    del mat, mab
+    del mab
     b2 = 2 * (abE * lx - lE * abx)
     b3 = 2 * (abE * ly - lE * aby)
     b4 = 2 * (abE * lz - lE * abz)
@@ -366,6 +366,10 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     at = ak.with_name(
         ak.sum(at * weights, axis=1, keepdims=True)[has_solution],
         "LorentzVector") / sum_weights
+
+    # Top mass got changed by the averaging. Set to input mass again
+    t["t"] = np.sqrt(mt ** 2 + t.rho2)
+    at["t"] = np.sqrt(mat ** 2 + t.rho2)
 
     return t, at
 
