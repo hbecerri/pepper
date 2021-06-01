@@ -369,7 +369,7 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
 
     # Top mass got changed by the averaging. Set to input mass again
     t["t"] = np.sqrt(mt ** 2 + t.rho2)
-    at["t"] = np.sqrt(mat ** 2 + t.rho2)
+    at["t"] = np.sqrt(mat ** 2 + at.rho2)
 
     return t, at
 
