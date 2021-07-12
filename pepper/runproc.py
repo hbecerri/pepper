@@ -61,7 +61,8 @@ def run_processor(processor_class=None, description=None, mconly=False):
         "-d", "--debug", action="store_true", help="Enable debug messages and "
         "only process a small amount of files to make debugging feasible")
     parser.add_argument(
-        "-p", "--parsl_config", help="JSON file holding a dictionary with the "
+        "-p", "--parsl_config", "--condor_config",
+        help="JSON file holding a dictionary with the "
         "keys condor_init and condor_config. Former overwrites the enviroment "
         "script that is executed at the start of a Condor job. Latter is "
         "appended to the job submit file.")
