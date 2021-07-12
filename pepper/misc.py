@@ -317,7 +317,8 @@ cd -
                   "--block_id={{block_id}} "
                   "--hb_period={heartbeat_period} "
                   "{address_probe_timeout_string} "
-                  "--hb_threshold={heartbeat_threshold} ")
+                  "--hb_threshold={heartbeat_threshold} "
+                  "--cpu-affinity {cpu_affinity} ")
     parsl_executor = parsl.executors.HighThroughputExecutor(
         label="HTCondor",
         launch_cmd=launch_cmd,
