@@ -182,7 +182,10 @@ def rootimport(uproothist, enconding="utf-8"):
             name = name.decode(enconding)
         axis = coffea.hist.Bin(name, title, edges_per_axis)
         axes.append(axis)
-    title = uproothist.title
+    if hasattr(uproothist, "title"):
+        title = uproothist.title
+    else:
+        title = ""
     if isinstance(title, bytes):
         title = title.decode(enconding)
     hist = coffea.hist.Hist(title, *axes)
