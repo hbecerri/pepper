@@ -51,7 +51,7 @@ class ConfigTTbarLL(pepper.Config):
             "drellyan_sf": self._get_drellyan_sf,
             "reco_info_file": self._get_path,
             "store": self._get_path,
-            "lumimask": self._get_maybe_external,
+            "lumimask": self._get_path,
             "rng_seed_file": self._get_path,
             "trigger_sfs": self._get_trigger_sfs
         })
