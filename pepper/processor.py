@@ -9,6 +9,7 @@ import logging
 from time import time
 import abc
 import uuid
+from collections import defaultdict
 
 import pepper
 from pepper import Selector, OutputFiller, HDF5File
@@ -281,11 +282,26 @@ class Processor(coffea.processor.ProcessorABC):
             # Save histograms with a hist.json describing the hist files
             jsonname = "hists.json"
             hists_forjson = {}
+            cut_lists = [list(cutflow.keys()) for cutflow in output["cutflows"]["all"].values()]
+            cuts_precursors = defaultdict(set)
+            for cut_list in cut_lists:
+                for i, cut in enumerate(cut_list):
+                    cuts_precursors[cut].update(set(cut_list[:i]))
+            cuts = []
+            while len(cuts_precursors) > 0:
+                for cut, precursors in cuts_precursors.items():
+                    if len(precursors) == 0:
+                        cuts.append(cut)
+                        for p in cuts_precursors.values():
+                            p.discard(cut)
+                        cuts_precursors.pop(cut)
+                        break
+                else:
+                    raise ValueError("No well-defined ordering of cuts for all datasets found")
             for key, hist in hists.items():
                 if hist.values() == {}:
                     continue
-                cuts = next(iter(output["cutflows"]["all"].values())).keys()
-                cutnum = list(cuts).index(key[0])
+                cutnum = cuts.index(key[0])
                 fname = "Cut {:03} {}.coffea".format(cutnum, "_".join(key))
                 fname = fname.replace("/", "")
                 coffea.util.save(hist, os.path.join(dest, "hists", fname))
