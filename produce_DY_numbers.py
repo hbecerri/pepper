@@ -1,17 +1,11 @@
-import sys
-from collections import namedtuple
 import json
 import logging
-from argparse import ArgumentParser
 import os
-import shutil
 from functools import partial
 
 import numpy as np
-import parsl
 import awkward as ak
 import coffea
-from coffea.nanoevents import NanoAODSchema
 
 import pepper
 
@@ -107,7 +101,8 @@ class DYprocessor(pepper.ProcessorTTbarLL):
         Z_w = {"in": Z_window, "out": ~Z_window}
         btags = {"0b": (ak.sum(data["Jet"]["btagged"], axis=1) == 0),
                  "1b": (ak.sum(data["Jet"]["btagged"], axis=1) > 0)}
-        if "bin_dy_sfs" in self.config and self.config["bin_dy_sfs"] is not None:
+        if ("bin_dy_sfs" in self.config and
+                self.config["bin_dy_sfs"] is not None):
             bin_axis = pepper.hist_defns.DataPicker(self.config["bin_dy_sfs"])
             edges = self.config["dy_sf_bin_edges"]
             bins = {str(edges[i]) + "_to_" + str(edges[i+1]):
@@ -121,8 +116,9 @@ class DYprocessor(pepper.ProcessorTTbarLL):
                 for btag in btags.items():
                     if bin_axis is not None:
                         for _bin in bins.items():
-                            new_chs[ch[0] + "_" + Zw[0] + "_" + btag[0] + "_" + _bin[0]] = (
-                                ch[1] & Zw[1] & btag[1] & _bin[1])
+                            key = (ch[0] + "_" + Zw[0] + "_" + btag[0]
+                                   + "_" + _bin[0])
+                            new_chs[key] = ch[1] & Zw[1] & btag[1] & _bin[1]
                     else:
                         new_chs[ch[0] + "_" + Zw[0] + "_" + btag[0]] = (
                                 ch[1] & Zw[1] & btag[1])
@@ -135,6 +131,12 @@ class DYprocessor(pepper.ProcessorTTbarLL):
     def apply_dy_sfs(self, dsname, data):
         # Don't apply old DY SFs if these are still in config
         return np.full(len(data), True)
+
+    def save_output(self, output, dest):
+        with open(os.path.join(dest, "cutflow_errs.json"), "w") as f:
+            json.dump(output["cutflow_errs"], f, indent=4)
+        super().save_output(output, dest)
+
 
 if __name__ == "__main__":
     from pepper import runproc
