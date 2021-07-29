@@ -111,3 +111,9 @@ Data pickers are arrays, specifying to use something from the `data` array of th
 - `reco_w_mass`: Needed if `reco_algorithm` is `"Sonnenschein"`, float or string. If it is a float, its value is used as the W boson mass inside Sonnenschein. If it is a string, for example `"mw"`, the mass value is randomly drawn from the distribution defined by the histogram inside the `reco_info_file` named by the string.
 - `reco_t_mass`: Needed if `reco_algorithm` is `"Sonnenschein"`, float or string. If it is a float, its value is used as the top quark mass inside Sonnenschein. If it is a string, for example `"mt"`, the mass value is randomly drawn from the distribution defined by the histogram inside the `reco_info_file` named by the string.
 - `reco_num_smear`: Needed if `reco_algorithm` is `"Sonnenschein"`, integer determining the number of smearings inside Sonnenschein.
+
+
+## DY Scale factors
+- `fast_dy_sfs`: Optional, bool. Specifies if DYprocessor should run over just DY and observed data; not relevant for other processors.
+- `bin_dy_sfs`: Optional, data picker defining a variable in which DY SFs should be binned. Used by both DYprocessor when producing these SFs, and the standard Processor when applying them. If omitted or null, inclusive SFs will be produced.
+- `dy_sf_bin_edges`: Optional, list of ints. List of bin edges to use when producing DY SFs. must be defined if bin_dy_sfs is not null.

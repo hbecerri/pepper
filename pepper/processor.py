@@ -282,7 +282,8 @@ class Processor(coffea.processor.ProcessorABC):
             # Save histograms with a hist.json describing the hist files
             jsonname = "hists.json"
             hists_forjson = {}
-            cut_lists = [list(cutflow.keys()) for cutflow in output["cutflows"]["all"].values()]
+            cut_lists = [list(cutflow.keys()) for cutflow
+                         in output["cutflows"]["all"].values()]
             cuts_precursors = defaultdict(set)
             for cut_list in cut_lists:
                 for i, cut in enumerate(cut_list):
@@ -297,7 +298,8 @@ class Processor(coffea.processor.ProcessorABC):
                         cuts_precursors.pop(cut)
                         break
                 else:
-                    raise ValueError("No well-defined ordering of cuts for all datasets found")
+                    raise ValueError("No well-defined ordering of cuts "
+                                     "for all datasets found")
             for key, hist in hists.items():
                 if hist.values() == {}:
                     continue

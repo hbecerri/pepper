@@ -446,5 +446,6 @@
     "reco_t_mass": 172.5,
     "reco_num_smear": 100,
 
-    "hists": "$CONFDIR/hist_config.json"
+    "hists": "$CONFDIR/hist_config.json",
+    "fast_dy_sfs": true
 }
