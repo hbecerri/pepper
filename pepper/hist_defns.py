@@ -113,8 +113,8 @@ class HistDefinition:
         removes events where counts do not agree (in case of 2 dims), applies
         the given mask and flattens everything into numpy arrays"""
         if mask is not None:
-            mask = ak.fill_none(mask, False)
             if mask.ndim == 1:
+                mask = ak.fill_none(mask, False)
                 # Raw numpy has better performance here
                 mask = np.asarray(mask)
         size = None

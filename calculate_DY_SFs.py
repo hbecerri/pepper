@@ -1,9 +1,8 @@
 import numpy as np
-import coffea.util
-import json
+import hjson
 import logging
 import argparse
-from copy import copy
+import os
 
 import sympy
 
@@ -12,42 +11,48 @@ logger = logging.getLogger(__name__)
 
 
 class SFEquations():
-    def __init__(self, met_bins, config):
+    def __init__(self, config):
         self.config = config
-        self.regions = ["in_0b_", "out_0b_", "in_1b_"]
-        self.MET_bins = met_bins
+        self.regions = ["in_0b", "out_0b", "in_1b"]
+        self.bins = config["bins"]
+        if config["bins"] is None:
+            self.bins = [""]
+        else:
+            self.bins = [
+                "_" + str(config["bins"][i]) + "_" + str(config["bins"][i+1])
+                for i in range(len(config["bins"]) - 1)]
         chs = ["ee_", "em_", "mm_"]
-        self.symbols = [ch + reg + MET for ch in chs
-                        for reg in self.regions for MET in met_bins]
+        self.symbols = [ch + reg + b for ch in chs
+                        for reg in self.regions for b in self.bins]
         Nee_inc = ""
         Nmm_inc = ""
         for reg in self.regions:
-            for MET in met_bins:
-                Nee_inc += " + Nee_" + reg + MET
-                Nmm_inc += " + Nmm_" + reg + MET
+            for b in self.bins:
+                Nee_inc += " + Nee_" + reg + b
+                Nmm_inc += " + Nmm_" + reg + b
         Nee_inc = sympy.sympify(Nee_inc)
         Nmm_inc = sympy.sympify(Nmm_inc)
         kee = (Nee_inc / Nmm_inc) ** 0.5
         self.ee_SFs = {}
         self.em_SFs = {}
         self.mm_SFs = {}
-        for MET in met_bins:
-            Nee_0b_in = sympy.symbols("Nee_in_0b_" + MET)
-            Nem_0b_in = sympy.symbols("Nem_in_0b_" + MET)
-            Nmm_0b_in = sympy.symbols("Nmm_in_0b_" + MET)
-            Nee_0b_out = sympy.symbols("Nee_out_0b_" + MET)
-            Nem_0b_out = sympy.symbols("Nem_out_0b_" + MET)
-            Nmm_0b_out = sympy.symbols("Nmm_out_0b_" + MET)
-            Nee_1b_in = sympy.symbols("Nee_in_1b_" + MET)
-            Nem_1b_in = sympy.symbols("Nem_in_1b_" + MET)
-            Nmm_1b_in = sympy.symbols("Nmm_in_1b_" + MET)
+        for b in self.bins:
+            Nee_0b_in = sympy.symbols("Nee_in_0b" + b)
+            Nem_0b_in = sympy.symbols("Nem_in_0b" + b)
+            Nmm_0b_in = sympy.symbols("Nmm_in_0b" + b)
+            Nee_0b_out = sympy.symbols("Nee_out_0b" + b)
+            Nem_0b_out = sympy.symbols("Nem_out_0b" + b)
+            Nmm_0b_out = sympy.symbols("Nmm_out_0b" + b)
+            Nee_1b_in = sympy.symbols("Nee_in_1b" + b)
+            Nem_1b_in = sympy.symbols("Nem_in_1b" + b)
+            Nmm_1b_in = sympy.symbols("Nmm_in_1b" + b)
 
-            Zee_0b_in = sympy.symbols("Zee_in_0b_" + MET)
-            Zmm_0b_in = sympy.symbols("Zmm_in_0b_" + MET)
-            Zee_0b_out = sympy.symbols("Zee_out_0b_" + MET)
-            Zmm_0b_out = sympy.symbols("Zmm_out_0b_" + MET)
-            Zee_1b_in = sympy.symbols("Zee_in_1b_" + MET)
-            Zmm_1b_in = sympy.symbols("Zmm_in_1b_" + MET)
+            Zee_0b_in = sympy.symbols("Zee_in_0b" + b)
+            Zmm_0b_in = sympy.symbols("Zmm_in_0b" + b)
+            Zee_0b_out = sympy.symbols("Zee_out_0b" + b)
+            Zmm_0b_out = sympy.symbols("Zmm_out_0b" + b)
+            Zee_1b_in = sympy.symbols("Zee_in_1b" + b)
+            Zmm_1b_in = sympy.symbols("Zmm_in_1b" + b)
 
             Ree_0b_data = ((Nee_0b_in - 0.5 * kee * Nem_0b_in)
                            / (Nee_0b_out - 0.5 * kee * Nem_0b_out))
@@ -55,11 +60,11 @@ class SFEquations():
             Rmm_0b_data = ((Nmm_0b_in - 0.5 * Nem_0b_in / kee)
                            / (Nmm_0b_out - 0.5 * Nem_0b_out / kee))
             Rmm_0b_MC = Zmm_0b_in / Zmm_0b_out
-            self.ee_SFs[MET] = ((Nee_1b_in - 0.5 * kee * Nem_1b_in) / Zee_1b_in
-                                * Ree_0b_MC / Ree_0b_data)
-            self.mm_SFs[MET] = ((Nmm_1b_in - 0.5 * Nem_1b_in / kee) / Zmm_1b_in
-                                * Rmm_0b_MC / Rmm_0b_data)
-            self.em_SFs[MET] = (self.ee_SFs[MET] * self.mm_SFs[MET]) ** 0.5
+            self.ee_SFs[b] = ((Nee_1b_in - 0.5 * kee * Nem_1b_in) / Zee_1b_in
+                              * Ree_0b_MC / Ree_0b_data)
+            self.mm_SFs[b] = ((Nmm_1b_in - 0.5 * Nem_1b_in / kee) / Zmm_1b_in
+                              * Rmm_0b_MC / Rmm_0b_data)
+            self.em_SFs[b] = (self.ee_SFs[b] * self.mm_SFs[b]) ** 0.5
 
     def evaluate(self, values, cut):
         ret_vals = [[], [], []]
@@ -69,30 +74,30 @@ class SFEquations():
         subs.update({"Z" + sym: sum([values[sym][ds][cut]
                                      for ds in self.config["DY_MC"]])
                      for sym in self.symbols})
-        for MET in self.MET_bins:
+        for b in self.bins:
             ret_vals[0].append(sympy.lambdify(list(subs.keys()),
-                                              self.ee_SFs[MET])(**subs))
+                                              self.ee_SFs[b])(**subs))
             ret_vals[1].append(sympy.lambdify(list(subs.keys()),
-                                              self.em_SFs[MET])(**subs))
+                                              self.em_SFs[b])(**subs))
             ret_vals[2].append(sympy.lambdify(list(subs.keys()),
-                                              self.mm_SFs[MET])(**subs))
+                                              self.mm_SFs[b])(**subs))
         return ret_vals
 
     def calculate_errs(self):
-        self.ee_SF_errs = {MET: 0 for MET in self.MET_bins}
-        self.em_SF_errs = {MET: 0 for MET in self.MET_bins}
-        self.mm_SF_errs = {MET: 0 for MET in self.MET_bins}
+        self.ee_SF_errs = {b: 0 for b in self.bins}
+        self.em_SF_errs = {b: 0 for b in self.bins}
+        self.mm_SF_errs = {b: 0 for b in self.bins}
         err_dicts = [(self.ee_SF_errs, self.ee_SFs),
                      (self.em_SF_errs, self.em_SFs),
                      (self.mm_SF_errs, self.mm_SFs)]
-        for MET in self.MET_bins:
+        for b in self.bins:
             for err_dict, SFs in err_dicts:
                 for sym in self.symbols:
-                    err_dict[MET] += ((sympy.diff(SFs[MET], "N" + sym)) ** 2
-                                      * sympy.symbols("N" + sym+"_err"))
-                    err_dict[MET] += ((sympy.diff(SFs[MET], "Z" + sym)) ** 2
-                                      * sympy.symbols("Z" + sym+"_err"))
-                err_dict[MET] = err_dict[MET] ** 0.5
+                    err_dict[b] += ((sympy.diff(SFs[b], "N" + sym)) ** 2
+                                    * sympy.symbols("N" + sym+"_err"))
+                    err_dict[b] += ((sympy.diff(SFs[b], "Z" + sym)) ** 2
+                                    * sympy.symbols("Z" + sym+"_err"))
+                err_dict[b] = err_dict[b] ** 0.5
 
     def evaluate_errs(self, values, errs, cut):
         ret_vals = [[], [], []]
@@ -108,38 +113,14 @@ class SFEquations():
         subs.update({"Z" + sym + "_err":
                      sum([errs[sym][ds][cut] for ds in self.config["DY_MC"]])
                      for sym in self.symbols})
-        for MET in self.MET_bins:
+        for b in self.bins:
             ret_vals[0].append(sympy.lambdify(
-                list(subs.keys()), self.ee_SF_errs[MET])(**subs))
+                list(subs.keys()), self.ee_SF_errs[b])(**subs))
             ret_vals[1].append(sympy.lambdify(
-                list(subs.keys()), self.em_SF_errs[MET])(**subs))
+                list(subs.keys()), self.em_SF_errs[b])(**subs))
             ret_vals[2].append(sympy.lambdify(
-                list(subs.keys()), self.mm_SF_errs[MET])(**subs))
+                list(subs.keys()), self.mm_SF_errs[b])(**subs))
         return ret_vals
-
-
-def rebin_met(cutflows, rebin_dict):
-    cutflow = cutflows["cutflow"]
-    errors = cutflows["errs"]
-    met_bins = [k[9:] for k in cutflow if k.startswith("ee_in_0b_")]
-    if rebin_dict == "Inclusive":
-        rebin_dict = {"Inclusive": copy(met_bins)}
-    regions = ["in_0b_", "out_0b_", "in_1b_"]
-    chs = ["ee_", "em_", "mm_"]
-    for new_bin, old_bins in rebin_dict.items():
-        for old_bin in old_bins:
-            if old_bin not in met_bins:
-                raise ValueError(f"Bin {old_bin} not present in met_bins: "
-                                 f"{met_bins}")
-            met_bins.remove(old_bin)
-        met_bins.append(new_bin)
-        for ch in chs:
-            for reg in regions:
-                cutflow[ch+reg+new_bin] = sum(
-                    [cutflow[ch+reg+old_bin] for old_bin in old_bins], {})
-                errors[ch+reg+new_bin] = sum(
-                    [errors[ch+reg+old_bin] for old_bin in old_bins], {})
-    return met_bins, cutflow, errors
 
 
 class MultiInputOptArg(argparse.Action):
@@ -155,11 +136,10 @@ parser = argparse.ArgumentParser(description="Calculate DY scale factors from "
 parser.add_argument(
     "config", help="Path to a config containing labels for which datsets "
     "correspond to DY, and which to data, as well as information about the "
-    "binning to use, which should be either 'Inclusive' or a dict with bins "
-    "(with names in the format <lower_lim>_to_<upper_lim> as keys, and lists "
-    "of the corresponding MET bins as values")
-parser.add_argument("cutflow", help="Path to a cutflow containing the numbers "
-                    "required to calculate the SFs")
+    "binning to use, which can be either 'null' or a list of the bin edges")
+parser.add_argument("cutflows", help="Path to a output directory from "
+                    "produce_DY_numbers.py, containing the cutflows for "
+                    "this calculation")
 parser.add_argument("output", help="Path to the output file")
 parser.add_argument(
     "-c", "--cutname", default="Jet pt req", help="Cut for which scale "
@@ -173,19 +153,20 @@ parser.add_argument(
 args = parser.parse_args()
 
 with open(args.config, "r") as f:
-    config = json.load(f)
-cutflows = coffea.util.load(args.cutflow)
-met_bins, cutflow, errors = rebin_met(cutflows, config["rebin"])
+    config = hjson.load(f)
+with open(os.path.join(args.cutflows, "cutflows.json"), "r") as f:
+    cutflow = hjson.load(f)
+with open(os.path.join(args.cutflows, "cutflow_errs.json"), "r") as f:
+    errors = hjson.load(f)
 
-if config["rebin"] == "Inclusive":
+if config["bins"] is None:
     bins = {"channel": [0, 1, 2, 3]}
 else:
-    met_edges = [int(k.split("_")[0]) for k in config["rebin"].keys()]
-    met_edges.append(10000)
-    bins = {"met": met_edges, "channel": [0, 1, 2, 3]}
+    bin_edges = [int(k.split("_")[0]) for k in config["rebin"].keys()]
+    bins = {"axis": config["bins"], "channel": [0, 1, 2, 3]}
 out_dict = {"bins": bins}
 
-sf_eq = SFEquations(met_bins, config)
+sf_eq = SFEquations(config)
 sfs = sf_eq.evaluate(cutflow, args.cutname)
 sf_eq.calculate_errs()
 stat_errs = sf_eq.evaluate_errs(cutflow, errors, args.cutname)
@@ -195,8 +176,7 @@ if args.variation:
         raise ValueError("Too many arguments supplied to variation (max 2)")
     elif len(args.variation) == 2:
         with open(args.variation[0], "r") as f:
-            var_cutflows = json.load(f)
-        _, var_cutflow, _ = rebin_met(var_cutflows, config["rebin"])
+            var_cutflow = hjson.load(f)
         cutname = args.variation[1]
     else:
         var_cutflow = cutflow
@@ -218,10 +198,10 @@ out_dict["factors_down"] = [
     [sfs[ch_i][met_i] - tot_errs[ch_i][met_i]
      for met_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
 
-if config["rebin"] == "Inclusive":
+if config["bins"] is None:
     out_dict["factors"] = [sf[0] for sf in out_dict["factors"]]
     out_dict["factors_up"] = [sf[0] for sf in out_dict["factors_up"]]
     out_dict["factors_down"] = [sf[0] for sf in out_dict["factors_down"]]
 
 with open(args.output, "w+") as f:
-    json.dump(out_dict, f, indent=4)
+    hjson.dump(out_dict, f, indent=4)

@@ -1003,12 +1003,17 @@ class Processor(pepper.Processor):
     def apply_dy_sfs(self, dsname, data):
         if dsname.startswith("DY"):
             channel = ak.where(data["is_ee"], 0, ak.where(data["is_em"], 1, 2))
-            met = data["MET"].pt
-            central = self.drellyan_sf(channel=channel, met=met)
+            if ("bin_dy_sfs" in self.config and
+                    self.config["bin_dy_sfs"] is not None):
+                params = {
+                    "channel": channel, "axis":
+                    pepper.hist_defns.DataPicker(self.config["bin_dy_sfs"])}
+            else:
+                params = {"channel": channel}
+            central = self.drellyan_sf(**params)
             if self.config["compute_systematics"]:
-                up = self.drellyan_sf(channel=channel, met=met, variation="up")
-                down = self.drellyan_sf(
-                    channel=channel, met=met, variation="down")
+                up = self.drellyan_sf(**params, variation="up")
+                down = self.drellyan_sf(**params, variation="down")
                 return central, {"DYsf": (up / central, down / central)}
             return central
         elif self.config["compute_systematics"]:
