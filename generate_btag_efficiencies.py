@@ -57,8 +57,8 @@ class HistCollection(dict):
 
 parser = ArgumentParser(
     description="Generate a ROOT file containing efficiency histograms needed "
-    "for computing b-tagging scale factors. This retuires a specific "
-    "histogram to have been computed. See the btageff histogram in "
+    "for computing b-tagging scale factors. This requires a specific "
+    "histogram to have been computed, see the btageff histogram in "
     "example/hist_config.json")
 parser.add_argument("histsfile", help="A JSON file specifying the histograms, "
                                       "e.g. 'hists.json'")
