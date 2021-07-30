@@ -72,7 +72,8 @@ class ConfigTTbarLL(pepper.Config):
     @staticmethod
     def _get_year(value):
         year = str(value)
-        if year not in ("2016", "2017", "2018"):
+        if year not in ("2016", "2017", "2018", "ul2016pre", "ul2016post",
+                        "ul2017", "ul2018"):
             raise pepper.config.ConfigError("Invalid year {}".format(year))
         return year
 

@@ -196,7 +196,8 @@ class Processor(pepper.Processor):
             dsname, is_mc, self.trigger_paths, self.trigger_order, era=era)
         selector.add_cut("Trigger", partial(
             self.passing_trigger, pos_triggers, neg_triggers))
-        if (self.config["year"] == "2016" or self.config["year"] == "2017"):
+        if self.config["year"] in ("2016", "2017", "ul2016pre", "ul2016post",
+                                   "ul2017"):
             selector.add_cut("L1 prefiring", self.add_l1_prefiring_weights)
 
         selector.add_cut("MET filters", partial(self.met_filters, is_mc))
@@ -490,11 +491,11 @@ class Processor(pepper.Processor):
             else:
                 weight = np.ones(len(data))
             if self.config["compute_systematics"]:
-                if (self.config["year"] == "2018"
-                        or self.config["year"] == "2016"):
+                if self.config["year"] in ("2018", "2016", "ul2018",
+                                           "ul2016pre", "ul2016post"):
                     sys["lumi"] = (np.full(len(data), 1 + 0.025),
                                    np.full(len(data), 1 - 0.025))
-                elif self.config["year"] == "2017":
+                elif self.config["year"] in ("2017", "ul2017"):
                     sys["lumi"] = (np.full(len(data), 1 + 0.023),
                                    np.full(len(data), 1 - 0.023))
                 return weight, sys
@@ -564,6 +565,12 @@ class Processor(pepper.Processor):
         if year in ("2018", "2017"):
             passing_filters = (
                 passing_filters & data["Flag"]["ecalBadCalibFilterV2"])
+        if year in ("ul2018", "ul2017"):
+            passing_filters = (
+                passing_filters & data["Flag"]["ecalBadCalibFilter"])
+        if year in ("ul2018", "ul2017", "ul2016"):
+            passing_filters = (
+                passing_filters & data["Flag"]["eeBadScFilter"])
 
         return passing_filters
 
