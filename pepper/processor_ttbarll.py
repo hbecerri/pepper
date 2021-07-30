@@ -76,7 +76,7 @@ class Processor(pepper.Processor):
             self.btagweighters = config["btag_sf"]
         else:
             logger.warning("No btag scale factor specified")
-            self.btagweighters = None
+            self.btagweighters = []
 
         if "jet_uncertainty" in self.config:
             self._junc = self.config["jet_uncertainty"]
@@ -1143,6 +1143,8 @@ class Processor(pepper.Processor):
         """Modifies factors in the systematic table to account for differences
         in b-tag efficiencies. This is only done for variations the efficiency
         ROOT file contains a histogram with the name of the variation."""
+        if len(self.btagweighters) == 0:
+            return
         available = set.intersection(
             *(w.available_efficiencies for w in self.btagweighters))
         data = selector.data
@@ -1170,7 +1172,7 @@ class Processor(pepper.Processor):
     def btag_cut(self, is_mc, data):
         num_btagged = ak.sum(data["Jet"]["btagged"], axis=1)
         accept = np.asarray(num_btagged >= self.config["num_atleast_btagged"])
-        if is_mc and self.btagweighters is not None:
+        if is_mc and len(self.btagweighters) != 0:
             weight, systematics = self.compute_weight_btag(data[accept])
             accept = accept.astype(float)
             accept[accept.astype(bool)] *= np.asarray(weight)
