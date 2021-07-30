@@ -1,5 +1,5 @@
 import numpy as np
-import json
+import hjson
 import logging
 import argparse
 import os
@@ -153,11 +153,11 @@ parser.add_argument(
 args = parser.parse_args()
 
 with open(args.config, "r") as f:
-    config = json.load(f)
+    config = hjson.load(f)
 with open(os.path.join(args.cutflows, "cutflows.json"), "r") as f:
-    cutflow = json.load(f)
+    cutflow = hjson.load(f)
 with open(os.path.join(args.cutflows, "cutflow_errs.json"), "r") as f:
-    errors = json.load(f)
+    errors = hjson.load(f)
 
 if config["bins"] is None:
     bins = {"channel": [0, 1, 2, 3]}
@@ -176,7 +176,7 @@ if args.variation:
         raise ValueError("Too many arguments supplied to variation (max 2)")
     elif len(args.variation) == 2:
         with open(args.variation[0], "r") as f:
-            var_cutflow = json.load(f)
+            var_cutflow = hjson.load(f)
         cutname = args.variation[1]
     else:
         var_cutflow = cutflow
@@ -204,4 +204,4 @@ if config["bins"] is None:
     out_dict["factors_down"] = [sf[0] for sf in out_dict["factors_down"]]
 
 with open(args.output, "w+") as f:
-    json.dump(out_dict, f, indent=4)
+    hjson.dump(out_dict, f, indent=4)
