@@ -16,10 +16,10 @@ with warnings.catch_warnings():
 
 class Processor(pepper.ProcessorTTbarLL):
     def __init__(self, config, destdir):
-        config["reco_algorithm"] = None
+        del config["reco_algorithm"]
         if "reco_info_file" in config:
             del config["reco_info_file"]
-        config["blinding_denom"] = None
+        del config["blinding_denom"]
         config["compute_systematics"] = False
         super().__init__(config, None)
 
