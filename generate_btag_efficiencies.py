@@ -4,11 +4,11 @@ import os
 import sys
 from collections import namedtuple
 import json
-import uproot
 import coffea
 import pepper
+import uproot3
 from argparse import ArgumentParser
-from collections import Mapping
+from collections.abc import Mapping
 
 
 class HistCollection(dict):
@@ -64,8 +64,8 @@ parser.add_argument("histsfile", help="A JSON file specifying the histograms, "
                                       "e.g. 'hists.json'")
 parser.add_argument("output", help="Output ROOT file")
 parser.add_argument(
-    "--cut", default="#Jets >= 2", help="Name of the cut before the b-tag "
-                                        "requirement. (Default '#Jets >= 2')")
+    "--cut", default="Has jet(s)", help="Name of the cut before the b-tag "
+                                        "requirement. (Default 'Has jet(s)')")
 parser.add_argument(
     "--histname", default="btageff", help="Name of the b-tagging efficiency "
                                           "histogram. (Default 'btageff')")
@@ -82,7 +82,7 @@ if os.path.exists(args.output):
 with open(args.histsfile) as f:
     hists = HistCollection.from_json(f)
 
-with uproot.recreate(args.output) as f:
+with uproot3.recreate(args.output) as f:
     for key, histpath in hists[dict(cut=args.cut, hist=args.histname)].items():
         hist = hists.load(key).sum("dataset", "channel")
         eff = pepper.misc.hist_divide(
