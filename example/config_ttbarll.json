@@ -27,21 +27,25 @@
     "electron_sf": [
         [
             "$DATADIR/scale_factors/egammaEffi.txt_EGM2D_updatedAll.root",
-            "EGamma_SF2D"
+            "EGamma_SF2D",
+            ["eta", "pt"]
         ],
         [
             "$DATADIR/scale_factors/2018_ElectronMVA90.root",
-            "EGamma_SF2D"
+            "EGamma_SF2D",
+            ["eta", "pt"]
         ]
     ],
     "muon_sf": [
         [
             "$DATADIR/scale_factors/Muon2018_RunABCD_SF_ID.root",
-            "NUM_MediumID_DEN_TrackerMuons_pt_abseta"
+            "NUM_MediumID_DEN_TrackerMuons_pt_abseta",
+            ["pt", "abseta"]
         ],
         [
             "$DATADIR/scale_factors/Muon2018_RunABCD_SF_ISO.root",
-            "NUM_LooseRelIso_DEN_MediumID_pt_abseta"
+            "NUM_LooseRelIso_DEN_MediumID_pt_abseta",
+            ["pt", "abseta"]
         ]
     ],
     "btag_sf": [

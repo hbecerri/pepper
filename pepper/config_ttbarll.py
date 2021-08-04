@@ -29,10 +29,8 @@ class ConfigTTbarLL(pepper.Config):
             "year": self._get_year,
             "top_pt_reweighting": self._get_top_pt_reweighting,
             "pileup_reweighting": self._get_pileup_reweighting,
-            "electron_sf": partial(
-                self._get_scalefactors, dimlabels=["eta", "pt"]),
-            "muon_sf": partial(
-                self._get_scalefactors, dimlabels=["pt", "abseta"]),
+            "electron_sf": self._get_scalefactors,
+            "muon_sf": self._get_scalefactors,
             "btag_sf": self._get_btag_sf,
             "jet_correction": self._get_jet_correction,
             "jet_uncertainty": partial(
@@ -56,7 +54,7 @@ class ConfigTTbarLL(pepper.Config):
             "trigger_sfs": self._get_trigger_sfs
         })
 
-    def _get_scalefactors(self, value, dimlabels):
+    def _get_scalefactors(self, value):
         sfs = []
         for sfpath in value:
             if not isinstance(sfpath, list) or len(sfpath) < 2:
@@ -65,7 +63,7 @@ class ConfigTTbarLL(pepper.Config):
                     "form of [rootfile, histname]")
             with uproot.open(self._get_path(sfpath[0])) as f:
                 hist = f[sfpath[1]]
-            sf = ScaleFactors.from_hist(hist, dimlabels)
+            sf = ScaleFactors.from_hist(hist, sfpath[2])
             sfs.append(sf)
         return sfs
 
