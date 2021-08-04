@@ -9,8 +9,10 @@ import parsl
 import hjson
 from argparse import ArgumentParser
 import logging
+from datetime import datetime
 
 import pepper
+import pepper.executor
 
 
 def run_processor(processor_class=None, description=None, mconly=False):
@@ -66,6 +68,17 @@ def run_processor(processor_class=None, description=None, mconly=False):
         "keys condor_init and condor_config. Former overwrites the enviroment "
         "script that is executed at the start of a Condor job. Latter is "
         "appended to the job submit file.")
+    parser.add_argument(
+        "--metadata", help="File to cache metadata in. This allows speeding "
+        "up or skipping the preprocessing step. Default is "
+        "'pepper_metadata.coffea'", default="pepper_metadata.coffea")
+    parser.add_argument(
+        "--statedata", help="File to write and load processing state to/from. "
+        "This allows resuming the processor after an interruption that made "
+        "the process quit. States produced from different configurations "
+        "should not be loaded, as this can lead to bogus results. Default is "
+        "'pepper_state.coffea'", default="pepper_state.coffea"
+    )
     args = parser.parse_args()
 
     logger = logging.getLogger("pepper")
@@ -149,13 +162,28 @@ def run_processor(processor_class=None, description=None, mconly=False):
     # Create histdir and in case of errors, raise them now (before processing)
     os.makedirs(args.output, exist_ok=True)
 
+    if os.path.realpath(args.metadata) == os.path.realpath(args.statedata):
+        print("--metadata and --statedate can not be the same")
+        sys.exit(1)
+    if os.path.exists(args.statedata) and os.path.getsize(args.statedata) > 0:
+        mtime = datetime.fromtimestamp(os.stat(args.statedata).st_mtime)
+        while True:
+            answer = input(
+                f"Found old processor state from {mtime}. Load? y/n ")
+            if answer == "n":
+                print(f"Please delete the old file {args.statedata}")
+                sys.exit(1)
+            elif answer == "y":
+                break
+
     processor = Processor(config, args.eventdir)
     datasets = processor.preprocess(datasets)
     executor_args = {
         "schema": processor.schema_class,
         "align_clusters": not args.force_chunksize}
     if args.condor is not None:
-        executor = coffea.processor.parsl_executor
+        pre_executor = pepper.executor.ParslExecutor(args.metadata)
+        executor = pepper.executor.ParslExecutor(args.statedata, True)
         # Load parsl config immediately instead of putting it into
         # executor_args to be able to use the same jobs for preprocessing and
         # processing
@@ -173,12 +201,30 @@ def run_processor(processor_class=None, description=None, mconly=False):
         parsl.load(parsl_config)
     else:
         if args.parsl_config is not None:
-            print("Ignoring parsl_config because condor is not specified")
-        executor = coffea.processor.iterative_executor
+            print("Ignoring parsl_config because --condor is not specified")
+        pre_executor = pepper.executor.IterativeExecutor(args.metadata)
+        executor = pepper.executor.IterativeExecutor(args.statedata)
+
+    try:
+        pre_executor.load_state()
+    except (FileNotFoundError, EOFError):
+        pass
+    try:
+        executor.load_state()
+    except (FileNotFoundError, EOFError):
+        pass
+    userdata = executor.state["userdata"]
+    if "chunksize" in userdata:
+        if userdata["chunksize"] != args.chunksize:
+            print(
+                f"'{args.statedata}' got different chunksize: "
+                f"{userdata['chunksize']}. Delete it or change --chunksize")
+            sys.exit(1)
+    userdata["chunksize"] = args.chunksize
 
     output = coffea.processor.run_uproot_job(
         datasets, "Events", processor, executor, executor_args,
-        chunksize=args.chunksize)
+        pre_executor=pre_executor, chunksize=args.chunksize)
     processor.save_output(output, args.output)
 
     return output
