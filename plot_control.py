@@ -20,6 +20,10 @@ LUMIS = {
     "2016": "35.9",
     "2017": "41.5",
     "2018": "59.7",
+    "ul2016pre": "19.5",
+    "ul2016post": "16.8",
+    "ul2017": "41.5",
+    "ul2018": "59.9",
 }
 
 
@@ -123,8 +127,9 @@ def plot(data_hist, pred_hist, sys, namebase, colors={}, log=False,
     ax2.set_ylim(0.75, 1.25)
     fig.subplots_adjust(hspace=0)
     if cmsyear is not None:
+        year = "".join(c for c in cmsyear if c.isdigit())
         ax1 = hep.cms.label(
-            ax=ax1, llabel="Work in progress", year=cmsyear,
+            ax=ax1, llabel="Work in progress", year=year,
             lumi=LUMIS[cmsyear])
     if log:
         ax1.autoscale(axis="y")
