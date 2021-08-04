@@ -162,7 +162,7 @@ class Processor(pepper.ProcessorTTbarLL):
                        weight=np.repeat(weight, rep))
         rep = ak.fill_none(ak.num(energyf[~ak.is_none(energyf)]), 0)
         energyfhist.fill(energyf=ak.flatten(energyf, axis=None),
-                         weight=np.repeat(weight, ak.num(energyf)))
+                         weight=np.repeat(weight, rep))
 
     def fill_after_selection(self, data, sys, output):
         weight = np.asarray(ak.flatten(sys["weight"], axis=None))
