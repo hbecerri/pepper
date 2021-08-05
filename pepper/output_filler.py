@@ -48,6 +48,8 @@ class OutputFiller:
             weight = systematics["weight"]
         else:
             weight = ak.Array(np.ones(len(data)))
+            if hasattr(data.layout, "bytemask"):
+                weight = weight.mask[~ak.is_none(data)]
         if "all" not in accumulator:
             accumulator["all"] = coffea.processor.defaultdict_accumulator(
                 partial(coffea.processor.defaultdict_accumulator, int))

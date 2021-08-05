@@ -19,6 +19,8 @@ class DYOutputFiller(pepper.OutputFiller):
             weight = systematics["weight"]
         else:
             weight = ak.Array(np.ones(len(data)))
+            if hasattr(data.layout, "bytemask"):
+                weight = weight.mask[~ak.is_none(data)]
         logger.info("Filling cutflow. Current event count: "
                     + str(ak.sum(weight)))
         self.fill_accumulator(self.output["cutflows"], cut, data, weight)
