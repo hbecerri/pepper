@@ -155,7 +155,6 @@ class Processor(coffea.processor.ProcessorABC):
                 logger.info("Skipping to save column because it is not "
                             f"present: {specifier}")
                 continue
-            item = pepper.misc.akstriparray(item)
             if key is None:
                 key = datapicker.name
             if key in columns:

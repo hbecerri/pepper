@@ -456,33 +456,3 @@ def akremask(array, mask):
         return ak.pad_none(array, len(mask), axis=0)
     offsets = np.cumsum(np.asarray(mask)) - 1
     return ak.mask(array[offsets], mask)
-
-
-def akstriparray(array):
-    """Make an awkward array use as little memory as possible.
-
-    This is a workaround until ak.packed in implemented"""
-    def strip_inner(array):
-        if isinstance(array.type.type, ak.types.OptionType):
-            mask = ~ak.is_none(array)
-        else:
-            mask = None
-        array = ak.flatten(array, axis=None)
-        if mask is not None:
-            array = akremask(array, mask)
-        return array
-
-    if len(ak.fields(array)) != 0:
-        values = {f: akstriparray(array[f]) for f in ak.fields(array)}
-        parameters = ak.parameters(array)
-        behavior = array.behavior
-        try:
-            res = ak.zip(values, parameters=parameters, behavior=behavior)
-        except ValueError:
-            # Can not be broadcasted, values have differing offsets
-            res = ak.Array(values, behavior=behavior)
-            for name, val in ak.parameters(array):
-                res = ak.with_parameter(res, name, val)
-    else:
-        res = onedimeval(strip_inner, array, False)
-    return res

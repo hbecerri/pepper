@@ -27,7 +27,8 @@ class CompressionWrapper:
 
 
 class HDF5File(MutableMapping):
-    def __init__(self, file, mode=None, compression=hdf5plugin.Blosc()):
+    def __init__(self, file, mode=None, compression=hdf5plugin.Blosc(),
+                 packed=True):
         """Create or open an HDF5 file storing awkward arrays
 
         Arguments:
@@ -40,6 +41,7 @@ class HDF5File(MutableMapping):
                        `h5py.Group.create_dataset` or a mapping with keys
                        `compression` and `compression_opts`. See
                        `h5py.Group.create_dataset` for details.
+        packed -- Minimize size that awkward arrays will take using ak.packed.
         """
         if isinstance(file, str):
             if mode is None:
@@ -50,6 +52,7 @@ class HDF5File(MutableMapping):
             self._should_close = False
         self._file = file
         self.compression = compression
+        self.packed = packed
 
     def __setitem__(self, key, value):
         if isinstance(value, dict):
@@ -83,6 +86,8 @@ class HDF5File(MutableMapping):
                 container = CompressionWrapper(group, self.compression)
         else:
             container = group
+        if self.packed:
+            value = ak.packed(value)
         form, length, container = ak.to_buffers(value, container=container)
         group.attrs["form"] = form.tojson()
         group.attrs["length"] = json.dumps(length)
