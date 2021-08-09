@@ -182,8 +182,7 @@ def run_processor(processor_class=None, description=None, mconly=False):
         "schema": processor.schema_class,
         "align_clusters": not args.force_chunksize}
     if args.condor is not None:
-        pre_executor = pepper.executor.ParslExecutor(args.metadata)
-        executor = pepper.executor.ParslExecutor(args.statedata, True)
+        executor_class = pepper.executor.ParslExecutor
         # Load parsl config immediately instead of putting it into
         # executor_args to be able to use the same jobs for preprocessing and
         # processing
@@ -202,8 +201,9 @@ def run_processor(processor_class=None, description=None, mconly=False):
     else:
         if args.parsl_config is not None:
             print("Ignoring parsl_config because --condor is not specified")
-        pre_executor = pepper.executor.IterativeExecutor(args.metadata)
-        executor = pepper.executor.IterativeExecutor(args.statedata)
+        executor_class = pepper.executor.IterativeExecutor
+    pre_executor = executor_class(args.metadata)
+    executor = executor_class(args.statedata)
 
     try:
         pre_executor.load_state()
