@@ -88,6 +88,7 @@ class ResumableExecutor(abc.ABC):
 
         if accumulator is not None and self.state["accumulator"] is not None:
             accumulator.add(self.state["accumulator"])
+            self.state["accumulator"] = accumulator
         elif accumulator is not None:
             self.state["accumulator"] = accumulator
         elif self.state["accumulator"] is not None:
