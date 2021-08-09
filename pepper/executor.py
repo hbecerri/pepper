@@ -122,12 +122,14 @@ class ResumableExecutor(abc.ABC):
     def save_state_generator(self, gen, items):
         nextstatebackup = time.time() + self.save_interval
         for item, result in zip(items, gen):
-            self.state["items_done"].append(item)
-            if self.state["accumulator"] is None:
-                self.state["accumulator"] = result
+            # Save state before appending item to done because result is not in
+            # accumulator yet
             if nextstatebackup <= time.time():
                 self.save_state()
                 nextstatebackup = time.time() + self.save_interval
+            self.state["items_done"].append(item)
+            if self.state["accumulator"] is None:
+                self.state["accumulator"] = result
             yield result
         self.save_state()
 
