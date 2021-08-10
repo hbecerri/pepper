@@ -127,51 +127,14 @@ class ConfigTTbarLL(pepper.Config):
         return dy_sf
 
     def _get_trigger_sfs(self, value):
-        if value is None:
-            return None
-        if isinstance(value, str):
-            with open(self._get_path(value)) as f:
-                value = hjson.load(f)
-        if isinstance(value, list):
-            path, histnames = value
-            if isinstance(histnames, str):
-                with uproot.open(self._get_path(path)) as f:
-                    hist = f[histnames]
-                return ScaleFactors.from_hist(
-                    hist, dimlabels=["lep1_pt", "lep2_pt"])
-            elif isinstance(histnames[0], str):
-                # histnames is a list of hists per channel
-                with uproot.open(self._get_path(path)) as f:
-                    hists = [f[histname] for histname in histnames]
-                return ScaleFactors.from_hist_per_bin(
-                    hists, dimlabels=["lep1_pt", "lep2_pt"],
-                    channel=[0, 1, 2, 3])
-            else:
-                # histnames is a list of lists per channel of hists dependent
-                # on the number of electrons in the barrel
-                with uproot.open(self._get_path(path)) as f:
-                    hists = [[f[histname] for histname in h]
-                             for h in histnames]
-                return ScaleFactors.from_hist_per_bin(
-                    hists, dimlabels=["lep1_pt", "lep2_pt"],
-                    channel=[0, 1, 2, 3], e_in_barrel=[0, 1, 2, 3])
-        else:
-            if "bins" in value:
-                bins = value["bins"]
-            else:
-                bins = {"channel": [0, 1, 2, 3]}
-            if "factors_up" in value:
-                factors_up = np.array(value["factors_up"])
-                factors_down = np.array(value["factors_down"])
-            elif "errors" in value:
-                factors_up = (np.array(value["factors"])
-                              + np.array(value["errors"]))
-                factors_down = (np.array(value["factors"])
-                                - np.array(value["errors"]))
-            else:
-                raise pepper.config.ConfigError(
-                    "trigger_sfs must contain one of 'factors_up' or 'errors'")
-            return ScaleFactors(factors=np.array(value["factors"]),
-                                factors_up=factors_up,
-                                factors_down=factors_down,
-                                bins=bins)
+        path, histnames = value
+        ret = {}
+        if len(histnames) != 3:
+            raise pepper.config.ConfigError(
+                "Need 3 histograms for trigger scale factors. Got "
+                f"{len(histnames)}")
+        with uproot.open(self._get_path(path)) as f:
+            for chn, histname in zip(("is_ee", "is_em", "is_mm"), histnames):
+                ret[chn] = ScaleFactors.from_hist(
+                    f[histname], dimlabels=["lep1_pt", "lep2_pt"])
+        return ret

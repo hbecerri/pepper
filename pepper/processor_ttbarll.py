@@ -992,26 +992,27 @@ class Processor(pepper.Processor):
         return met
 
     def apply_trigger_sfs(self, dsname, data):
-        leps = data["Lepton"][:, :2]
-        channel = ak.where(data["is_ee"], 0, ak.where(data["is_em"], 1, 2))
-        e_in_barrel = ak.sum((abs(leps.eta) < 1.444)
-                             & (abs(leps.pdgId) == 11), axis=1)
-        central = self.trigger_sfs(channel=channel,
-                                   e_in_barrel=e_in_barrel,
-                                   lep1_pt=leps[:, 0].pt,
-                                   lep2_pt=leps[:, 1].pt)
+        leps = data["Lepton"]
+        ones = np.ones(len(data))
+        central = ones
+        channels = ["is_ee", "is_em", "is_mm"]
+        for channel in channels:
+            sf = self.trigger_sfs[channel](lep1_pt=leps[:, 0].pt,
+                                           lep2_pt=leps[:, 1].pt)
+            central = ak.where(data[channel], sf, central)
         if self.config["compute_systematics"]:
-            up = self.trigger_sfs(channel=channel,
-                                  e_in_barrel=e_in_barrel,
-                                  lep1_pt=leps[:, 0].pt,
-                                  lep2_pt=leps[:, 1].pt,
-                                  variation="up")
-            down = self.trigger_sfs(channel=channel,
-                                    e_in_barrel=e_in_barrel,
-                                    lep1_pt=leps[:, 0].pt,
-                                    lep2_pt=leps[:, 1].pt,
-                                    variation="down")
-            return central, {"Trigger_SFs": (up / central, down / central)}
+            up = ones
+            down = ones
+            for channel in channels:
+                sf = self.trigger_sfs[channel](lep1_pt=leps[:, 0].pt,
+                                               lep2_pt=leps[:, 1].pt,
+                                               variation="up")
+                up = ak.where(data[channel], sf, up)
+                sf = self.trigger_sfs[channel](lep1_pt=leps[:, 0].pt,
+                                               lep2_pt=leps[:, 1].pt,
+                                               variation="down")
+                down = ak.where(data[channel], sf, down)
+            return central, {"triggersf": (up / central, down / central)}
         return central
 
     def apply_dy_sfs(self, dsname, data):
