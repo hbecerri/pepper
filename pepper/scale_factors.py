@@ -36,8 +36,8 @@ class ScaleFactors:
     @staticmethod
     def _setoverflow(factors, value):
         for i in range(factors.ndim):
-            factors[tuple([slice(None)] * i + [slice(0, 1)])] = 1
-            factors[tuple([slice(None)] * i + [slice(-1, None)])] = 1
+            factors[tuple([slice(None)] * i + [slice(0, 1)])] = value
+            factors[tuple([slice(None)] * i + [slice(-1, None)])] = value
 
     @classmethod
     def from_hist(cls, hist, dimlabels=None):
