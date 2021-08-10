@@ -725,27 +725,34 @@ class Processor(pepper.Processor):
         # Electron identification efficiency
         for i, sffunc in enumerate(self.electron_sf):
             sceta = eles.eta + eles.deltaEtaSC
-            central = ak.prod(sffunc(eta=sceta, pt=eles.pt), axis=1)
+            params = {}
+            for dimlabel in sffunc.dimlabels:
+                if dimlabel == "abseta":
+                    params["abseta"] = abs(sceta)
+                elif dimlabel == "eta":
+                    params["eta"] = sceta
+                else:
+                    params[dimlabel] = getattr(eles, dimlabel)
+            central = ak.prod(sffunc(**params), axis=1)
             key = "electronsf{}".format(i)
             if self.config["compute_systematics"]:
-                up = ak.prod(sffunc(
-                    eta=sceta, pt=eles.pt, variation="up"), axis=1)
-                down = ak.prod(sffunc(
-                    eta=sceta, pt=eles.pt, variation="down"), axis=1)
+                up = ak.prod(sffunc(**params, variation="up"), axis=1)
+                down = ak.prod(sffunc(**params, variation="down"), axis=1)
                 systematics[key] = (up / central, down / central)
             weight = weight * central
         # Muon identification and isolation efficiency
         for i, sffunc in enumerate(self.muon_sf):
-            central = ak.prod(
-                sffunc(abseta=abs(muons.eta), pt=muons.pt), axis=1)
+            params = {}
+            for dimlabel in sffunc.dimlabels:
+                if dimlabel == "abseta":
+                    params["abseta"] = abs(muons.eta)
+                else:
+                    params[dimlabel] = getattr(muons, dimlabel)
+            central = ak.prod(sffunc(**params), axis=1)
             key = "muonsf{}".format(i)
             if self.config["compute_systematics"]:
-                up = ak.prod(sffunc(
-                    abseta=abs(muons.eta), pt=muons.pt, variation="up"),
-                    axis=1)
-                down = ak.prod(sffunc(
-                    abseta=abs(muons.eta), pt=muons.pt, variation="down"),
-                    axis=1)
+                up = ak.prod(sffunc(**params, variation="up"), axis=1)
+                down = ak.prod(sffunc(**params, variation="down"), axis=1)
                 systematics[key] = (up / central, down / central)
             weight = weight * central
         return weight, systematics

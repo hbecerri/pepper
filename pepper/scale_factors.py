@@ -115,7 +115,7 @@ class ScaleFactors:
         elif variation == "down":
             factors = self._factors_down
 
-        binIdxs = []
+        bin_idxs = []
         counts = None
         for key, bins_for_key in self._bins.items():
             try:
@@ -130,12 +130,16 @@ class ScaleFactors:
                     counts.append(ak.num(val))
                     val = ak.flatten(val)
                 val = np.asarray(val)
-            binIdxs.append(np.digitize(val, bins_for_key) - 1)
-        ret = factors[tuple(binIdxs)]
+            bin_idxs.append(np.digitize(val, bins_for_key) - 1)
+        ret = factors[tuple(bin_idxs)]
         if counts is not None:
             for count in reversed(counts):
                 ret = ak.unflatten(ret, count)
         return ret
+
+    @property
+    def dimlabels(self):
+        return self._bins.keys()
 
 
 WpTuple = namedtuple("WpTuple", ("loose", "medium", "tight"))
