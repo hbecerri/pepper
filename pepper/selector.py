@@ -3,6 +3,7 @@ import awkward as ak
 from collections import defaultdict
 import logging
 from copy import copy
+import pepper.misc
 
 
 logger = logging.getLogger(__name__)
@@ -88,11 +89,6 @@ class Selector:
         self._applying_cuts = True
         self.add_cut("Before cuts", np.full(self.num, True))
         self._applying_cuts = applying_cuts
-
-        # Workaround for adding lazy column not working
-        self.set_column(
-            "__lazyworkaround", lambda data: np.empty(len(data)),
-            no_callback=True, lazy=True)
 
     @property
     def applying_cuts(self):
@@ -323,13 +319,19 @@ class Selector:
             mask = None
         if callable(column):
             if lazy:
-                column = ak.virtual(column, (data,), cache={},
-                                    length=len(data))
+                column = pepper.misc.VirtualArrayCopier(data).wrap_with_copy(
+                    column)
+                column = ak.virtual(column, cache={}, length=len(data))
             else:
                 column = column(data)
         if mask is not None:
             column = self._mask(column, mask)
-        self.data[column_name] = column
+        if lazy:
+            data_copier = pepper.misc.VirtualArrayCopier(self.data)
+            data_copier[column_name] = column
+            self.data = data_copier.get()
+        else:
+            self.data[column_name] = column
         self.done_steps.add("column:" + column_name)
         if not no_callback:
             self._invoke_callbacks()
@@ -377,10 +379,7 @@ class Selector:
         s = self.__class__.__new__(self.__class__)
         s.__dict__.update(self.__dict__)
         # copy(self.data) loads all fields. Workaround
-        s.data = ak.Array({})
-        for field in self.data.fields:
-            s.data[field] = self.data[field]
-        s.data.behavior = self.data.behavior
+        s.data = pepper.misc.VirtualArrayCopier(self.data).get()
         if self.systematics is not None:
             s.systematics = copy(self.systematics)
         s.cutnames = copy(self.cutnames)
