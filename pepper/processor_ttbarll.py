@@ -897,7 +897,10 @@ class Processor(pepper.Processor):
                 & (pt_min < j_pt))
 
     def build_jet_column(self, data):
-        jets = data["Jet"][self.good_jet(data)]
+        is_good_jet = self.good_jet(data)
+        jets = data["Jet"][is_good_jet]
+        if "jetfac" in ak.fields(data):
+            jets["pt"] = jets["pt"] * data["jetfac"][is_good_jet]
 
         # Evaluate b-tagging
         tagger, wp = self.config["btag"].split(":")
