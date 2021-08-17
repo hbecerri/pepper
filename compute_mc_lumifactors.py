@@ -41,17 +41,29 @@ parser.add_argument("crosssections", help="Path to the JSON file containing "
 parser.add_argument("config", help="Path to the JSON config file containing "
                                    "the MC dataset names")
 parser.add_argument("out", help="Path to the output file")
+parser.add_argument(
+    "-s", "--skip", action="store_true",
+    help="If out exists, skip the data sets that are already in the output "
+         "file")
 args = parser.parse_args()
+
+if args.skip and os.path.exists(args.out):
+    with open(args.out) as f:
+        factors = json.load(f)
+else:
+    factors = {}
 
 config = pepper.Config(args.config)
 store, datasets = config[["store", "mc_datasets"]]
-datasets = {k: v for k, v in datasets.items() if v is not None}
+datasets = {k: v for k, v in datasets.items()
+            if v is not None and k not in factors}
 datasets = pepper.datasets.expand_datasetdict(datasets, store)[0]
 if "dataset_for_systematics" in config:
     dsforsys = config["dataset_for_systematics"]
 else:
     dsforsys = {}
-crosssections = json.load(open(args.crosssections))
+with open(args.crosssections) as f:
+    crosssections = json.load(f)
 counts = defaultdict(int)
 num_files = len(list(chain(*datasets.values())))
 i = 0
@@ -75,7 +87,6 @@ for process_name, proc_datasets in tqdm(datasets.items(), desc="Total"):
         i += 1
     print("\033[F\033[F")  # Workaround for tqdm adding a new line
 print("")
-factors = {}
 for key in counts.keys():
     if key.endswith("_LHEScaleSumw") or key.endswith("_LHEPdfSumw"):
         dsname = key.rsplit("_", 1)[0]
@@ -96,16 +107,6 @@ for key in counts.keys():
                                                               xs,
                                                               counts[key],
                                                               factors[key]))
-
-if os.path.exists(args.out):
-    try:
-        with open(args.out) as f:
-            factors_old = json.load(f)
-    except json.decoder.JSONDecodeError:
-        pass
-    else:
-        factors_old.update(factors)
-        factors = factors_old
 
 with open(args.out, "w") as f:
     json.dump(factors, f, indent=4)
