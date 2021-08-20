@@ -1,5 +1,4 @@
 import os
-import sys
 from glob import glob
 import awkward as ak
 import coffea
@@ -252,7 +251,7 @@ def hist_counts(hist):
 
 def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
                      hostname=None, *, condor_submit=None, condor_init=None):
-    """Get a parsl config for a host.
+    """Get a parsl HTCondor config for a host.
 
     Arguments:
     num_jobs -- Number of jobs/processes to run in parallel
@@ -262,19 +261,18 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
                retried until it stops failing
     hostname -- hostname of the machine to submit from. If None, use current
     condor_submit -- String that gets appended to the Condor submit file
-    condor_init -- Overwrite default environment setup on Condor node. This
-                   needs to be a string containing Bash commands
+    condor_init -- String containing Shell commands to be executed by every job
+                   upon startup to setup an envrionment. If None, try to read
+                   the file pointed at by the local environment variable
+                   PEPPER_CONDOR_ENV and its contents instead. If
+                   PEPPER_CONDOR_ENV is also not set, no futher environment
+                   will be set up.
     """
     if hostname is None:
         hostname = parsl.addresses.address_by_hostname()
     if retries is None:
         # Actually parsl doesn't support infinite retries so set it very high
         retries = 1000000
-    scriptdir = os.path.realpath(sys.path[0])
-    if "PYTHONPATH" in os.environ:
-        pythonpath = os.environ["PYTHONPATH"]
-    else:
-        pythonpath = ""
     condor_config = ""
     if runtime is not None:
         if hostname.endswith(".desy.de"):
@@ -288,15 +286,9 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
         condor_config += f"RequestMemory = {memory}\n"
     if condor_submit is not None:
         condor_config += condor_submit
-    if condor_init is None:
-        condor_init = """
-source /cvmfs/cms.cern.ch/cmsset_default.sh
-cd /cvmfs/cms.cern.ch/slc7_amd64_gcc820/cms/cmssw/CMSSW_11_1_0_pre5_PY3/src
-eval `scramv1 runtime -sh`
-cd -
-"""
-        # Need to put own directory into PYTHONPATH for unpickling to work.
-        condor_init += f"export PYTHONPATH={scriptdir}:{pythonpath}\n"
+    if condor_init is None and "PEPPER_CONDOR_ENV" in os.environ:
+        with open(os.environ["PEPPER_CONDOR_ENV"]) as f:
+            condor_init = f.read()
     provider = parsl.providers.CondorProvider(
         init_blocks=min(5, num_jobs),
         max_blocks=num_jobs,

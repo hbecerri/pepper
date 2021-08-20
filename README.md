@@ -11,8 +11,6 @@ python3 -m pip install --user --upgrade pip
 python3 -m pip install --user coffea awkward parsl h5py hdf5plugin hjson
 ```
 
-Pepper has been tested on and is recommended to be used with `CMSSW_11_1_0_pre5_PY3`.
-
 The features of the framework are implemented as a Python package, which is inside the `pepper` directory. To use it, you can add the path to where you downloaded the repository to the `PYTHONPATH` variable
 
 ```sh
@@ -32,8 +30,14 @@ Now, `pepper` can be imported as any other python package from any location.
 
 
 
-## Running
-The main directory contains numerous scripts that can be evoked:
+## Usage
+In Pepper an analysis is implemented as a Processor class. A short example of such a Processor can be found in [here](example/example_processor.py). A processor can be run using 'python3 -m pepper.runproc example_processor.py'
+
+### Running on HTCondor
+In order to run on HTCondor, one only has to specify the `--condor` parameter followed by the number of jobs desired. If an environment like anaconda or CMSSW is supposed to be used on the HTCondor node, one has to create a Shell script that can be sourced setting up the environment and provide its path via the `--condorinit` parameter or set the `PEPPER_CONDOR_ENV` environment variable locally to that path.
+
+### Main scripts
+The main directory of this repository contains several optional scripts to obtain inputs and plot outputs:
 
  - `calculate_DY_SFs.py`: Calculate scale factors for DY reweighting from the output of produce_DY_numbers.py
  - `compute_kinreco_hists.py`: Generate histograms needed for top-quark kinematic reconstruction
