@@ -204,4 +204,4 @@ if config["bins"] is None:
     out_dict["factors_down"] = [sf[0] for sf in out_dict["factors_down"]]
 
 with open(args.output, "w+") as f:
-    hjson.dump(out_dict, f, indent=4)
+    hjson.dumpJSON(out_dict, f, indent=4)
