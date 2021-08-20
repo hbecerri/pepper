@@ -196,8 +196,8 @@ class Processor(pepper.Processor):
             dsname, is_mc, self.trigger_paths, self.trigger_order, era=era)
         selector.add_cut("Trigger", partial(
             self.passing_trigger, pos_triggers, neg_triggers))
-        if self.config["year"] in ("2016", "2017", "ul2016pre", "ul2016post",
-                                   "ul2017"):
+        if is_mc and self.config["year"] in ("2016", "2017", "ul2016pre",
+                                             "ul2016post", "ul2017"):
             selector.add_cut("L1 prefiring", self.add_l1_prefiring_weights)
 
         selector.add_cut("MET filters", partial(self.met_filters, is_mc))
@@ -533,11 +533,12 @@ class Processor(pepper.Processor):
         return trigger
 
     def add_l1_prefiring_weights(self, data):
-        l1_wghts = data["L1PreFiringWeight"]
+        w = data["L1PreFiringWeight"]
+        nom = w["Nom"]
         if self.config["compute_systematics"]:
-            sys = {"L1 prefiring": (l1_wghts["Up"], l1_wghts["Dn"])}
-            return l1_wghts["Nom"], sys
-        return l1_wghts["Nom"]
+            sys = {"L1 prefiring": (w["Up"] / nom, w["Dn"] / nom)}
+            return nom, sys
+        return nom
 
     def mpv_quality(self, data):
         # Does not include check for fake. Is this even needed?
