@@ -1,7 +1,7 @@
 import numpy as np
 import uproot3
-from uproot3_methods.classes.TH1 import from_numpy as TH1_from_numpy
-from uproot3_methods.classes.TH2 import from_numpy as TH2_from_numpy
+from uproot3_methods.classes.TH1 import from_numpy as th1_from_numpy
+from uproot3_methods.classes.TH2 import from_numpy as th2_from_numpy
 from argparse import ArgumentParser
 
 
@@ -17,12 +17,12 @@ class TAxis(object):
 
 def create_root_hist(hist, sumw2, edges):
     if len(edges) == 1:
-        out = TH1_from_numpy([hist, list(edges)])
+        out = th1_from_numpy([hist, list(edges)])
         sw2 = np.zeros(len(hist) + 2, dtype=sumw2.dtype)
         sw2[1:-1] = sumw2
         out._fSumw2 = (sw2).astype(">f8")
     elif len(edges) == 2:
-        out = TH2_from_numpy([hist, list(edges)])
+        out = th2_from_numpy([hist, list(edges)])
         out._fSumw2 = np.pad((sumw2).astype(">f8").T, (1, 1),
                              mode='constant').flatten()
     return out
