@@ -202,6 +202,8 @@ class Processor(pepper.Processor):
 
         selector.add_cut("MET filters", partial(self.met_filters, is_mc))
 
+        selector.add_cut("No add leps",
+                         partial(self.no_additional_leptons, is_mc))
         selector.set_column("Electron", self.pick_electrons)
         selector.set_column("Muon", self.pick_muons)
         selector.set_column("Lepton", self.build_lepton_column)
@@ -216,8 +218,6 @@ class Processor(pepper.Processor):
         selector.applying_cuts = False
 
         selector.add_cut("Opposite sign", self.opposite_sign_lepton_pair)
-        selector.add_cut("No add leps",
-                         partial(self.no_additional_leptons, is_mc))
         selector.add_cut("Chn trig match",
                          partial(self.channel_trigger_matching, era))
         if self.trigger_sfs is not None and is_mc:
