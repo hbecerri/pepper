@@ -381,7 +381,7 @@ class Processor(pepper.Processor):
         if len(psweight) > 0 and ak.num(psweight)[0] != 1:
             # NanoAOD containts one 1.0 per event in PSWeight if there are no
             # PS weights available, otherwise all counts > 1.
-            if self.confog["year"].startswith("ul"):
+            if self.config["year"].startswith("ul"):
                 # Workaround for PSWeight number changed their order in
                 # NanoAODv8, meaning non-UL is unaffected
                 selector.set_systematic(
