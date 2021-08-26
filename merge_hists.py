@@ -1,21 +1,8 @@
 import numpy as np
 import uproot3
-from uproot3_methods.classes.TH1 import Methods as TH1Methods
-from uproot3_methods.classes.TH2 import Methods as TH2Methods
-from uproot3_methods.classes.TH3 import Methods as TH3Methods
+from uproot3_methods.classes.TH1 import from_numpy as th1_from_numpy
+from uproot3_methods.classes.TH2 import from_numpy as th2_from_numpy
 from argparse import ArgumentParser
-
-
-class TH1(TH1Methods, list):
-    pass
-
-
-class TH2(TH2Methods, list):
-    pass
-
-
-class TH3(TH3Methods, list):
-    pass
 
 
 class TAxis(object):
@@ -28,28 +15,17 @@ class TAxis(object):
         self._fTitle = label
 
 
-def create_root_hist(hist, sumw2, edges, labels, name):
+def create_root_hist(hist, sumw2, edges):
     if len(edges) == 1:
-        out_hist = TH1.__new__(TH1)
-        out_hist._fXaxis = TAxis(edges[0], labels[0])
-        out_hist._classname = b"TH1D"
+        out = th1_from_numpy([hist, list(edges)])
+        sw2 = np.zeros(len(hist) + 2, dtype=sumw2.dtype)
+        sw2[1:-1] = sumw2
+        out._fSumw2 = (sw2).astype(">f8")
     elif len(edges) == 2:
-        out_hist = TH2.__new__(TH2)
-        out_hist._fXaxis = TAxis(edges[0], labels[0])
-        out_hist._fYaxis = TAxis(edges[1], labels[1])
-        out_hist._classname = b"TH2D"
-    elif len(edges) == 3:
-        out_hist = TH3.__new__(TH3)
-        out_hist._fXaxis = TAxis(edges[0], labels[0])
-        out_hist._fYaxis = TAxis(edges[1], labels[1])
-        out_hist._fZaxis = TAxis(edges[2], labels[2])
-        out_hist._classname = b"TH3D"
-
-    out_hist._fName = name
-    out_hist._fTitle = name
-    out_hist.extend((hist).astype(">f8"))
-    out_hist._fSumw2 = (sumw2).astype(">f8")
-    return out_hist
+        out = th2_from_numpy([hist, list(edges)])
+        out._fSumw2 = np.pad((sumw2).astype(">f8").T, (1, 1),
+                             mode='constant').flatten()
+    return out
 
 
 parser = ArgumentParser(
@@ -74,8 +50,8 @@ for in_hist in args.input:
     dimlabels = []
     for member in ("_fXaxis", "_fYaxis", "_fZaxis")[:len(edges)]:
         dimlabels.append(getattr(getattr(hist, member), "_fName"))
-    factors = hist.allvalues
-    sigmas = np.sqrt(hist.allvariances)
+    factors = hist.values
+    sigmas = np.sqrt(hist.variances)
     if len(edges) != len(dimlabels):
         raise ValueError("Got {} dimenions but {} labels"
                          .format(len(edges), len(dimlabels)))
@@ -94,6 +70,6 @@ for in_hist in args.input:
         sigma_num += sigmas * weight
 
 out_file = uproot3.recreate(args.out_file)
-out_file[args.name] = create_root_hist(
-    Numerator / denom, (sigma_num / denom) ** 2, edges, dimlabels, args.name)
+out_file[args.name] = create_root_hist(Numerator / denom,
+                                       (sigma_num / denom) ** 2, edges)
 out_file.close()
