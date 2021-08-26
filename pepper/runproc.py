@@ -6,7 +6,6 @@ import importlib
 import coffea
 import shutil
 import parsl
-import hjson
 from argparse import ArgumentParser
 import logging
 from datetime import datetime
@@ -63,11 +62,17 @@ def run_processor(processor_class=None, description=None, mconly=False):
         "-d", "--debug", action="store_true", help="Enable debug messages and "
         "only process a small amount of files to make debugging feasible")
     parser.add_argument(
-        "-p", "--parsl_config", "--condor_config",
-        help="JSON file holding a dictionary with the "
-        "keys condor_init and condor_config. Former overwrites the enviroment "
-        "script that is executed at the start of a Condor job. Latter is "
-        "appended to the job submit file.")
+        "-i", "--condorinit",
+        help="Shell script that will be sourced by an HTCondor job after "
+        "starting. This can be used to setup environment variables, if using "
+        "for example CMSSW. If not provided, the local content of the "
+        "environment variable PEPPER_CONDOR_ENV will be used as path to the "
+        "script instead.")
+    parser.add_argument(
+        "--condorsubmit",
+        help="Text file containing additional parameters to put into the "
+        "HTCondor job submission file that is used for condor_submit"
+    )
     parser.add_argument(
         "--metadata", help="File to cache metadata in. This allows speeding "
         "up or skipping the preprocessing step. Default is "
@@ -183,24 +188,29 @@ def run_processor(processor_class=None, description=None, mconly=False):
         "align_clusters": not args.force_chunksize}
     if args.condor is not None:
         executor_class = pepper.executor.ParslExecutor
+        if args.condorinit is not None:
+            with open(args.condorinit) as f:
+                condorinit = f.read()
+        else:
+            condorinit = None
+        if args.condorsubmit is not None:
+            with open(args.condorsubmit) as f:
+                condorsubmit = f.read()
+        else:
+            condorsubmit = None
         # Load parsl config immediately instead of putting it into
         # executor_args to be able to use the same jobs for preprocessing and
         # processing
         print("Spawning jobs. This can take a while")
-        if args.parsl_config is not None:
-            with open(args.parsl_config) as f:
-                parsl_config = hjson.load(f)
-            parsl_config = pepper.misc.get_parsl_config(
-                args.condor,
-                condor_submit=parsl_config["condor_config"],
-                condor_init=parsl_config["condor_init"])
-        else:
-            parsl_config = pepper.misc.get_parsl_config(
-                args.condor, retries=args.retries)
+        parsl_config = pepper.misc.get_parsl_config(
+            args.condor,
+            condor_submit=condorsubmit,
+            condor_init=condorinit)
         parsl.load(parsl_config)
     else:
-        if args.parsl_config is not None:
-            print("Ignoring parsl_config because --condor is not specified")
+        if args.condorinit is not None or args.condorsubmit is not None:
+            print(
+                "Ignoring condor parameters because --condor is not specified")
         executor_class = pepper.executor.IterativeExecutor
     pre_executor = executor_class(args.metadata)
     executor = executor_class(args.statedata)
