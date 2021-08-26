@@ -16,9 +16,7 @@
     "drellyan_sf": "$DATADIR/scale_factors/dy_lo_inclusive.json",
     "trigger_sfs": [
         "$DATADIR/scale_factors/TriggerSF_2018.root",
-        [["h2D_SF_ee_lepABpt_eeOut_FullError", "h2D_SF_ee_lepABpt_eeSplit_FullError", "h2D_SF_ee_lepABpt_eeIn_FullError"],
-         ["h2D_SF_emu_lepABpt_emuOut_FullError", "h2D_SF_emu_lepABpt_emuIn_FullError"],
-         ["h2D_SF_mumu_lepABpt_FullError"]]
+        ["h2D_SF_ee_lepABpt_FullError", "h2D_SF_emu_lepABpt_FullError", "h2D_SF_mumu_lepABpt_FullError"]
     ],
     "pdf_types": {
         "91400": "Hessian",
