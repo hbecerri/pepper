@@ -36,6 +36,7 @@ In Pepper an analysis is implemented as a Processor class. A short example of su
 ### Running on HTCondor
 In order to run on HTCondor using `pepper.runproc`, one only has to specify the `--condor` parameter followed by the number of jobs desired. Events will be split across jobs as evenly as possible.
 To control which environment is employed on the HTCondor node, the parameter `--condorinit` can be used. `--condorinit` should point to a Shell script that can be sourced setting up the environment. If `--condorinit` is not present, Pepper will instead use the script that is pointed at by the local environment variable `PEPPER_CONDOR_ENV`. If this is also not set, the jobs will be run in the default environment of your HTCondor system. For an example environment script setting up LCG100 on CentOS7 see [here](example/env_lcg100.sh).
+
 When running on HTCondor, the local process, that has started also the jobs, needs to be kept open until everything has finished. In order to not accidentally kill the process by an unstable connection or similar, it is recommended to run it inside a `byobu`, `tmux` or `screen` session, or to prepend the command `nohup`.
 
 ### Main scripts
