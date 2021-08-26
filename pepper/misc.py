@@ -2,6 +2,7 @@ import os
 from glob import glob
 import awkward as ak
 import coffea
+import hist as hi
 import numpy as np
 import parsl
 import parsl.addresses
@@ -69,135 +70,44 @@ def get_event_files(eventdir, eventext, datasets):
     return out
 
 
-def export(hist):
-    """Export a one, two or three dimensional `Hist` to a uproot3 histogram"""
-    d = hist.dense_dim()
-    if d > 3:
-        raise ValueError("export() only supports up to three dense dimensions")
-    if hist.sparse_dim() != 0:
-        raise ValueError("export() expects zero sparse dimensions")
+def coffeahist2hist(hist):
+    axes = []
+    cat_pos = []
+    for i, axis in enumerate(hist.axes()):
+        if isinstance(axis, coffea.hist.Cat):
+            identifiers = [idn.name for idn in axis.identifiers()]
+            axes.append(hi.axis.StrCategory(identifiers, name=axis.name,
+                                            label=axis.label))
+            cat_pos.append(i)
+        elif isinstance(axis, coffea.hist.Bin):
+            edges = axis.edges()
+            is_uniform = np.unique(np.diff(edges)).size == 1
+            if is_uniform:
+                axes.append(hi.axis.Regular(
+                    edges.size - 1, edges[0], edges[-1], name=axis.name,
+                    label=axis.label, overflow=True, underflow=True))
+            else:
+                axes.append(hi.axis.Variable(
+                    edges, name=axis.name, label=axis.label, overflow=True,
+                    underflow=True))
+        else:
+            raise ValueError(f"Axis of unknown type: {axis}")
+    ret = hi.Hist(*axes, storage=hi.storage.Weight())
+    idx = [slice(None)] * len(axes)
+    for key, (sumw, sumw2) in hist.values(
+            overflow="allnan", sumw2=True).items():
+        for i, idn in zip(cat_pos, key):
+            idx[i] = idn
+        # Sum NaN bins to overflow bins
+        for i in range(len(axes) - len(cat_pos)):
+            sumw[(np.s_[:],) * i + (-2,)] += sumw[(np.s_[:],) * i + (-1,)]
+            sumw2[(np.s_[:],) * i + (-2,)] += sumw2[(np.s_[:],) * i + (-1,)]
+        # Remove NaN bins
+        sumw = sumw[(np.s_[:-1],) * sumw.ndim]
+        sumw2 = sumw2[(np.s_[:-1],) * sumw2.ndim]
 
-    axes = hist.axes()
-
-    if d == 1:
-        from uproot3_methods.classes.TH1 import Methods
-    elif d == 2:
-        from uproot3_methods.classes.TH2 import Methods
-    else:
-        from uproot3_methods.classes.TH3 import Methods
-
-    class TH(Methods, list):
-        pass
-
-    class TAxis(object):
-        def __init__(self, fnbins, fxmin, fxmax):
-            self._fNbins = fnbins
-            self._fXmin = fxmin
-            self._fXmax = fxmax
-
-    out = TH.__new__(TH)
-    axisattrs = ["_fXaxis", "_fYaxis", "_fZaxis"][:d]
-
-    values_of = hist.values(sumw2=True, overflow="all")  # with overflow
-    values_noof = hist.values()  # no overflow
-    if len(values_of) == 0:
-        sumw_of = sumw2_of = np.zeros(tuple(axis.size - 1 for axis in axes))
-        sumw_noof = np.zeros(tuple(axis.size - 3 for axis in axes))
-    else:
-        sumw_of, sumw2_of = values_of[()]
-        sumw_noof = values_noof[()]
-    centers = []
-    for axis, axisattr in zip(axes, axisattrs):
-        edges = axis.edges(overflow="none")
-
-        taxis = TAxis(len(edges) - 1, edges[0], edges[-1])
-        taxis._fName = axis.name
-        taxis._fTitle = axis.label
-        if not axis._uniform:
-            taxis._fXbins = edges.astype(">f8")
-        setattr(out, axisattr, taxis)
-        centers.append((edges[:-1] + edges[1:]) / 2.0)
-
-    out._fEntries = out._fTsumw = out._fTsumw2 = sumw_noof.sum()
-
-    projected_x = sumw_noof.sum((1, 2)[:d - 1])
-    out._fTsumwx = (projected_x * centers[0]).sum()
-    out._fTsumwx2 = (projected_x * centers[0]**2).sum()
-    if d >= 2:
-        projected_y = sumw_noof.sum((0, 2)[:d - 1])
-        projected_xy = sumw_noof.sum((2,)[:d - 2])
-        out._fTsumwy = (projected_y * centers[1]).sum()
-        out._fTsumwy2 = (projected_y * centers[1]**2).sum()
-        out._fTsumwxy = ((projected_xy * centers[1]).sum(1) * centers[0]).sum()
-    if d == 3:
-        projected_z = sumw_noof.sum((0, 1)[:d - 1])
-        projected_xz = sumw_noof.sum((1,)[:d - 2])
-        projected_yz = sumw_noof.sum((0,)[:d - 2])
-        out._fTsumwz = (projected_z * centers[2]).sum()
-        out._fTsumwz2 = (projected_z * centers[2]**2).sum()
-        out._fTsumwxz = ((projected_xz * centers[2]).sum(1) * centers[0]).sum()
-        out._fTsumwyz = ((projected_yz * centers[2]).sum(1) * centers[1]).sum()
-
-    out._fName = "histogram"
-    out._fTitle = hist.label
-
-    if d == 1:
-        out._classname = b"TH1D"
-    elif d == 2:
-        out._classname = b"TH2D"
-    else:
-        out._classname = b"TH3D"
-    out.extend(sumw_of.astype(">f8").transpose().flatten())
-    out._fSumw2 = sumw2_of.astype(">f8").transpose().flatten()
-
-    return out
-
-
-def export_with_sparse(hist):
-    ret = {}
-    for key in hist.values().keys():
-        hist_integrated = hist
-        for sparse_axis, keypart in zip(hist.sparse_axes(), key):
-            hist_integrated = hist_integrated.integrate(sparse_axis, keypart)
-        ret[key] = export(hist_integrated)
+        ret[tuple(idx)] = np.stack([sumw, sumw2], axis=-1)
     return ret
-
-
-def rootimport(uproothist, enconding="utf-8"):
-    """The inverse of export. Takes an uproot3 histogram and converts it to a
-    coffea histogram. `encoding` is the coding with which the labels of the
-    uproot histogram are decoded."""
-    axes = []
-    edges = uproothist.edges
-    if not isinstance(edges, tuple):
-        edges = (edges,)
-    axes = []
-    attrs = ("_fXaxis", "_fYaxis", "_fZaxis")
-    for i, (attr, edges_per_axis) in enumerate(zip(attrs, edges)):
-        uprootaxis = getattr(uproothist, attr)
-        title = uprootaxis._fTitle
-        if isinstance(title, bytes):
-            title = title.decode(enconding)
-        name = uprootaxis._fName
-        if isinstance(name, bytes):
-            name = name.decode(enconding)
-        axis = coffea.hist.Bin(name, title, edges_per_axis)
-        axes.append(axis)
-    if hasattr(uproothist, "title"):
-        title = uproothist.title
-    else:
-        title = ""
-    if isinstance(title, bytes):
-        title = title.decode(enconding)
-    hist = coffea.hist.Hist(title, *axes)
-    ndim = len(edges)
-    # Add NaN bins
-    values = np.pad(uproothist.allvalues, ((0, 1),) * ndim).astype(float)
-    sumw2 = np.pad(uproothist.allvariances, ((0, 1),) * ndim).astype(float)
-
-    hist._sumw = {tuple(): values}
-    hist._sumw2 = {tuple(): sumw2}
-    return hist
 
 
 def hist_divide(num, denom):

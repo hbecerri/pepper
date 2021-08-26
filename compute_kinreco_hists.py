@@ -3,15 +3,11 @@
 import os
 import numpy as np
 import awkward as ak
+import uproot
 import coffea
 
 import pepper
-from pepper.misc import export
-
-import warnings
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import uproot3
+from pepper.misc import coffeahist2hist
 
 
 class Processor(pepper.ProcessorTTbarLL):
@@ -176,11 +172,11 @@ class Processor(pepper.ProcessorTTbarLL):
             genjet, recojet, weight, output["alphaj"], output["energyfj"])
 
     def save_output(self, output, dest):
-        with uproot3.recreate(os.path.join(dest, "kinreco.root")) as f:
+        with uproot.recreate(os.path.join(dest, "kinreco.root")) as f:
             items = ("mlb", "mw", "mt", "alphal", "energyfl", "alphaj",
                      "energyfj")
             for key in items:
-                f[key] = export(output[key])
+                f[key] = coffeahist2hist(output[key])
 
 
 if __name__ == "__main__":

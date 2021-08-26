@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import awkward as ak
+import uproot
 import coffea
 from coffea.nanoevents import NanoAODSchema
 import h5py
@@ -14,11 +15,6 @@ from collections import defaultdict
 import pepper
 from pepper import Selector, OutputFiller, HDF5File
 import pepper.config
-
-import warnings
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import uproot3
 
 
 logger = logging.getLogger(__name__)
@@ -121,20 +117,31 @@ class Processor(coffea.processor.ProcessorABC):
     def postprocess(self, accumulator):
         return accumulator
 
-    def _open_output(self, dsname):
+    def _open_output(self, dsname, filetype):
+        if filetype == "root":
+            ext = ".root"
+        elif filetype == "hdf5":
+            ext = ".h5"
+        else:
+            raise ValueError(f"Invalid filetype: {filetype}")
         dsname = dsname.replace("/", "_")
         dsdir = os.path.join(self.eventdir, dsname)
         os.makedirs(dsdir, exist_ok=True)
         i = 0
         while True:
-            filepath = os.path.join(dsdir, str(i).zfill(4) + ".hdf5")
+            filepath = os.path.join(dsdir, str(i).zfill(4) + ext)
             try:
-                f = h5py.File(filepath, "x")
+                f = open(filepath, "x")
             except (FileExistsError, OSError):
                 i += 1
                 continue
             else:
                 break
+        f.close()
+        if filetype == "root":
+            f = uproot.recreate(filepath)
+        elif filetype == "hdf5":
+            f = h5py.File(filetype, "w")
         logger.debug(f"Opened output {filepath}")
         return f
 
@@ -163,7 +170,7 @@ class Processor(coffea.processor.ProcessorABC):
             columns[key] = item
         return ak.Array(columns)
 
-    def _save_per_event_info(
+    def _save_per_event_info_hdf5(
             self, dsname, selector, identifier, save_full_sys=True):
         out_dict = {"dsname": dsname, "identifier": identifier}
         out_dict["events"] = self._prepare_saved_columns(selector)
@@ -177,8 +184,33 @@ class Processor(coffea.processor.ProcessorABC):
         elif selector.systematics is not None:
             out_dict["weight"] = ak.flatten(
                 selector.systematics["weight"], axis=0)
-        with self._open_output(dsname) as f:
+        with self._open_output(dsname, "hdf5") as f:
             outf = HDF5File(f)
+            for key in out_dict.keys():
+                outf[key] = out_dict[key]
+
+    def _save_per_event_info_root(self, dsname, selector, identifier,
+                                  save_full_sys=True):
+        out_dict = {"dsname": dsname, "identifier": str(identifier)}
+        events = self._prepare_saved_columns(selector)
+        events = {f: out_dict[f] for f in ak.fields(out_dict)}
+        additional = {}
+        cutnames, cutflags = selector.get_cuts()
+        out_dict["Cutnames"] = str(cutnames)
+        additional["cutflags"] = cutflags
+        if selector.systematics is not None:
+            additional["weight"] = selector.systematics["weight"]
+            if self.config["compute_systematics"] and save_full_sys:
+                for field in ak.fields(selector.systematics):
+                    additional[f"systematics_{field}"] = \
+                        selector.systematics[field]
+        for key in additional.keys():
+            if key in events:
+                raise RuntimeError(
+                    f"branch named '{key}' already present in Events tree")
+        events.update(additional)
+        out_dict["Events"] = events
+        with self._open_output(dsname, "root") as outf:
             for key in out_dict.keys():
                 outf[key] = out_dict[key]
 
@@ -203,8 +235,20 @@ class Processor(coffea.processor.ProcessorABC):
 
         if self.eventdir is not None:
             logger.debug("Saving per event info")
-            self._save_per_event_info(
-                dsname, selector, self.get_identifier(selector))
+            if "column_output_format" in self.config:
+                outformat = self.config["column_output_format"].lower()
+            else:
+                outformat = "root"
+            if outformat == "root":
+                self._save_per_event_info_hdf5(
+                    dsname, selector, self.get_identifier(selector))
+            elif outformat == "hdf5":
+                self._save_per_event_info_root(
+                    dsname, selector, self.get_identifier(selector))
+            else:
+                raise pepper.config.ConfigError(
+                    "Invalid value for column_output_format, must be 'root' "
+                    "or 'hdf'")
 
         timetaken = time() - starttime
         logger.debug(f"Processing finished. Took {timetaken:.3f} s.")
@@ -322,7 +366,7 @@ class Processor(coffea.processor.ProcessorABC):
                 roothists = pepper.misc.export_with_sparse(hist)
                 if len(roothists) == 0:
                     continue
-                with uproot3.recreate(os.path.join(dest, "hists", fname)) as f:
+                with uproot.recreate(os.path.join(dest, "hists", fname)) as f:
                     for key, subhist in roothists.items():
                         key = "_".join(key).replace("/", "_")
                         f[key] = subhist
