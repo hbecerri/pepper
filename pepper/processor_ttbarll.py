@@ -381,8 +381,18 @@ class Processor(pepper.Processor):
         if len(psweight) > 0 and ak.num(psweight)[0] != 1:
             # NanoAOD containts one 1.0 per event in PSWeight if there are no
             # PS weights available, otherwise all counts > 1.
-            selector.set_systematic("PSisr", psweight[:, 2], psweight[:, 0])
-            selector.set_systematic("PSfsr", psweight[:, 3], psweight[:, 1])
+            if self.config["year"].startswith("ul"):
+                # Workaround for PSWeight number changed their order in
+                # NanoAODv8, meaning non-UL is unaffected
+                selector.set_systematic(
+                    "PSisr", psweight[:, 0], psweight[:, 2])
+                selector.set_systematic(
+                    "PSfsr", psweight[:, 1], psweight[:, 3])
+            else:
+                selector.set_systematic(
+                    "PSisr", psweight[:, 2], psweight[:, 0])
+                selector.set_systematic(
+                    "PSfsr", psweight[:, 3], psweight[:, 1])
         else:
             selector.set_systematic(
                 "PSisr", np.ones(len(data)), np.ones(len(data)))
