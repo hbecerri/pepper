@@ -189,11 +189,29 @@ class Processor(coffea.processor.ProcessorABC):
             for key in out_dict.keys():
                 outf[key] = out_dict[key]
 
+    @staticmethod
+    def _separate_masks_for_root(arrays):
+        ret = {}
+        for key, array in arrays.items():
+            if (not isinstance(array, ak.Array)
+                    or not pepper.misc.akismasked(array)):
+                ret[key] = array
+                continue
+            if array.ndim > 2:
+                raise ValueError(
+                    f"Array '{key}' as too many dimensions for ROOT output")
+            if "mask" + key in arrays:
+                raise RuntimeError(f"Output named 'mask{key}' already present "
+                                   "but need this key for storing the mask")
+            ret["mask" + key] = ~ak.is_none(array)
+            ret[key] = ak.fill_none(array, 0)
+        return ret
+
     def _save_per_event_info_root(self, dsname, selector, identifier,
                                   save_full_sys=True):
         out_dict = {"dsname": dsname, "identifier": str(identifier)}
         events = self._prepare_saved_columns(selector)
-        events = {f: out_dict[f] for f in ak.fields(out_dict)}
+        events = {f: events[f] for f in ak.fields(events)}
         additional = {}
         cutnames, cutflags = selector.get_cuts()
         out_dict["Cutnames"] = str(cutnames)
@@ -204,15 +222,35 @@ class Processor(coffea.processor.ProcessorABC):
                 for field in ak.fields(selector.systematics):
                     additional[f"systematics_{field}"] = \
                         selector.systematics[field]
+
         for key in additional.keys():
             if key in events:
                 raise RuntimeError(
                     f"branch named '{key}' already present in Events tree")
         events.update(additional)
+        events = self._separate_masks_for_root(events)
         out_dict["Events"] = events
         with self._open_output(dsname, "root") as outf:
             for key in out_dict.keys():
                 outf[key] = out_dict[key]
+
+    def save_per_event_info(self, dsname, selector, save_full_sys=True):
+        idn = self.get_identifier(selector)
+        logger.debug("Saving per event info")
+        if "column_output_format" in self.config:
+            outformat = self.config["column_output_format"].lower()
+        else:
+            outformat = "root"
+        if outformat == "root":
+            self._save_per_event_info_root(
+                dsname, selector, idn, save_full_sys)
+        elif outformat == "hdf5":
+            self._save_per_event_info_hdf5(
+                dsname, selector, idn, save_full_sys)
+        else:
+            raise pepper.config.ConfigError(
+                "Invalid value for column_output_format, must be 'root' "
+                "or 'hdf'")
 
     @staticmethod
     def get_identifier(data):
@@ -234,21 +272,7 @@ class Processor(coffea.processor.ProcessorABC):
         self.process_selection(selector, dsname, is_mc, filler)
 
         if self.eventdir is not None:
-            logger.debug("Saving per event info")
-            if "column_output_format" in self.config:
-                outformat = self.config["column_output_format"].lower()
-            else:
-                outformat = "root"
-            if outformat == "root":
-                self._save_per_event_info_hdf5(
-                    dsname, selector, self.get_identifier(selector))
-            elif outformat == "hdf5":
-                self._save_per_event_info_root(
-                    dsname, selector, self.get_identifier(selector))
-            else:
-                raise pepper.config.ConfigError(
-                    "Invalid value for column_output_format, must be 'root' "
-                    "or 'hdf'")
+            self.save_per_event_info(dsname, selector)
 
         timetaken = time() - starttime
         logger.debug(f"Processing finished. Took {timetaken:.3f} s.")

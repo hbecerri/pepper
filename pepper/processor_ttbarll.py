@@ -239,9 +239,8 @@ class Processor(pepper.Processor):
                 if self.eventdir is not None:
                     logger.debug(f"Saving per event info for variation"
                                  f" {variarg.name}")
-                    self._save_per_event_info(
-                        dsname + "_" + variarg.name, selector_copy,
-                        self.get_identifier(selector_copy), False)
+                    self.save_per_event_info(
+                        dsname + "_" + variarg.name, selector_copy, False)
             filler.sys_overwrite = None
 
         # Do normal, no-variation run

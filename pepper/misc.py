@@ -387,3 +387,13 @@ class VirtualArrayCopier:
         def wrapper(*args, **kwargs):
             return func(self.get(), *args, **kwargs)
         return wrapper
+
+
+def akismasked(arr):
+    """Return true if arr is masked on any axis, otherwise false"""
+    t = arr
+    while hasattr(t, "type"):
+        if isinstance(t.type, ak.types.OptionType):
+            return True
+        t = t.type
+    return False
