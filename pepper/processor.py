@@ -387,10 +387,15 @@ class Processor(coffea.processor.ProcessorABC):
         elif hform == "root":
             for cut, hist in output["hists"].items():
                 fname = '_'.join(cut).replace('/', '_') + ".root"
-                roothists = pepper.misc.export_with_sparse(hist)
-                if len(roothists) == 0:
-                    continue
                 with uproot.recreate(os.path.join(dest, "hists", fname)) as f:
-                    for key, subhist in roothists.items():
-                        key = "_".join(key).replace("/", "_")
-                        f[key] = subhist
+                    for key in hist.values().keys():
+                        hist_integrated = hist
+                        for sparse_axis, keypart in zip(hist.sparse_axes(),
+                                                        key):
+                            hist_integrated = hist_integrated.integrate(
+                                sparse_axis, keypart)
+                        if len(key) == 0:
+                            key = "hist"
+                        else:
+                            key = "_".join(key).replace("/", "_")
+                        f[key] = pepper.misc.coffeahist2hist(hist_integrated)
