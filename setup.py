@@ -15,6 +15,7 @@ Easy to use and highly configurable.
         "parsl",
         "h5py",
         "hdf5plugin",
+        "hist",
         "hjson",
     ],
 )

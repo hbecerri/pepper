@@ -6,7 +6,7 @@ from collections import namedtuple
 import json
 import coffea
 import pepper
-import uproot3
+import uproot
 from argparse import ArgumentParser
 from collections.abc import Mapping
 
@@ -82,13 +82,13 @@ if os.path.exists(args.output):
 with open(args.histsfile) as f:
     hists = HistCollection.from_json(f)
 
-with uproot3.recreate(args.output) as f:
+with uproot.recreate(args.output) as f:
     for key, histpath in hists[dict(cut=args.cut, hist=args.histname)].items():
-        hist = hists.load(key).sum("dataset", "channel")
-        eff = pepper.misc.hist_divide(
-            hist.integrate("btagged", int_range="yes"), hist.sum("btagged"))
+        hist = pepper.misc.coffeahist2hist(hists.load(key))
+        hist = hist[{"dataset": sum, "channel": sum}]
+        eff = hist[{"btagged": "yes"}] / hist[{"btagged": sum}].values()
         if key.variation is None:
-            f["central"] = pepper.misc.export(eff)
+            f["central"] = eff
         elif args.central:
             continue
         elif any(key.variation.endswith(x) for x in (
@@ -97,4 +97,4 @@ with uproot3.recreate(args.output) as f:
             # on the efficiency
             continue
         else:
-            f[key[2]] = pepper.misc.export(eff)
+            f[key[2]] = eff

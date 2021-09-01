@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import awkward as ak
+import uproot
 import coffea
 from coffea.nanoevents import NanoAODSchema
 import h5py
@@ -14,11 +15,6 @@ from collections import defaultdict
 import pepper
 from pepper import Selector, OutputFiller, HDF5File
 import pepper.config
-
-import warnings
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import uproot3
 
 
 logger = logging.getLogger(__name__)
@@ -121,20 +117,31 @@ class Processor(coffea.processor.ProcessorABC):
     def postprocess(self, accumulator):
         return accumulator
 
-    def _open_output(self, dsname):
+    def _open_output(self, dsname, filetype):
+        if filetype == "root":
+            ext = ".root"
+        elif filetype == "hdf5":
+            ext = ".h5"
+        else:
+            raise ValueError(f"Invalid filetype: {filetype}")
         dsname = dsname.replace("/", "_")
         dsdir = os.path.join(self.eventdir, dsname)
         os.makedirs(dsdir, exist_ok=True)
         i = 0
         while True:
-            filepath = os.path.join(dsdir, str(i).zfill(4) + ".hdf5")
+            filepath = os.path.join(dsdir, str(i).zfill(4) + ext)
             try:
-                f = h5py.File(filepath, "x")
+                f = open(filepath, "x")
             except (FileExistsError, OSError):
                 i += 1
                 continue
             else:
                 break
+        f.close()
+        if filetype == "root":
+            f = uproot.recreate(filepath)
+        elif filetype == "hdf5":
+            f = h5py.File(filetype, "w")
         logger.debug(f"Opened output {filepath}")
         return f
 
@@ -163,7 +170,7 @@ class Processor(coffea.processor.ProcessorABC):
             columns[key] = item
         return ak.Array(columns)
 
-    def _save_per_event_info(
+    def _save_per_event_info_hdf5(
             self, dsname, selector, identifier, save_full_sys=True):
         out_dict = {"dsname": dsname, "identifier": identifier}
         out_dict["events"] = self._prepare_saved_columns(selector)
@@ -177,10 +184,73 @@ class Processor(coffea.processor.ProcessorABC):
         elif selector.systematics is not None:
             out_dict["weight"] = ak.flatten(
                 selector.systematics["weight"], axis=0)
-        with self._open_output(dsname) as f:
+        with self._open_output(dsname, "hdf5") as f:
             outf = HDF5File(f)
             for key in out_dict.keys():
                 outf[key] = out_dict[key]
+
+    @staticmethod
+    def _separate_masks_for_root(arrays):
+        ret = {}
+        for key, array in arrays.items():
+            if (not isinstance(array, ak.Array)
+                    or not pepper.misc.akismasked(array)):
+                ret[key] = array
+                continue
+            if array.ndim > 2:
+                raise ValueError(
+                    f"Array '{key}' as too many dimensions for ROOT output")
+            if "mask" + key in arrays:
+                raise RuntimeError(f"Output named 'mask{key}' already present "
+                                   "but need this key for storing the mask")
+            ret["mask" + key] = ~ak.is_none(array)
+            ret[key] = ak.fill_none(array, 0)
+        return ret
+
+    def _save_per_event_info_root(self, dsname, selector, identifier,
+                                  save_full_sys=True):
+        out_dict = {"dsname": dsname, "identifier": str(identifier)}
+        events = self._prepare_saved_columns(selector)
+        events = {f: events[f] for f in ak.fields(events)}
+        additional = {}
+        cutnames, cutflags = selector.get_cuts()
+        out_dict["Cutnames"] = str(cutnames)
+        additional["cutflags"] = cutflags
+        if selector.systematics is not None:
+            additional["weight"] = selector.systematics["weight"]
+            if self.config["compute_systematics"] and save_full_sys:
+                for field in ak.fields(selector.systematics):
+                    additional[f"systematics_{field}"] = \
+                        selector.systematics[field]
+
+        for key in additional.keys():
+            if key in events:
+                raise RuntimeError(
+                    f"branch named '{key}' already present in Events tree")
+        events.update(additional)
+        events = self._separate_masks_for_root(events)
+        out_dict["Events"] = events
+        with self._open_output(dsname, "root") as outf:
+            for key in out_dict.keys():
+                outf[key] = out_dict[key]
+
+    def save_per_event_info(self, dsname, selector, save_full_sys=True):
+        idn = self.get_identifier(selector)
+        logger.debug("Saving per event info")
+        if "column_output_format" in self.config:
+            outformat = self.config["column_output_format"].lower()
+        else:
+            outformat = "root"
+        if outformat == "root":
+            self._save_per_event_info_root(
+                dsname, selector, idn, save_full_sys)
+        elif outformat == "hdf5":
+            self._save_per_event_info_hdf5(
+                dsname, selector, idn, save_full_sys)
+        else:
+            raise pepper.config.ConfigError(
+                "Invalid value for column_output_format, must be 'root' "
+                "or 'hdf'")
 
     @staticmethod
     def get_identifier(data):
@@ -202,9 +272,7 @@ class Processor(coffea.processor.ProcessorABC):
         self.process_selection(selector, dsname, is_mc, filler)
 
         if self.eventdir is not None:
-            logger.debug("Saving per event info")
-            self._save_per_event_info(
-                dsname, selector, self.get_identifier(selector))
+            self.save_per_event_info(dsname, selector)
 
         timetaken = time() - starttime
         logger.debug(f"Processing finished. Took {timetaken:.3f} s.")
@@ -319,10 +387,15 @@ class Processor(coffea.processor.ProcessorABC):
         elif hform == "root":
             for cut, hist in output["hists"].items():
                 fname = '_'.join(cut).replace('/', '_') + ".root"
-                roothists = pepper.misc.export_with_sparse(hist)
-                if len(roothists) == 0:
-                    continue
-                with uproot3.recreate(os.path.join(dest, "hists", fname)) as f:
-                    for key, subhist in roothists.items():
-                        key = "_".join(key).replace("/", "_")
-                        f[key] = subhist
+                with uproot.recreate(os.path.join(dest, "hists", fname)) as f:
+                    for key in hist.values().keys():
+                        hist_integrated = hist
+                        for sparse_axis, keypart in zip(hist.sparse_axes(),
+                                                        key):
+                            hist_integrated = hist_integrated.integrate(
+                                sparse_axis, keypart)
+                        if len(key) == 0:
+                            key = "hist"
+                        else:
+                            key = "_".join(key).replace("/", "_")
+                        f[key] = pepper.misc.coffeahist2hist(hist_integrated)

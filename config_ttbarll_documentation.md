@@ -47,6 +47,7 @@ These determine various calibrations and weightings. In case they are optional a
 
 ## Output
 - `columns_to_save`: Optional, array of data pickers or object of data pickers. The data pickers specify which observables should be saved as per-event output. If this is an object, the keys will be used inside the output file for the corresponding observable. Per-event output must be turned on manually, even if this variable is present.
+- `column_output_format`: Optional, string indicating the file format which is used to save the columns named by `columns_to_save`. This can either be `"root"` or `"hdf5"`. By default the root format is used.
 - `hists`: Path to a JSON file containing the histogram definitions as object. The keys decide the name of the histogram. For its elements, see the Histogram Definition subparagraph.
 - `cuts_to_histogram`: Optional, array of strings. If this is present, histograms will only be created for cuts whose names are in this array.
 - `datasets_to_group`: Optional, object of strings. If a data set name is present as a key inside this object, its value will be used as name instead inside the histograms.

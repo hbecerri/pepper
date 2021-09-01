@@ -1,7 +1,7 @@
 import os
 import pepper
 import coffea
-import uproot3
+import uproot
 
 
 class Processor(pepper.Processor):
@@ -10,37 +10,33 @@ class Processor(pepper.Processor):
         self.data_pu_hist_up = config["data_pu_hist_up"]
         self.data_pu_hist_down = config["data_pu_hist_down"]
 
-        with uproot3.open(self.data_pu_hist) as f:
-            datahist = pepper.misc.rootimport(f["pileup"])
-        with uproot3.open(self.data_pu_hist_up) as f:
-            datahistup = pepper.misc.rootimport(f["pileup"])
-        with uproot3.open(self.data_pu_hist_down) as f:
-            datahistdown = pepper.misc.rootimport(f["pileup"])
-        if len(datahist.axes()) != 1:
+        datahist, datahistup, datahistdown = self.load_input_hists()
+        if len(datahist.axes) != 1:
             raise pepper.config.ConfigError(
                 "data_pu_hist has invalid number of axes. Only one axis is "
                 "allowed.")
-        if not datahist.compatible(datahistup):
+        if datahist.axes != datahistup.axes:
             raise pepper.config.ConfigError(
-                "data_pu_hist_up does not have the same shape as "
+                "data_pu_hist_up does not have the same axes as "
                 "data_pu_hist.")
-        if not datahist.compatible(datahistdown):
+        if datahist.axes != datahistdown.axes:
             raise pepper.config.ConfigError(
-                "data_pu_hist_down does not have the same shape as "
+                "data_pu_hist_down does not have the same axes as "
                 "data_pu_hist.")
 
+        axisname = datahist.axes[0].name
         config["hists"] = {
             "pileup": pepper.HistDefinition({
                 "bins": [
                     {
-                        "name": datahist.axes()[0].name,
+                        "name": axisname,
                         "label": ("True mean number interactions per bunch "
                                   "crossing"),
-                        "n_or_arr": datahist.axes()[0].edges()
+                        "n_or_arr": datahist.axes[0].edges
                     }
                 ],
                 "fill": {
-                    datahist.axes()[0].name: [
+                    axisname: [
                         "Pileup",
                         "nTrueInt"
                     ]
@@ -71,31 +67,36 @@ class Processor(pepper.Processor):
     def process_selection(self, selector, dsname, is_mc, filler):
         pass
 
+    def load_input_hists(self):
+        with uproot.open(self.data_pu_hist) as f:
+            datahist = f["pileup"].to_hist()
+        with uproot.open(self.data_pu_hist_up) as f:
+            datahistup = f["pileup"].to_hist()
+        with uproot.open(self.data_pu_hist_down) as f:
+            datahistdown = f["pileup"].to_hist()
+        return datahist, datahistup, datahistdown
+
     @staticmethod
     def _save_hists(hist, datahist, datahistup, datahistdown, filename):
-        with uproot3.recreate(filename) as f:
-            for idn in hist.identifiers("dataset"):
-                dataset = idn.name
-                hist_int = hist.integrate("dataset", dataset)
-                hist_int.scale(1 / hist_int.project().values()[()])
+        hist = pepper.misc.coffeahist2hist(hist)
+
+        with uproot.recreate(filename) as f:
+            for dataset in hist.axes["dataset"]:
+                hist_int = hist[dataset, :]
+                hist_int /= hist_int.sum().value
                 for datahist_i, suffix in [
                         (datahist, ""), (datahistup, "_up"),
                         (datahistdown, "_down")]:
-                    ratio = pepper.misc.hist_divide(datahist_i, hist_int)
-                    f[dataset + suffix] = pepper.misc.export(ratio)
+                    ratio = datahist_i / hist_int.values()
+                    f[dataset + suffix] = ratio
 
     def save_output(self, output, dest):
-        with uproot3.open(self.data_pu_hist) as f:
-            datahist = pepper.misc.rootimport(f["pileup"])
-        with uproot3.open(self.data_pu_hist_up) as f:
-            datahistup = pepper.misc.rootimport(f["pileup"])
-        with uproot3.open(self.data_pu_hist_down) as f:
-            datahistdown = pepper.misc.rootimport(f["pileup"])
+        datahist, datahistup, datahistdown = self.load_input_hists()
 
         # Normalize data histograms
-        datahist.scale(1 / datahist.project().values()[()])
-        datahistup.scale(1 / datahistup.project().values()[()])
-        datahistdown.scale(1 / datahistdown.project().values()[()])
+        datahist /= datahist.sum().value
+        datahistup /= datahistup.sum().value
+        datahistdown /= datahistdown.sum().value
 
         mchist = output["hists"][("Before cuts", "pileup")]
         # Set underflow and 0 pileup bin to 0, which might be != 0 only for
