@@ -123,6 +123,7 @@ class ResumableExecutor(abc.ABC):
                 accum_iadd(accum, next(gen))
         except StopIteration:
             pass
+        self.save_state()
         return accum
 
     @abc.abstractmethod
