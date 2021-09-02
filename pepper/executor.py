@@ -156,12 +156,10 @@ class ParslExecutor(ResumableExecutor):
         app = timeout(python_app(function))
 
         gen = _futures_handler(map(app, items), tailtimeout)
-        if clevel is not None:
-            gen = map(_decompress, gen)
         try:
             accumulator = self._accumulate(
                 tqdm(
-                    gen,
+                    gen if clevel is None else map(_decompress, gen),
                     disable=not status,
                     unit=unit,
                     total=len(items),
