@@ -1,7 +1,6 @@
 import os
 import abc
 import time
-from collections import namedtuple
 import parsl
 from parsl.app.app import python_app
 from coffea.processor.parsl.timeout import timeout
@@ -13,25 +12,11 @@ from coffea.processor.accumulator import (add as accum_add, iadd as accum_iadd)
 from tqdm import tqdm
 
 
-STATEFILE_VERSION = 1
+STATEFILE_VERSION = 2
 
 
 class StateFileError(Exception):
     pass
-
-
-class WorkItem(namedtuple("WorkItemBase", [
-    "dataset", "filename", "treename", "entrystart", "entrystop", "fileuuid",
-    "usermeta"
-])):
-    def __new__(cls, dataset, filename, treename, entrystart, entrystop,
-                fileuuid, usermeta=None):
-        return cls.__bases__[0].__new__(
-            cls, dataset, filename, treename, entrystart, entrystop, fileuuid,
-            usermeta)
-
-    def __len__(self):
-        return self.entrystop - self.entrystart
 
 
 class ResumableExecutor(abc.ABC):
@@ -76,13 +61,6 @@ class ResumableExecutor(abc.ABC):
                       "version": STATEFILE_VERSION, "userdata": {}}
 
     def __call__(self, items, function, accumulator, **kwargs):
-        # Workaround for coffea WorkItems having no comparison
-        if isinstance(next(iter(items)), coffea.processor.executor.WorkItem):
-            items = [WorkItem(
-                item.dataset, item.filename, item.treename, item.entrystart,
-                item.entrystop, item.fileuuid, item.usermeta)
-                for item in items]
-
         items_done = self.state["items_done"]
         items = [item for item in items if item not in items_done]
 
