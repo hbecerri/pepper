@@ -9,7 +9,7 @@ import coffea.processor
 import coffea.util
 from coffea.processor.executor import (
     _compression_wrapper, _decompress, _futures_handler)
-from coffea.processor.accumulator import accumulate
+from coffea.processor.accumulator import (add as accum_add, iadd as accum_iadd)
 from tqdm import tqdm
 
 
@@ -101,6 +101,30 @@ class ResumableExecutor(abc.ABC):
             os.remove(self.state_file_name)
         return res
 
+    def _track_done_items(self, gen, items):
+        for item, result in zip(items, gen):
+            self.state["items_done"].append(item)
+            yield result
+
+    def _accumulate(self, gen, items, accum=None):
+        # In addition to fullfilling the same ask as coffea's accumulate
+        # this also keeps track of done items and saves the state
+        gen = self._track_done_items(gen, items)
+        gen = (x for x in gen if x is not None)
+        nextstatebackup = time.time() + self.save_interval
+        try:
+            if accum is None:
+                accum = accum_add(next(gen), next(gen))
+                self.state["accumulator"] = accum
+            while True:
+                if nextstatebackup <= time.time():
+                    self.save_state()
+                    nextstatebackup = time.time() + self.save_interval
+                accum_iadd(accum, next(gen))
+        except StopIteration:
+            pass
+        return accum
+
     @abc.abstractmethod
     def _execute(self, items, function, accumulator, **kwargs):
         return
@@ -119,20 +143,6 @@ class ResumableExecutor(abc.ABC):
         coffea.util.save(self.state, output)
         os.replace(output, self.state_file_name)
 
-    def save_state_generator(self, gen, items):
-        nextstatebackup = time.time() + self.save_interval
-        for item, result in zip(items, gen):
-            # Save state before appending item to done because result is not in
-            # accumulator yet
-            if nextstatebackup <= time.time():
-                self.save_state()
-                nextstatebackup = time.time() + self.save_interval
-            self.state["items_done"].append(item)
-            if self.state["accumulator"] is None:
-                self.state["accumulator"] = result
-            yield result
-        self.save_state()
-
 
 class IterativeExecutor(ResumableExecutor):
     """Same as coffea.processor.iterative_executor while being resumable"""
@@ -145,8 +155,7 @@ class IterativeExecutor(ResumableExecutor):
         gen = tqdm(items, disable=not status, unit=unit, total=len(items),
                    desc=desc)
         gen = map(function, gen)
-        gen = self.save_state_generator(gen, items)
-        return accumulate(gen, accumulator)
+        return self._accumulate(gen, items, accumulator)
 
 
 class ParslExecutor(ResumableExecutor):
@@ -170,9 +179,8 @@ class ParslExecutor(ResumableExecutor):
         gen = _futures_handler(map(app, items), tailtimeout)
         if clevel is not None:
             gen = map(_decompress, gen)
-        gen = self.save_state_generator(gen, items)
         try:
-            accumulator = accumulate(
+            accumulator = self._accumulate(
                 tqdm(
                     gen,
                     disable=not status,
@@ -180,6 +188,7 @@ class ParslExecutor(ResumableExecutor):
                     total=len(items),
                     desc=desc,
                 ),
+                items,
                 accumulator,
             )
         finally:
