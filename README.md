@@ -3,23 +3,10 @@ A python framework for analyzing NanoAODs. Easy to use and highly configurable.
 
 Currently focusing on <img src="https://latex.codecogs.com/gif.latex?\mathrm{t\bar{t}}\rightarrow\mathrm{ll\nu\nu}" />.
 
+
+
 ## Installation
-Requires Python3 and the Python packages `coffea`, `awkward`, `parsl`, `h5py`, `hdf5plugin` and `hjson`
-
-```sh
-python3 -m pip install --user --upgrade pip
-python3 -m pip install --user coffea awkward parsl h5py hdf5plugin hjson
-```
-
-The features of the framework are implemented as a Python package, which is inside the `pepper` directory. To use it, you can add the path to where you downloaded the repository to the `PYTHONPATH` variable
-
-```sh
-git clone <repository url> pepper
-export PYTHONPATH=`pwd`/pepper:$PYTHONPATH
-```
-
-## Installation through pip3
-Alternatively, Pepper can be installed as a python package as follows:
+Pepper can be installed as a python package as follows:
 ```sh
 git clone <repository url> pepper
 cd pepper
