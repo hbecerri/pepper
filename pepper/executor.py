@@ -92,7 +92,11 @@ class ResumableExecutor(abc.ABC):
         nextstatebackup = time.time() + self.save_interval
         try:
             if accum is None:
-                accum = accum_add(next(gen), next(gen))
+                # Set the accumulator to the first result
+                accum = next(gen)
+                # If there is more to do, add up results in another accumulator
+                # instance
+                accum = accum_add(accum, next(gen))
                 self.state["accumulator"] = accum
             while True:
                 if nextstatebackup <= time.time():
