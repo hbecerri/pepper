@@ -141,7 +141,7 @@ class Processor(coffea.processor.ProcessorABC):
         if filetype == "root":
             f = uproot.recreate(filepath)
         elif filetype == "hdf5":
-            f = h5py.File(filetype, "w")
+            f = h5py.File(filepath, "w")
         logger.debug(f"Opened output {filepath}")
         return f
 
