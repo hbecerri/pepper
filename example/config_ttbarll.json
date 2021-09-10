@@ -60,6 +60,7 @@
     "jet_uncertainty": "$DATADIR/scale_factors/Autumn18_V19_MC_Uncertainty_AK4PFchs.txt",
     "jet_resolution": "$DATADIR/scale_factors/Autumn18_V7b_MC_PtResolution_AK4PFchs.txt",
     "jet_ressf": "$DATADIR/scale_factors/Autumn18_V7b_MC_SF_AK4PFchs.txt",
+    "smear_met": true,
     "exp_datasets": {
         "MuonEG": [
             "/MuonEG/Run2018A-02Apr2020-v1/NANOAOD",
