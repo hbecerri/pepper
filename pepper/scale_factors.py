@@ -296,4 +296,4 @@ class TopPtWeigter:
     def __call__(self, toppt, antitoppt):
         sf = self.sffunc(toppt)
         antisf = self.sffunc(antitoppt)
-        return np.sqrt(sf ** 2 * antisf ** 2) * self.scale
+        return np.sqrt(sf * antisf) * self.scale
