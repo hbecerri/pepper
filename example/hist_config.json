@@ -122,6 +122,7 @@
         }
     },
     "btageff": {
+        # Used in the production of btagging SFs
         "bins": [
             {
                 "name": "flav",
@@ -167,6 +168,89 @@
                 "no": [
                     "Jet",
                     "btagged",
+                    {"function": "not"}
+                ]
+            }
+        }
+    },
+    "trigger_sf_constructor": {
+        # Used by produce_triggerSF_numbers.py
+        "bins": [
+            {
+                "name": "1st lep pt",
+                "label": "1st lep $p_{\\mathrm{T}}$",
+                "n_or_arr": [25, 40, 60, 85, 120, 180, 1000]
+            },
+            {
+                "name": "2nd lep pt",
+                "label": "2nd lep $p_{\\mathrm{T}}$",
+                "n_or_arr": [20, 40, 60, 85, 120, 1000]
+            },
+            # Bins for computing systematic variations:
+            {
+                "name": "njet",
+                "label": "njet",
+                "n_or_arr": [0, 3, 10]
+            },
+            {
+                "name": "nPV",
+                "label": "nPV",
+                "n_or_arr": [0, 30, 200]
+            },
+            {
+                "name": "MET",
+                "label": "MET",
+                "n_or_arr": [0, 150, 2000]
+            }
+        ],
+        "cats": [
+            {
+                "name": "MET triggers",
+                "label": "MET triggers"
+            },
+            {
+                "name": "dilep triggers",
+                "label": "dilep triggers"
+            }
+        ],
+        "fill": {
+            "1st lep pt": [
+                "Lepton",
+                "pt",
+                {"leading": 1}
+            ],
+            "2nd lep pt": [
+                "Lepton",
+                "pt",
+                {"leading": 2}
+            ],
+            "njet": [
+                "Jet",
+                {"function": "num"}
+            ],
+            "nPV": [
+                "PV",
+                "npvs"
+            ],
+            "MET": [
+                "MET",
+                "pt"
+            ],
+            "MET triggers": {
+                "yes": [
+                    "MET triggers"
+                ],
+                "no": [
+                    "MET triggers",
+                    {"function": "not"}
+                ]
+            },
+            "dilep triggers": {
+                "yes": [
+                    "dilep triggers"
+                ],
+                "no": [
+                    "dilep triggers",
                     {"function": "not"}
                 ]
             }

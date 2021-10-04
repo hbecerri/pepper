@@ -86,6 +86,12 @@
             "/EGamma/Run2018D-02Apr2020-v1/NANOAOD"
         ]
     },
+    "MET_trigger_datasets": {
+        "MET_2018A": ["/MET/Run2018A-02Apr2020-v1/NANOAOD"],
+        "MET_2018B": ["/MET/Run2018B-02Apr2020-v1/NANOAOD"],
+        "MET_2018C": ["/MET/Run2018C-02Apr2020-v1/NANOAOD"],
+        "MET_2018D": ["/MET/Run2018D-02Apr2020-v2/NANOAOD"]
+    },
     "data_eras": {
         "2018A": [315252, 316995],
         "2018B": [316998, 319312],
@@ -344,6 +350,16 @@
             "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL_DZ"
         ]
     },
+    "MET_triggers": [
+        "PFMET120_PFMHT120_IDTight",
+        "PFMET200_HBHE_BeamHaloCleaned",
+        "PFMETNoMu120_PFMHTNoMu120_IDTight",
+        "PFMET120_PFMHT120_IDTight_PFHT60",
+        "PFMETNoMu120_PFMHTNoMu120_IDTight_PFHT60",
+        "PFHT500_PFMET100_PFMHT100_IDTight",
+        "PFHT700_PFMET85_PFMHT85_IDTight",
+        "PFHT800_PFMET75_PFMHT75_IDTight"
+    ],
     "dataset_trigger_order": [
         "MuonEG",
         "DoubleMuon",
