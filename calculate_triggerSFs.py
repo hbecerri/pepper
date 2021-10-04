@@ -35,8 +35,11 @@ def calculate_sf(data_hist, mc_hist):
 
 
 parser = ArgumentParser(
-    description="")
-parser.add_argument("config", help="Json config")
+    description="Calculate SFs for ttbar dileptonic triggers using the output "
+    "of produce_triggerSF_numbers.py by cross-trigger method. Systematic "
+    "uncertainties are implemented following AN2019_008 (ttH trigger SFs)")
+parser.add_argument("config", help="Json configuration file containing names "
+                    "of MET trigger datasets")
 parser.add_argument("histsfile", help="A JSON file specifying the histograms, "
                                       "e.g. 'hists.json'")
 parser.add_argument("output", help="Output ROOT file")
@@ -113,7 +116,8 @@ eff_both = safe_div(
     mc_hist[{"dilep triggers": "yes", "MET triggers": "yes"}].values(), denom)
 alpha = safe_div(eff_mt_only * eff_dlt_only, eff_both)
 sf_variance += ((1 - alpha) * sf.values()) ** 2
-logger.debug(f"Trigger correlation unc.: {np.where(sf.values()>0, 1 - alpha, 0)}")
+logger.debug(
+    f"Trigger correlation unc.: {np.where(sf.values()>0, 1 - alpha, 0)}")
 
 sf[:, :, :] = np.stack([sf.values(), sf_variance], axis=-1)
 logger.debug(
