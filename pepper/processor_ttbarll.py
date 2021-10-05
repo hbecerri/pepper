@@ -100,10 +100,6 @@ class Processor(pepper.Processor):
                 "Need jet_correction for propagating jet corrections to MET")
         else:
             self._jec = self.config["jet_correction"]
-        if "smear_met" in self.config:
-            self.smear_met = self.config["smear_met"]
-        else:
-            self.smear_met = False
 
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
@@ -298,9 +294,10 @@ class Processor(pepper.Processor):
                 selector.rng))
         selector.set_column("OrigJet", selector.data["Jet"])
         selector.set_column("Jet", self.build_jet_column)
+        smear_met = "smear_met" in self.config and self.config["smear_met"]
         selector.set_column(
             "MET", partial(self.build_met_column, variation.junc,
-                           variation.jer, selector.rng, is_mc, dsname,
+                           variation.jer if smear_met else None, selector.rng,
                            era, variation=variation.met))
         selector.set_multiple_columns(
             partial(self.drellyan_sf_columns, filler))
@@ -953,16 +950,13 @@ class Processor(pepper.Processor):
         jets["pt"] = l1l2l3 * jets.rawPt
         jets["pt_nomuon"] = jets["pt"] * (1 - jets["muonSubtrFactor"])
 
+        jets["factor"] = ak.ones_like(jets["pt"])
         if junc is not None:
-            jets["juncfac"] = self.compute_junc_factor(
+            jets["factor"] = jets["factor"] * self.compute_junc_factor(
                 data, *junc, pt=jets["pt"], eta=jets["eta"])
-        else:
-            jets["juncfac"] = ak.ones_like(jets["pt"])
         if jer is not None:
-            jets["jerfac"] = self.compute_jer_factor(
+            jets["factor"] = jets["factor"] * self.compute_jer_factor(
                 data, rng, jer, jets["pt"], jets["eta"], False)
-        else:
-            jets["jerfac"] = ak.ones_like(data["Jet"].pt)
 
         jets["emef"] = jets["mass"] = ak.zeros_like(jets["pt"])
         jets.behavior = data["Jet"].behavior
@@ -970,8 +964,7 @@ class Processor(pepper.Processor):
 
         return jets
 
-    def build_met_column(self, junc, jer, rng, is_mc, dsname, era,
-                         data, variation="central"):
+    def build_met_column(self, junc, jer, rng, era, data, variation="central"):
         met = data["MET"]
         metx = met.pt * np.cos(met.phi)
         mety = met.pt * np.sin(met.phi)
@@ -992,14 +985,14 @@ class Processor(pepper.Processor):
         elif variation != "central":
             raise ValueError(
                 "variation must be one of 'central', 'up' or 'down'")
-        if self.smear_met and "jetfac" in ak.fields(data):
+        if jer is not None and "jetfac" in ak.fields(data):
             factors = data["jetfac"]
-        elif "juncfac" in ak.fields(data) and ak.any(data["juncfac"] != 1):
+        elif "juncfac" in ak.fields(data):
             factors = data["juncfac"]
         else:
             factors = None
-        if factors is not None:
-            # Do MET type-1 corrections
+        if factors is not None and ak.any(factors != 1):
+            # Do MET type-1 and smearing corrections
             jets = data["OrigJet"]
             jets = ak.zip({
                 "pt": jets.pt,
@@ -1017,10 +1010,7 @@ class Processor(pepper.Processor):
                                   & (lowptjets["emef"] < 0.9)]
             # lowptjets lose their type here. Probably a bug, workaround
             lowptjets = ak.with_name(lowptjets, "Jet")
-            if self.smear_met:
-                lowptfac = lowptjets["juncfac"] * lowptjets["jerfac"] - 1
-            else:
-                lowptfac = lowptjets["juncfac"] - 1
+            lowptfac = lowptjets["factor"] - 1
             metx = metx - (
                 ak.sum(jets.x * jets["factor"], axis=1)
                 + ak.sum(lowptjets.x * lowptfac, axis=1))
