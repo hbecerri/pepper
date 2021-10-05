@@ -20,7 +20,10 @@
     ],
     "pdf_types": {
         "91400": "Hessian",
-        "306000": "Hessian"
+        "306000": "Hessian",
+        "325300": "Hessian",
+        "325500": "Hessian",
+        "320900" : "MC_Gaussian"
     },
     "electron_sf": [
         [
