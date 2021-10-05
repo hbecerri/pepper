@@ -1,6 +1,7 @@
 from functools import partial
 
 import hjson
+import awkward as ak
 
 import pepper
 
@@ -47,8 +48,10 @@ class TriggerSFProducer(pepper.ProcessorTTbarLL):
 
         selector.add_cut("Lumi", partial(self.good_lumimask, is_mc, dsname))
 
+        met_trigs = [trig for trig in self.config["MET_triggers"] if trig in
+                     ak.fields(selector.final.HLT)]
         selector.set_column("MET triggers", partial(
-            self.passing_trigger, self.config["MET_triggers"], []))
+            self.passing_trigger, met_trigs, []))
 
         if is_mc and self.config["year"] in ("2016", "2017", "ul2016pre",
                                              "ul2016post", "ul2017"):
