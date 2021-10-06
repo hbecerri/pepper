@@ -1,5 +1,7 @@
 import os
 import abc
+from dataclasses import dataclass
+from copy import deepcopy
 import time
 import parsl
 from parsl.app.app import python_app
@@ -19,25 +21,37 @@ class StateFileError(Exception):
     pass
 
 
-class ResumableExecutor(abc.ABC):
-    def __init__(self, state_file_name=None, remove_state_at_end=False,
-                 save_interval=300):
-        """Abstract base class for executors that save their state and thus are
-        able to resume if there was an interruption
+@dataclass
+class ResumableExecutor(abc.ABC, coffea.processor.executor.ExecutorBase):
+    """Abstract base class for executors that save their state and thus are
+    able to resume if there was an interruption
 
-        Parameters:
-        state_file_name -- Name of the file to save and read the state to/from
-        remove_state_at_end -- Bool, if true, remove the state file after
-                               successful completion
-        save_interval -- Seconds that have to pass before the state is saved
-                         after start or the last save. The sate is saved only
-                         after the completion of an item
-        """
-        self.state_file_name = state_file_name
-        self.remove_state_at_end = remove_state_at_end
-        self.save_interval = save_interval
+    Parameters:
+    state_file_name -- Name of the file to save and read the state to/from
+    remove_state_at_end -- Bool, if true, remove the state file after
+                           successful completion
+    save_interval -- Seconds that have to pass before the state is saved
+                     after start or the last save. The sate is saved only
+                     after the completion of an item
+    """
+
+    state_file_name: str = None
+    remove_state_at_end: bool = False
+    save_interval: int = 1
+
+    def __post_init__(self):
         self.state = {"items_done": [], "accumulator": None,
                       "version": STATEFILE_VERSION, "userdata": {}}
+
+    def copy(self, **kwargs):
+        # Same as ExecutorBase.copy, just handling self.state correctly
+        tmp = self.__dict__.copy()
+        tmp.update(kwargs)
+        tmp.pop("state")
+        instance = type(self)(**tmp)
+        # Need deep copy here to not modify the accumulator later
+        instance.state = deepcopy(self.state)
+        return instance
 
     def load_state(self, filename=None):
         """Load a previous state from a file
@@ -60,7 +74,7 @@ class ResumableExecutor(abc.ABC):
         self.state = {"items_done": [], "accumulator": None,
                       "version": STATEFILE_VERSION, "userdata": {}}
 
-    def __call__(self, items, function, accumulator, **kwargs):
+    def __call__(self, items, function, accumulator):
         items_done = self.state["items_done"]
         items = [item for item in items if item not in items_done]
 
@@ -72,7 +86,7 @@ class ResumableExecutor(abc.ABC):
         elif self.state["accumulator"] is not None:
             accumulator = self.state["accumulator"]
 
-        res = self._execute(items, function, accumulator, **kwargs)
+        res = self._execute(items, function, accumulator)
         if (self.state_file_name is not None
                 and self.remove_state_at_end
                 and os.path.exists(self.state_file_name)):
@@ -128,45 +142,41 @@ class ResumableExecutor(abc.ABC):
 
 class IterativeExecutor(ResumableExecutor):
     """Same as coffea.processor.iterative_executor while being resumable"""
-    def _execute(self, items, function, accumulator, **kwargs):
+    def _execute(self, items, function, accumulator):
         if len(items) == 0:
             return accumulator
-        status = kwargs.pop("status", True)
-        unit = kwargs.pop("unit", "items")
-        desc = kwargs.pop("desc", "Processing")
-        gen = tqdm(items, disable=not status, unit=unit, total=len(items),
-                   desc=desc)
+        gen = tqdm(items, disable=not self.status, unit=self.unit,
+                   total=len(items), desc=self.desc)
         gen = map(function, gen)
         return self._accumulate(gen, items, accumulator)
 
 
+@dataclass
 class ParslExecutor(ResumableExecutor):
     """Same as coffea.processor.parsl_executor while being resumable"""
-    def _execute(self, items, function, accumulator, **kwargs):
+
+    tailtimeout: int = None
+
+    def _execute(self, items, function, accumulator):
         if len(items) == 0:
             return accumulator
 
-        status = kwargs.pop("status", True)
-        unit = kwargs.pop("unit", "items")
-        desc = kwargs.pop("desc", "Processing")
-        clevel = kwargs.pop("compression", 1)
-        tailtimeout = kwargs.pop("tailtimeout", None)
-        if clevel is not None:
-            function = _compression_wrapper(clevel, function)
+        if self.compression is not None:
+            function = _compression_wrapper(self.compression, function)
 
         parsl.dfk()
 
         app = timeout(python_app(function))
 
-        gen = _futures_handler(map(app, items), tailtimeout)
+        gen = _futures_handler(map(app, items), self.tailtimeout)
         try:
             accumulator = self._accumulate(
                 tqdm(
-                    gen if clevel is None else map(_decompress, gen),
-                    disable=not status,
-                    unit=unit,
+                    gen if self.compression is None else map(_decompress, gen),
+                    disable=not self.status,
+                    unit=self.unit,
                     total=len(items),
-                    desc=desc,
+                    desc=self.desc,
                 ),
                 items,
                 accumulator,
