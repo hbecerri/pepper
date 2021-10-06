@@ -183,9 +183,6 @@ def run_processor(processor_class=None, description=None, mconly=False):
 
     processor = Processor(config, args.eventdir)
     datasets = processor.preprocess(datasets)
-    executor_args = {
-        "schema": processor.schema_class,
-        "align_clusters": not args.force_chunksize}
     if args.condor is not None:
         executor_class = pepper.executor.ParslExecutor
         if args.condorinit is not None:
@@ -198,9 +195,6 @@ def run_processor(processor_class=None, description=None, mconly=False):
                 condorsubmit = f.read()
         else:
             condorsubmit = None
-        # Load parsl config immediately instead of putting it into
-        # executor_args to be able to use the same jobs for preprocessing and
-        # processing
         print("Spawning jobs. This can take a while")
         parsl_config = pepper.misc.get_parsl_config(
             args.condor,
@@ -212,8 +206,8 @@ def run_processor(processor_class=None, description=None, mconly=False):
             print(
                 "Ignoring condor parameters because --condor is not specified")
         executor_class = pepper.executor.IterativeExecutor
-    pre_executor = executor_class(args.metadata)
-    executor = executor_class(args.statedata)
+    pre_executor = executor_class(state_file_name=args.metadata)
+    executor = executor_class(state_file_name=args.statedata)
 
     try:
         pre_executor.load_state()
@@ -232,9 +226,10 @@ def run_processor(processor_class=None, description=None, mconly=False):
             sys.exit(1)
     userdata["chunksize"] = args.chunksize
 
-    output = coffea.processor.run_uproot_job(
-        datasets, "Events", processor, executor, executor_args,
-        pre_executor=pre_executor, chunksize=args.chunksize)
+    runner = coffea.processor.Runner(
+        executor, pre_executor, chunksize=args.chunksize,
+        align_clusters=not args.force_chunksize, schema=processor.schema_class)
+    output = runner(datasets, "Events", processor)
     processor.save_output(output, args.output)
 
     return output
