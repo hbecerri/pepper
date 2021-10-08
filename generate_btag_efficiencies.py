@@ -2,57 +2,12 @@
 
 import os
 import sys
-from collections import namedtuple
-import json
-import coffea
-import pepper
-import uproot
 from argparse import ArgumentParser
-from collections.abc import Mapping
 
+import uproot
 
-class HistCollection(dict):
-    class Key(namedtuple(
-            "HistCollectionKeyBase", ["cut", "hist", "variation"])):
-        def __new__(cls, cut=None, hist=None, variation=None):
-            return cls.__bases__[0].__new__(cls, cut, hist, variation)
-
-        def fitsto(self, **kwargs):
-            for key, value in kwargs.items():
-                if getattr(self, key) != value:
-                    return False
-            else:
-                return True
-
-    def __init__(self, *args, **kwargs):
-        self._path = kwargs["path"]
-        del kwargs["path"]
-        super().__init__(*args, **kwargs)
-
-    @classmethod
-    def from_json(cls, fileobj):
-        data = json.load(fileobj)
-        path = os.path.dirname(os.path.realpath(fileobj.name))
-        return cls({cls.Key(*k): v for k, v in zip(*data)}, path=path)
-
-    def __getitem__(self, key):
-        if isinstance(key, self.Key):
-            return super().__getitem__(key)
-        elif isinstance(key, Mapping):
-            ret = self.__class__({k: v for k, v in self.items()
-                                  if k.fitsto(**key)}, path=self._path)
-            if len(ret) == 0:
-                raise KeyError(key)
-            elif len(key) == len(self.Key._fields):
-                ret = next(iter(ret.values()))
-            return ret
-        elif isinstance(key, tuple):
-            return self[dict(zip(self.Key._fields, key))]
-        else:
-            return self[{self.Key._fields[0]: key}]
-
-    def load(self, key):
-        return coffea.util.load(os.path.join(self._path, self[key]))
+import pepper
+from pepper.misc import HistCollection
 
 
 parser = ArgumentParser(
