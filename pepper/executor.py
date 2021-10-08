@@ -75,6 +75,9 @@ class ResumableExecutor(abc.ABC, coffea.processor.executor.ExecutorBase):
                       "version": STATEFILE_VERSION, "userdata": {}}
 
     def __call__(self, items, function, accumulator):
+        def wrap(item):
+            return item, function(item)
+
         items_done = self.state["items_done"]
         items = [item for item in items if item not in items_done]
 
@@ -86,22 +89,22 @@ class ResumableExecutor(abc.ABC, coffea.processor.executor.ExecutorBase):
         elif self.state["accumulator"] is not None:
             accumulator = self.state["accumulator"]
 
-        res = self._execute(items, function, accumulator)
+        res = self._execute(items, wrap, accumulator)
         if (self.state_file_name is not None
                 and self.remove_state_at_end
                 and os.path.exists(self.state_file_name)):
             os.remove(self.state_file_name)
         return res
 
-    def _track_done_items(self, gen, items):
-        for item, result in zip(items, gen):
+    def _track_done_items(self, gen):
+        for item, result in gen:
             self.state["items_done"].append(item)
             yield result
 
-    def _accumulate(self, gen, items, accum=None):
+    def _accumulate(self, gen, accum=None):
         # In addition to fullfilling the same ask as coffea's accumulate
         # this also keeps track of done items and saves the state
-        gen = self._track_done_items(gen, items)
+        gen = self._track_done_items(gen)
         gen = (x for x in gen if x is not None)
         nextstatebackup = time.time() + self.save_interval
         try:
@@ -148,7 +151,7 @@ class IterativeExecutor(ResumableExecutor):
         gen = tqdm(items, disable=not self.status, unit=self.unit,
                    total=len(items), desc=self.desc)
         gen = map(function, gen)
-        return self._accumulate(gen, items, accumulator)
+        return self._accumulate(gen, accumulator)
 
 
 @dataclass
@@ -178,7 +181,6 @@ class ParslExecutor(ResumableExecutor):
                     total=len(items),
                     desc=self.desc,
                 ),
-                items,
                 accumulator,
             )
         finally:
