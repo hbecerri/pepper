@@ -47,8 +47,8 @@ def get_trigger_paths_for(dataset, is_mc, trigger_paths, trigger_order=None,
     pos_triggers = []
     neg_triggers = []
     if is_mc:
-        for paths in trigger_paths.values():
-            pos_triggers.extend(paths)
+        for key in trigger_order:
+            pos_triggers.extend(trigger_paths[key])
     else:
         for key in trigger_order:
             if (key == dataset) or (
