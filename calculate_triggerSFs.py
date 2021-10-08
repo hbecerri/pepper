@@ -69,7 +69,11 @@ hist = pepper.misc.coffeahist2hist(coffea.util.load(os.path.join(
 
 sel = {"njet": sum, "nPV": sum, "MET": sum, "MET triggers": "yes"}
 data_sel = {"dataset": list(config["MET_trigger_datasets"].keys())}
-mc_sel = {"dataset": "TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8"}
+if len([k for k in config["mc_datasets"] if k.startswith("TTTo2L2Nu_")]) == 1:
+    mc_sel = {"dataset": [k for k in config["mc_datasets"]
+                          if k.startswith("TTTo2L2Nu_")][0]}
+else:
+    raise ValueError("Could not find unique tt dileptonic dataset")
 data_hist = hist[sel][data_sel][{"dataset": sum}]
 mc_hist = hist[sel][mc_sel]
 sf = calculate_sf(data_hist, mc_hist)
