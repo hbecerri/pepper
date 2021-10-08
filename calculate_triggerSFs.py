@@ -69,13 +69,13 @@ hist = pepper.misc.coffeahist2hist(coffea.util.load(os.path.join(
 
 sel = {"njet": sum, "nPV": sum, "MET": sum, "MET triggers": "yes"}
 data_sel = {"dataset": list(config["MET_trigger_datasets"].keys())}
-if len([k for k in config["mc_datasets"] if k.startswith("TTTo2L2Nu_")]) == 1:
-    mc_sel = {"dataset": [k for k in config["mc_datasets"]
-                          if k.startswith("TTTo2L2Nu_")][0]}
-else:
-    raise ValueError("Could not find unique tt dileptonic dataset")
+for ax in hist.axes:
+    if ax.name == "dataset":
+        dsaxis = ax
+mc_sel = {"dataset": [ds for ds in list(config["mc_datasets"].keys())
+                      if ds in dsaxis]}
 data_hist = hist[sel][data_sel][{"dataset": sum}]
-mc_hist = hist[sel][mc_sel]
+mc_hist = hist[sel][mc_sel][{"dataset": sum}]
 sf = calculate_sf(data_hist, mc_hist)
 sf_variance = sf.variances()
 
@@ -86,10 +86,10 @@ logger.debug(f"Stat. unc.: {safe_div(sf_variance ** 0.5, sf.values())}")
 for ax in ["njet", "nPV", "MET"]:
     sel[ax] = 0
     data_hist_down = hist[sel][data_sel][{"dataset": sum}]
-    mc_hist_down = hist[sel][mc_sel]
+    mc_hist_down = hist[sel][mc_sel][{"dataset": sum}]
     sel[ax] = 1
     data_hist_up = hist[sel][data_sel][{"dataset": sum}]
-    mc_hist_up = hist[sel][mc_sel]
+    mc_hist_up = hist[sel][mc_sel][{"dataset": sum}]
     sel[ax] = sum
 
     sf_down = calculate_sf(data_hist_down, mc_hist_down)
@@ -110,7 +110,7 @@ sf_variance += np.amax(diffs, axis=0) ** 2
 
 # Trigger correlation systematics:
 sel = {"njet": sum, "nPV": sum, "MET": sum}
-mc_hist = hist[sel][mc_sel]
+mc_hist = hist[sel][mc_sel][{"dataset": sum}]
 denom = mc_hist[{"dilep triggers": sum, "MET triggers": sum}].values()
 eff_mt_only = safe_div(
     mc_hist[{"dilep triggers": sum, "MET triggers": "yes"}].values(), denom)
