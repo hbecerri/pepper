@@ -37,7 +37,7 @@ class ResumableExecutor(abc.ABC, coffea.processor.executor.ExecutorBase):
 
     state_file_name: str = None
     remove_state_at_end: bool = False
-    save_interval: int = 1
+    save_interval: int = 300
 
     def __post_init__(self):
         self.state = {"items_done": [], "accumulator": None,
