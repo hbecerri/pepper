@@ -94,12 +94,22 @@ class Processor(pepper.Processor):
                            "smearing, even if not computing systematics")
             self._jer = None
             self._jersf = None
-        if ((self._jer is not None or self._junc is not None)
-                and "jet_correction" not in self.config):
+        if ("jet_correction_mc" not in config and
+                (self._jer is not None or self._junc is not None or
+                    ("reapply_jec" in self.config
+                     and self.config["reapply_jec"]))):
             raise pepper.config.ConfigError(
-                "Need jet_correction for propagating jet corrections to MET")
+                "Need jet_correction_mc for propagating jet "
+                "smearing/variation to MET or because reapply_jec is true")
         else:
-            self._jec = self.config["jet_correction"]
+            self._jec_mc = self.config["jet_correction_mc"]
+        if ("jet_correction_data" not in config
+                and "reapply_jec" in self.config
+                and self.config["reapply_jec"]):
+            raise pepper.config.ConfigError(
+                "Need jet_correction_data because reapply_jec is true")
+        else:
+            self._jec_data = self.config["jet_correction_data"]
 
         self.trigger_paths = config["dataset_trigger_map"]
         self.trigger_order = config["dataset_trigger_order"]
@@ -288,15 +298,16 @@ class Processor(pepper.Processor):
     def process_selection_jet_part(self, selector, is_mc, variation, dsname,
                                    filler, era):
         logger.debug(f"Running jet_part with variation {variation.name}")
-        if is_mc:
-            selector.set_multiple_columns(partial(
-                self.compute_jet_factors, variation.junc, variation.jer,
-                selector.rng))
+        reapply_jec = ("reapply_jec" in self.config
+                       and self.config["reapply_jec"])
+        selector.set_multiple_columns(partial(
+            self.compute_jet_factors, is_mc, reapply_jec, variation.junc,
+            variation.jer, selector.rng))
         selector.set_column("OrigJet", selector.data["Jet"])
         selector.set_column("Jet", self.build_jet_column)
         smear_met = "smear_met" in self.config and self.config["smear_met"]
         selector.set_column(
-            "MET", partial(self.build_met_column, variation.junc,
+            "MET", partial(self.build_met_column, is_mc, variation.junc,
                            variation.jer if smear_met else None, selector.rng,
                            era, variation=variation.met))
         selector.set_multiple_columns(
@@ -793,6 +804,28 @@ class Processor(pepper.Processor):
     def dilep_pt(self, data):
         return (data["Lepton"][:, 0] + data["Lepton"][:, 1]).pt
 
+    def compute_jec_factor(self, is_mc, data, pt=None, eta=None, area=None,
+                           rho=None, raw_factor=None):
+        if pt is None:
+            pt = data["Jet"].pt
+        if eta is None:
+            eta = data["Jet"].eta
+        if area is None:
+            area = data["Jet"].area
+        if rho is None:
+            rho = data["fixedGridRhoFastjetAll"]
+        if raw_factor is None:
+            raw_factor = 1 - data["Jet"]["rawFactor"]
+        if is_mc:
+            jec = self._jec_mc
+        else:
+            jec = self._jec_data
+
+        raw_pt = pt * raw_factor
+        l1l2l3 = jec.getCorrection(
+            JetPt=raw_pt, JetEta=eta, JetA=area, Rho=rho)
+        return raw_factor * l1l2l3
+
     def compute_junc_factor(self, data, variation, source="jes", pt=None,
                             eta=None):
         if variation not in ("up", "down"):
@@ -849,17 +882,23 @@ class Processor(pepper.Processor):
             factor = factor_stoch
         return factor
 
-    def compute_jet_factors(self, junc, jer, rng, data):
-        if junc is not None:
+    def compute_jet_factors(self, is_mc, jec, junc, jer, rng, data):
+        factor = ak.ones_like(data["Jet"].pt)
+        if jec:
+            jecfac = self.compute_jec_factor(is_mc, data)
+            factor = factor * jecfac
+        if is_mc and junc is not None:
             juncfac = self.compute_junc_factor(data, *junc)
-        else:
-            juncfac = ak.ones_like(data["Jet"].pt)
-        if jer is not None:
+            factor = factor * juncfac
+        if is_mc and jer is not None:
             jerfac = self.compute_jer_factor(data, rng, jer)
-        else:
-            jerfac = ak.ones_like(data["Jet"].pt)
-        factor = juncfac * jerfac
-        return {"jetfac": factor, "juncfac": juncfac, "jerfac": jerfac}
+            factor = factor * jerfac
+        ret = {}
+        if jec or (is_mc and (junc is not None or jer is not None)):
+            ret["jetfac"] = factor
+        if jer is not None:
+            ret["jerfac"] = factor
+        return ret
 
     def good_jet(self, data):
         jets = data["Jet"]
@@ -939,17 +978,22 @@ class Processor(pepper.Processor):
 
         return jets
 
-    def build_lowptjet_column(self, junc, jer, rng, data):
+    def build_lowptjet_column(self, is_mc, junc, jer, rng, data):
         jets = data["CorrT1METJet"]
         # For MET we care about jets close to 15 GeV. JEC is derived with
         # pt > 10 GeV and |eta| < 5.2, thus cut there
         jets = jets[(jets.rawPt > 10) & (abs(jets.eta) < 5.2)]
-        l1l2l3 = self._jec.getCorrection(
-            JetPt=jets.rawPt, JetEta=jets.eta, JetA=jets.area,
-            Rho=data["fixedGridRhoFastjetAll"])
+        l1l2l3 = self.compute_jec_factor(
+            is_mc, data, jets.rawPt, jets.eta, jets.area,
+            raw_factor=ak.ones_like(jets.rawPt))
         jets["pt"] = l1l2l3 * jets.rawPt
         jets["pt_nomuon"] = jets["pt"] * (1 - jets["muonSubtrFactor"])
 
+        # Actually if reapply_met is True one would need to take into account
+        # the difference between JEC applied in NanoAOD and the one that is
+        # applied in the Processor for MET type-1 corrections. However, as
+        # NanoAOD doesn't provide a raw factor for low pt jets, assume the
+        # difference is negligible.
         jets["factor"] = ak.ones_like(jets["pt"])
         if junc is not None:
             jets["factor"] = jets["factor"] * self.compute_junc_factor(
@@ -964,7 +1008,8 @@ class Processor(pepper.Processor):
 
         return jets
 
-    def build_met_column(self, junc, jer, rng, era, data, variation="central"):
+    def build_met_column(self, is_mc, junc, jer, rng, era, data,
+                         variation="central"):
         met = data["MET"]
         metx = met.pt * np.cos(met.phi)
         mety = met.pt * np.sin(met.phi)
@@ -985,13 +1030,12 @@ class Processor(pepper.Processor):
         elif variation != "central":
             raise ValueError(
                 "variation must be one of 'central', 'up' or 'down'")
-        if jer is not None and "jetfac" in ak.fields(data):
+        if "jetfac" in ak.fields(data):
             factors = data["jetfac"]
-        elif "juncfac" in ak.fields(data):
-            factors = data["juncfac"]
-        else:
-            factors = None
-        if factors is not None and ak.any(factors != 1):
+            if "jerfac" in ak.fields(data) and (
+                    "smear_met" not in self.config
+                    or not self.config["smear_met"]):
+                factors = factors / data["jerfac"]
             # Do MET type-1 and smearing corrections
             jets = data["OrigJet"]
             jets = ak.zip({
@@ -1003,7 +1047,7 @@ class Processor(pepper.Processor):
                 "mass": jets.mass,
                 "emef": jets.neEmEF + jets.chEmEF
             }, with_name="Jet", behavior=jets.behavior)
-            lowptjets = self.build_lowptjet_column(junc, jer, rng, data)
+            lowptjets = self.build_lowptjet_column(is_mc, junc, jer, rng, data)
             # Cut according to MissingETRun2Corrections Twiki
             jets = jets[(jets["pt_nomuon"] > 15) & (jets["emef"] < 0.9)]
             lowptjets = lowptjets[(lowptjets["pt_nomuon"] > 15)

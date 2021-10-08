@@ -32,7 +32,8 @@ class ConfigTTbarLL(pepper.Config):
             "electron_sf": self._get_scalefactors,
             "muon_sf": self._get_scalefactors,
             "btag_sf": self._get_btag_sf,
-            "jet_correction": self._get_jet_correction,
+            "jet_correction_mc": self._get_jet_correction,
+            "jet_correction_data": self._get_jet_correction,
             "jet_uncertainty": partial(
                 self._get_jet_general, evaltype="junc",
                 cls=coffea.jetmet_tools.JetCorrectionUncertainty),
