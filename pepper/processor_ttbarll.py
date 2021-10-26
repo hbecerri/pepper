@@ -108,7 +108,7 @@ class Processor(pepper.Processor):
                 and self.config["reapply_jec"]):
             raise pepper.config.ConfigError(
                 "Need jet_correction_data because reapply_jec is true")
-        else:
+        elif "reapply_jec" in self.config and self.config["reapply_jec"]:
             self._jec_data = self.config["jet_correction_data"]
 
         self.trigger_paths = config["dataset_trigger_map"]
