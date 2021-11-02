@@ -176,7 +176,8 @@ def run_processor(processor_class=None, description=None, mconly=False):
             answer = input(
                 f"Found old processor state from {mtime}. Load? y/n ")
             if answer == "n":
-                print(f"Please delete the old file {args.statedata}")
+                print(f"Please delete/rename the old file {args.statedata} or "
+                      "use --statedata")
                 sys.exit(1)
             elif answer == "y":
                 break

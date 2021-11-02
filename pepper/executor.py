@@ -67,7 +67,8 @@ class ResumableExecutor(abc.ABC, coffea.processor.executor.ExecutorBase):
             filename = self.state_file_name
         state = coffea.util.load(filename)
         if state["version"] != STATEFILE_VERSION:
-            raise StateFileError("State file made by incompatible version")
+            raise StateFileError("State file made by incompatible version: "
+                                 f"{filename}")
         self.state = state
 
     def reset_state(self):
