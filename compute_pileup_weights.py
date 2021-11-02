@@ -2,6 +2,7 @@ import os
 import pepper
 import coffea
 import uproot
+import numpy as np
 
 
 class Processor(pepper.Processor):
@@ -88,6 +89,10 @@ class Processor(pepper.Processor):
                         (datahist, ""), (datahistup, "_up"),
                         (datahistdown, "_down")]:
                     ratio = datahist_i / hist_int.values()
+                    # Set infinities from zero height bins in hist_int to 0
+                    ratio[:] = np.nan_to_num(
+                        np.stack([ratio.values(), ratio.variances()], axis=-1),
+                        posinf=0)
                     f[dataset + suffix] = ratio
 
     def save_output(self, output, dest):
