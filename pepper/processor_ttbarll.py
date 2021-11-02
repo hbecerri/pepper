@@ -417,6 +417,8 @@ class Processor(pepper.Processor):
             if self.config["split_pdf_uncs"]:
                 split_pdf_uncs = True
         if (("LHEPdfWeight" not in data.fields) or (self.pdf_types is None)):
+            selector.set_systematic("PDF", 1, 1)
+            selector.set_systematic("PDF_alpha_s", 1, 1)
             return
         pdfs = data["LHEPdfWeight"]
         pdf_type = None
