@@ -241,6 +241,7 @@ class Processor(pepper.Processor):
                 and dsname not in self.config["dataset_for_systematics"]):
             if hasattr(filler, "sys_overwrite"):
                 assert filler.sys_overwrite is None
+            channels = filler.channels
             for variarg in self.get_jetmet_variation_args():
                 selector_copy = copy(selector)
                 filler.sys_overwrite = variarg.name
@@ -251,6 +252,7 @@ class Processor(pepper.Processor):
                                  f" {variarg.name}")
                     self.save_per_event_info(
                         dsname + "_" + variarg.name, selector_copy, False)
+                filler.channels = channels
             filler.sys_overwrite = None
 
         # Do normal, no-variation run
