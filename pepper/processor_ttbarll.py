@@ -548,13 +548,18 @@ class Processor(pepper.Processor):
 
     def passing_trigger(self, pos_triggers, neg_triggers, data):
         hlt = data["HLT"]
-        trigger = (
-            np.any([np.asarray(hlt[trigger_path])
-                    for trigger_path in pos_triggers], axis=0)
-            & ~np.any([np.asarray(hlt[trigger_path])
-                       for trigger_path in neg_triggers], axis=0)
-        )
-        return trigger
+        available = ak.fields(hlt)
+        triggered = np.full(len(data), False)
+        for trigger_path in pos_triggers:
+            if trigger_path not in available:
+                logger.debug(f"HLT_{trigger_path} not in file")
+                continue
+            triggered |= np.asarray(hlt[trigger_path])
+        for trigger_path in neg_triggers:
+            if trigger_path not in available:
+                continue
+            triggered &= ~np.asarray(hlt[trigger_path])
+        return triggered
 
     def add_l1_prefiring_weights(self, data):
         w = data["L1PreFiringWeight"]
@@ -1146,15 +1151,15 @@ class Processor(pepper.Processor):
         check = [
             (is_ee, "ee"), (is_mm, "mumu"), (is_em, "emu"),
             (is_ee | is_em, "e"), (is_mm | is_em, "mu")]
-        for mask, trigname in check:
-            if (trigname + "_" + era) in triggers:
+        for mask, channel in check:
+            if (channel + "_" + era) in triggers:
                 trigger = [pepper.misc.normalize_trigger_path(t)
-                           for t in triggers[trigname + "_" + era]]
+                           for t in triggers[channel + "_" + era]]
                 ret = ret | (
                     mask & self.passing_trigger(trigger, [], data))
-            elif trigname in triggers:
+            elif channel in triggers:
                 trigger = [pepper.misc.normalize_trigger_path(t)
-                           for t in triggers[trigname]]
+                           for t in triggers[channel]]
                 ret = ret | (
                     mask & self.passing_trigger(trigger, [], data))
 
