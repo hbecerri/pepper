@@ -495,9 +495,7 @@ class Processor(pepper.Processor):
         if not is_mc:
             return np.mod(data["event"], self.config["blinding_denom"]) == 0
         else:
-            return (np.full(data.size, True),
-                    {"Blinding_sf":
-                     np.full(data.size, 1/self.config["blinding_denom"])})
+            return np.full(len(data), 1/self.config["blinding_denom"])
 
     def good_lumimask(self, is_mc, dsname, data):
         if is_mc:
@@ -1023,12 +1021,12 @@ class Processor(pepper.Processor):
         metx = met.pt * np.cos(met.phi)
         mety = met.pt * np.sin(met.phi)
         if (self.met_xy_shifts and era != "no_events"):
-            metx += -(self.met_xy_shifts["METxcorr"][era][0]
-                      * data["PV"]["npvs"]
-                      + self.met_xy_shifts["METxcorr"][era][1])
-            mety += -(self.met_xy_shifts["METycorr"][era][0]
-                      * data["PV"]["npvs"]
-                      + self.met_xy_shifts["METycorr"][era][1])
+            metx = metx - (self.met_xy_shifts["METxcorr"][era][0]
+                           * data["PV"]["npvs"]
+                           + self.met_xy_shifts["METxcorr"][era][1])
+            mety = mety - (self.met_xy_shifts["METycorr"][era][0]
+                           * data["PV"]["npvs"]
+                           + self.met_xy_shifts["METycorr"][era][1])
 
         if variation == "up":
             metx = metx + met.MetUnclustEnUpDeltaX
