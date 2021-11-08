@@ -1,8 +1,9 @@
 import os
 import pepper
 import coffea
+import coffea.util
+import hist as hi
 import uproot
-import numpy as np
 
 
 class Processor(pepper.Processor):
@@ -26,24 +27,31 @@ class Processor(pepper.Processor):
                 "data_pu_hist.")
 
         axisname = datahist.axes[0].name
-        config["hists"] = {
-            "pileup": pepper.HistDefinition({
-                "bins": [
-                    {
-                        "name": axisname,
-                        "label": ("True mean number interactions per bunch "
-                                  "crossing"),
-                        "n_or_arr": datahist.axes[0].edges
-                    }
-                ],
-                "fill": {
-                    axisname: [
-                        "Pileup",
-                        "nTrueInt"
-                    ]
+        hist_config = {
+            "bins": [
+                {
+                    "name": axisname,
+                    "label": ("True mean number interactions per bunch "
+                              "crossing")
                 }
-            })
+            ],
+            "fill": {
+                axisname: [
+                    "Pileup",
+                    "nTrueInt"
+                ]
+            }
         }
+        if isinstance(datahist.axes[0], hi.axis.Regular):
+            ax = datahist.axes[0]
+            hist_config["bins"][0].update({
+                "n_or_arr": len(ax),
+                "lo": ax.value(0),
+                "hi": ax.value(len(ax))
+            })
+        else:
+            hist_config["bins"][0]["n_or_arr"] = datahist.axes[0].edges
+        config["hists"] = {"pileup": pepper.HistDefinition(hist_config)}
         if "hists_to_do" in config:
             del config["hists_to_do"]
         config["compute_systematics"] = False
@@ -83,25 +91,23 @@ class Processor(pepper.Processor):
 
         with uproot.recreate(filename) as f:
             for dataset in hist.axes["dataset"]:
-                hist_int = hist[dataset, :]
-                hist_int /= hist_int.sum().value
+                denom = hist[dataset, :].values().copy()
+                # Set bins that are zero in MC to 0 in data to get norm right
+                is_nonzero = denom != 0
+                # Avoid division by zero warning
+                denom[~is_nonzero] = 1
+                denom /= denom.sum()
                 for datahist_i, suffix in [
                         (datahist, ""), (datahistup, "_up"),
                         (datahistdown, "_down")]:
-                    ratio = datahist_i / hist_int.values()
-                    # Set infinities from zero height bins in hist_int to 0
-                    ratio[:] = np.nan_to_num(
-                        np.stack([ratio.values(), ratio.variances()], axis=-1),
-                        posinf=0)
+                    datahist_i = datahist_i * is_nonzero
+                    norm = datahist_i.sum().value
+                    ratio = datahist_i / norm / denom
+
                     f[dataset + suffix] = ratio
 
     def save_output(self, output, dest):
         datahist, datahistup, datahistdown = self.load_input_hists()
-
-        # Normalize data histograms
-        datahist /= datahist.sum().value
-        datahistup /= datahistup.sum().value
-        datahistdown /= datahistdown.sum().value
 
         mchist = output["hists"][("Before cuts", "pileup")]
         # Set underflow and 0 pileup bin to 0, which might be != 0 only for
