@@ -942,16 +942,8 @@ class Processor(pepper.Processor):
         j_pt = jets.pt
         if "jetfac" in ak.fields(data):
             j_pt = j_pt * data["jetfac"]
-        j_eta = jets.eta
-        j_phi = jets.phi
-        l_eta = leptons.eta
-        l_phi = leptons.phi
-        j_eta, l_eta = ak.unzip(ak.cartesian([j_eta, l_eta], nested=True))
-        j_phi, l_phi = ak.unzip(ak.cartesian([j_phi, l_phi], nested=True))
-        delta_eta = j_eta - l_eta
-        delta_phi = j_phi - l_phi
-        delta_r = np.hypot(delta_eta, delta_phi)
-        has_lepton_close = ak.any(delta_r < lep_dist, axis=2)
+        has_lepton_close = ak.any(
+            jets.metric_table(leptons) < lep_dist, axis=2)
 
         return (has_id & has_puId
                 & (~has_lepton_close)
