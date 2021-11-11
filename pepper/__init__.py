@@ -8,8 +8,10 @@ from pepper.selector import Selector
 from pepper.kinreco import sonnenschein
 from pepper.betchart_kinreco import betchart
 from pepper.config import Config
+from pepper.config_basic import ConfigBasicPhysics
 from pepper.config_ttbarll import ConfigTTbarLL
 from pepper.processor import Processor
+from pepper.processor_basic import ProcessorBasicPhysics
 from pepper.processor_ttbarll import Processor as ProcessorTTbarLL
 from pepper import scale_factors
 
@@ -24,8 +26,10 @@ __all__ = [
     "sonnenschein",
     "betchart",
     "Config",
+    "ConfigBasicPhysics",
     "ConfigTTbarLL",
     "Processor",
+    "ProcessorBasicPhysics",
     "ProcessorTTbarLL",
     "scale_factors"
 ]
