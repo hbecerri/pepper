@@ -198,8 +198,8 @@ class ProcessorBasicPhysics(pepper.Processor):
             else:
                 return rwght
 
-    def add_generator_uncertainies(self, dsname, selector):
-        # Matrix-element renormalization and factorization scale
+    def add_me_uncertainties(self, dsname, selector, data):
+        """Matrix-element renormalization and factorization scale"""
         # Get describtion of individual columns of this branch with
         # Events->GetBranch("LHEScaleWeight")->GetTitle() in ROOT
         data = selector.data
@@ -230,7 +230,9 @@ class ProcessorBasicPhysics(pepper.Processor):
                 "MEren", np.ones(len(data)), np.ones(len(data)))
             selector.set_systematic(
                 "MEfac", np.ones(len(data)), np.ones(len(data)))
-        # Parton shower scale
+
+    def add_ps_uncertainties(self, selector, data):
+        """Parton shower scale uncertainties"""
         psweight = data["PSWeight"]
         if len(psweight) > 0 and ak.num(psweight)[0] != 1:
             # NanoAOD containts one 1.0 per event in PSWeight if there are no
@@ -252,16 +254,19 @@ class ProcessorBasicPhysics(pepper.Processor):
                 "PSisr", np.ones(len(data)), np.ones(len(data)))
             selector.set_systematic(
                 "PSfsr", np.ones(len(data)), np.ones(len(data)))
-        # Add PDF uncertainties, using the methods described here:
-        # https://arxiv.org/pdf/1510.03865.pdf#section.6
-        split_pdf_uncs = False
-        if "split_pdf_uncs" in self.config:
-            if self.config["split_pdf_uncs"]:
-                split_pdf_uncs = True
+
+    def add_pdf_uncertainties(self, selector, data):
+        """Add PDF uncertainties, using the methods described here:
+        https://arxiv.org/pdf/1510.03865.pdf#section.6"""
         if ("LHEPdfWeight" not in data.fields
                 or "pdf_types" not in self.config):
             selector.set_systematic("PDF", 1, 1)
-            selector.set_systematic("PDF_alpha_s", 1, 1)
+            selector.set_systematic("PDFalphas", 1, 1)
+            return
+
+        split_pdf_uncs = False
+        if "split_pdf_uncs" in self.config:
+            split_pdf_uncs = self.config["split_pdf_uncs"]
         pdfs = data["LHEPdfWeight"]
         pdf_type = None
         for LHA_ID, _type in self.config["pdf_types"].items():
@@ -321,6 +326,13 @@ class ProcessorBasicPhysics(pepper.Processor):
         else:
             unc = np.zeros(len(data))
         selector.set_systematic("PDFalphas", 1 + unc, 1 - unc)
+
+    def add_generator_uncertainies(self, dsname, selector):
+        """Add MC generator uncertainties: ME, PS and PDF"""
+        data = selector.data
+        self.add_me_uncertainties(dsname, selector, data)
+        self.add_ps_uncertainties(selector, data)
+        self.add_pdf_uncertainties(selector, data)
 
     def crosssection_scale(self, dsname, data):
         num_events = len(data)
