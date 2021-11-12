@@ -61,19 +61,17 @@ class ConfigBasicPhysics(pepper.Config):
             }
         )
 
+    def _get_scalefactor(self, sfpath):
+        if not isinstance(sfpath, list) or len(sfpath) < 2:
+            raise pepper.config.ConfigError(
+                "scale factors needs to be list of 2-element-lists in "
+                "form of [rootfile, histname]")
+        with uproot.open(self._get_path(sfpath[0])) as f:
+            hist = f[sfpath[1]]
+        return ScaleFactors.from_hist(hist, sfpath[2])
+
     def _get_scalefactors(self, value):
-        sfs = []
-        for sfpath in value:
-            if not isinstance(sfpath, list) or len(sfpath) < 2:
-                raise pepper.config.ConfigError(
-                    "scale factors needs to be list of 2-element-lists in "
-                    "form of [rootfile, histname]"
-                )
-            with uproot.open(self._get_path(sfpath[0])) as f:
-                hist = f[sfpath[1]]
-            sf = ScaleFactors.from_hist(hist, sfpath[2])
-            sfs.append(sf)
-        return sfs
+        return [self._get_scalefactor(sfpath) for sfpath in value]
 
     @staticmethod
     def _get_year(value):
