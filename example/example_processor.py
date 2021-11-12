@@ -5,15 +5,13 @@
 # 'python3 -m pepper.runproc --debug example_processor.py'
 
 import pepper
-import numpy as np
 import awkward as ak
-import coffea.lumi_tools
 from functools import partial
 import awkward
 
 
 # All processors should inherit from pepper.Processor
-class Processor(pepper.Processor):
+class Processor(pepper.ProcessorBasicPhysics):
     # We use the ConfigTTbarLL instead of its base Config, to use some of its
     # predefined extras
     config_class = pepper.ConfigTTbarLL
@@ -36,7 +34,8 @@ class Processor(pepper.Processor):
 
         # Add a cut only allowing events according to the golden JSON
         if not is_mc:
-            selector.add_cut("Lumi", partial(self.good_lumimask, is_mc))
+            selector.add_cut("Lumi", partial(
+                self.good_lumimask, is_mc, dsname))
 
         # Only allow events that pass triggers specified in config
         # This also takes into account a trigger order to avoid triggering
@@ -56,26 +55,6 @@ class Processor(pepper.Processor):
 
         # Only accept events that have oppositely changed leptons
         selector.add_cut("OC leptons", self.opposite_sign_lepton_pair)
-
-    def good_lumimask(self, is_mc, data):
-        # This function gets called by the selector in order to get information
-        # on which events to discard or how to modify the event weight.
-        # The data argument is given by the selector and is a nanoevent object,
-        # giving us access to all info inside the Events tree of the NanoAOD
-        run = np.array(data["run"])
-        luminosity_block = np.array(data["luminosityBlock"])
-        lumimask = coffea.lumi_tools.LumiMask(self.lumimask)
-        return lumimask(run, luminosity_block)
-
-    def passing_trigger(self, pos_triggers, neg_triggers, data):
-        hlt = data["HLT"]
-        trigger = (
-            np.any([hlt[trigger_path] for trigger_path in pos_triggers],
-                   axis=0)
-            & ~np.any([hlt[trigger_path] for trigger_path in neg_triggers],
-                      axis=0)
-        )
-        return trigger
 
     def pick_electrons(self, data):
         ele = data["Electron"]

@@ -30,7 +30,8 @@ logger = logging.getLogger(__name__)
 
 
 class ProcessorBasicPhysics(pepper.Processor):
-    """Processor for the Top-pair with dileptonic decay selection"""
+    """Processor containing basic object definitions and cuts useful
+       for most physics analyses."""
 
     config_class = pepper.ConfigBasicPhysics
 
@@ -159,6 +160,8 @@ class ProcessorBasicPhysics(pepper.Processor):
             self.pdf_types = None
 
     def _check_config_integrity(self, config):
+        """Check integrity of configuration file."""
+
         super()._check_config_integrity(config)
 
         # Skip if no systematics, as currently only checking syst configs
@@ -236,6 +239,7 @@ class ProcessorBasicPhysics(pepper.Processor):
             return VariationArg(None, jer=None)
 
     def gentop(self, data):
+        """Return generator-level tops."""
         part = data["GenPart"]
         part = part[~ak.is_none(part.parent, axis=1)]
         part = part[part.hasFlags("isLastCopy")]
@@ -409,9 +413,9 @@ class ProcessorBasicPhysics(pepper.Processor):
                      np.full(data.size, 1/self.config["blinding_denom"])})
 
     def good_lumimask(self, is_mc, dsname, data):
+        """Keep only data events that are in the golden json files.
+           For MC, compute pileup reweighting and lumi variation here."""
         if is_mc:
-            # Lumimask only present in data, all events pass in MC
-            # Compute pileup reweighting and lumi variation here
             ntrueint = data["Pileup"]["nTrueInt"]
             sys = {}
             if self.puweighter is not None:
@@ -445,6 +449,7 @@ class ProcessorBasicPhysics(pepper.Processor):
             return lumimask(run, luminosity_block)
 
     def get_era(self, data, is_mc):
+        """Return data-taking eras based on run number."""
         if is_mc:
             return self.config["year"] + "MC"
         else:
@@ -458,6 +463,7 @@ class ProcessorBasicPhysics(pepper.Processor):
             raise ValueError(f"Run {run} does not correspond to any era")
 
     def passing_trigger(self, pos_triggers, neg_triggers, data):
+        """Return mask for events that pass the trigger."""
         hlt = data["HLT"]
         available = ak.fields(hlt)
         triggered = np.full(len(data), False)
@@ -481,6 +487,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         return nom
 
     def mpv_quality(self, data):
+        """Check quality of primary vertex."""
         # Does not include check for fake. Is this even needed?
         R = np.hypot(data["PV_x"], data["PV_y"])
         return ((data["PV_chi2"] != 0)
@@ -489,6 +496,7 @@ class ProcessorBasicPhysics(pepper.Processor):
                 & (R <= 2))
 
     def met_filters(self, is_mc, data):
+        """Apply met filters."""
         year = str(self.config["year"]).lower()
         if not self.config["apply_met_filters"]:
             return np.full(data.shape, True)
@@ -516,9 +524,11 @@ class ProcessorBasicPhysics(pepper.Processor):
         return passing_filters
 
     def in_transreg(self, abs_eta):
+        """Check if object is in detector transition region."""
         return (1.444 < abs_eta) & (abs_eta < 1.566)
 
     def electron_id(self, e_id, electron):
+        """Check if electrons have ID specified in the config file."""
         if e_id == "skip":
             has_id = True
         if e_id == "cut:loose":
@@ -540,6 +550,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         return has_id
 
     def electron_cuts(self, electron, good_lep):
+        """Apply some basic electron quality cuts."""
         if self.config["ele_cut_transreg"]:
             sc_eta_abs = abs(electron["eta"]
                              + electron["deltaEtaSC"])
@@ -560,10 +571,12 @@ class ProcessorBasicPhysics(pepper.Processor):
                 & (pt_min < electron["pt"]))
 
     def pick_electrons(self, data):
+        """Get electrons that pass basic quality cuts."""
         electrons = data["Electron"]
         return electrons[self.electron_cuts(electrons, good_lep=True)]
 
     def muon_id(self, m_id, muon):
+        """Check if muons have ID specified in the config file."""
         if m_id == "skip":
             has_id = True
         elif m_id == "cut:loose":
@@ -583,6 +596,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         return has_id
 
     def muon_iso(self, iso, muon):
+        """Check if muons have isolation specified in the config file."""
         if iso == "skip":
             return True
         elif iso == "cut:very_loose":
@@ -611,6 +625,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         raise ValueError("Invalid muon iso string")
 
     def muon_cuts(self, muon, good_lep):
+        """Apply some basic muon quality cuts"""
         if self.config["muon_cut_transreg"]:
             is_in_transreg = self.in_transreg(abs(muon["eta"]))
         else:
@@ -631,10 +646,12 @@ class ProcessorBasicPhysics(pepper.Processor):
                 & (pt_min < muon["pt"]))
 
     def pick_muons(self, data):
+        """Get muons that pass basic quality cuts."""
         muons = data["Muon"]
         return muons[self.muon_cuts(muons, good_lep=True)]
 
     def apply_rochester_corr(self, muons, rng, is_mc):
+        """Apply Rochester corrections for muons."""
         if not is_mc:
             dtSF = self.muon_roch.kScaleDT(
                 muons["charge"], muons["pt"], muons["eta"], muons["phi"]
@@ -670,6 +687,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         return muons
 
     def build_lepton_column(self, is_mc, rng, data):
+        """Build a lepton column containing electrons and muons."""
         electron = data["Electron"]
         muon = data["Muon"]
         # Apply Rochester corrections to muons
@@ -688,6 +706,8 @@ class ProcessorBasicPhysics(pepper.Processor):
         return lepton
 
     def compute_lepton_sf(self, data):
+        """Compute identification and isolation scale factors for
+           leptons (electrons and muons)."""
         eles = data["Electron"]
         muons = data["Muon"]
 
@@ -729,6 +749,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         return weight, systematics
 
     def lepton_pair(self, is_mc, data):
+        """Select events that contain at least two leptons."""
         accept = np.asarray(ak.num(data["Lepton"]) >= 2)
         if is_mc:
             weight, systematics = self.compute_lepton_sf(data[accept])
@@ -739,18 +760,22 @@ class ProcessorBasicPhysics(pepper.Processor):
             return accept
 
     def opposite_sign_lepton_pair(self, data):
+        """Select events that contain two opposite-sign leptons."""
         return (np.sign(data["Lepton"][:, 0].pdgId)
                 != np.sign(data["Lepton"][:, 1].pdgId))
 
     def same_flavor_lepton_pair(self, data):
+        """Select events that contain two same-flavor leptons."""
         return (abs(data["Lepton"][:, 0].pdgId)
                 == abs(data["Lepton"][:, 1].pdgId))
 
     def mass_lepton_pair(self, data):
+        """Return invariant mass of lepton pair."""
         return (data["Lepton"][:, 0] + data["Lepton"][:, 1]).mass
 
     def compute_jec_factor(self, is_mc, data, pt=None, eta=None, area=None,
                            rho=None, raw_factor=None):
+        """Return jet energy correction factor."""
         if pt is None:
             pt = data["Jet"].pt
         if eta is None:
@@ -773,6 +798,7 @@ class ProcessorBasicPhysics(pepper.Processor):
 
     def compute_junc_factor(self, data, variation, source="jes", pt=None,
                             eta=None):
+        """Return jet energy correction uncertainty factor."""
         if variation not in ("up", "down"):
             raise ValueError("variation must be either 'up' or 'down'")
         if source not in self._junc.levels:
@@ -793,6 +819,7 @@ class ProcessorBasicPhysics(pepper.Processor):
 
     def compute_jer_factor(self, data, rng, variation="central", pt=None,
                            eta=None, hybrid=True):
+        """Return jet energy resolution factor."""
         # Coffea offers a class named JetTransformer for this. Unfortunately
         # it is more inconvinient and bugged than useful.
         if pt is None:
@@ -828,6 +855,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         return factor
 
     def compute_jet_factors(self, is_mc, jec, junc, jer, rng, data):
+        """Return total jet factor."""
         factor = ak.ones_like(data["Jet"].pt)
         if jec:
             jecfac = self.compute_jec_factor(is_mc, data)
@@ -846,6 +874,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         return ret
 
     def good_jet(self, data):
+        """Apply some basic jet quality cuts."""
         jets = data["Jet"]
         leptons = data["Lepton"]
         j_id, j_puId, lep_dist, eta_min, eta_max, pt_min = self.config[[
@@ -890,6 +919,10 @@ class ProcessorBasicPhysics(pepper.Processor):
                 & (pt_min < j_pt))
 
     def build_jet_column(self, data):
+        """Build a column of jets passing the jet quality cuts,
+           including a 'btag' key (containing the value of the
+           chosen btag discriminator) and a 'btagged' key
+           (to select jets that are tagged as b-jets)."""
         is_good_jet = self.good_jet(data)
         jets = data["Jet"][is_good_jet]
         if "jetfac" in ak.fields(data):
@@ -916,6 +949,9 @@ class ProcessorBasicPhysics(pepper.Processor):
         return jets
 
     def build_lowptjet_column(self, is_mc, junc, jer, rng, data):
+        """Build a column of low-pt jets, needed to propagate jet
+           corrections to low-pt jets and consequently build the
+           MET column."""
         jets = data["CorrT1METJet"]
         # For MET we care about jets close to 15 GeV. JEC is derived with
         # pt > 10 GeV and |eta| < 5.2, thus cut there
@@ -947,6 +983,7 @@ class ProcessorBasicPhysics(pepper.Processor):
 
     def build_met_column(self, is_mc, junc, jer, rng, era, data,
                          variation="central"):
+        """Build a column for missing transverse energy."""
         met = data["MET"]
         metx = met.pt * np.cos(met.phi)
         mety = met.pt * np.sin(met.phi)
@@ -1003,9 +1040,12 @@ class ProcessorBasicPhysics(pepper.Processor):
         return met
 
     def in_hem1516(self, phi, eta):
+        """Return mask to select objects in faulty sector of hadronic
+           calorimeter encap (HEM 15/16 issue)."""
         return ((-3.0 < eta) & (eta < -1.3) & (-1.57 < phi) & (phi < -0.87))
 
     def hem_cut(self, data):
+        """Keep objects without the HEM 15/16 issue."""
         cut_ele = self.config["hem_cut_if_ele"]
         cut_muon = self.config["hem_cut_if_muon"]
         cut_jet = self.config["hem_cut_if_jet"]
@@ -1023,6 +1063,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         return keep
 
     def lep_pt_requirement(self, data):
+        """Require leptons with minimum pT threshold."""
         n = np.zeros(len(data))
         # This assumes leptons are ordered by pt highest first
         for i, pt_min in enumerate(self.config["lep_pt_min"]):
@@ -1035,14 +1076,17 @@ class ProcessorBasicPhysics(pepper.Processor):
         return data["mll"] > self.config["mll_min"]
 
     def no_additional_leptons(self, is_mc, data):
+        """Veto events with >= 3 leptons."""
         add_ele = self.electron_cuts(data["Electron"], good_lep=False)
         add_muon = self.muon_cuts(data["Muon"], good_lep=False)
         return ak.sum(add_ele, axis=1) + ak.sum(add_muon, axis=1) <= 2
 
     def has_jets(self, data):
+        """Require events with minimum number of jets."""
         return self.config["num_jets_atleast"] <= ak.num(data["Jet"])
 
     def jet_pt_requirement(self, data):
+        """Require jets with minimum pT threshold."""
         n = np.zeros(len(data))
         # This assumes jets are ordered by pt highest first
         for i, pt_min in enumerate(self.config["jet_pt_min"]):
@@ -1110,6 +1154,7 @@ class ProcessorBasicPhysics(pepper.Processor):
             selector.set_systematic("weight", sys / central * varied_sf)
 
     def btag_cut(self, is_mc, data):
+        """Select events with minimum number of b-tagegd jets."""
         num_btagged = ak.sum(data["Jet"]["btagged"], axis=1)
         accept = np.asarray(num_btagged >= self.config["num_atleast_btagged"])
         if is_mc and len(self.btagweighters) != 0:
@@ -1157,6 +1202,7 @@ class ProcessorBasicPhysics(pepper.Processor):
                               axis=1)
 
     def ttbar_system(self, reco_alg, rng, data):
+        """Do ttbar reconstruction."""
         lep = data["recolepton"][:, 0]
         antilep = data["recolepton"][:, 1]
         b = data["recob"][:, 0]
