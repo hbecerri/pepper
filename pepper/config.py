@@ -16,36 +16,23 @@ class ConfigError(RuntimeError):
 
 
 class Config(collections.MutableMapping):
-    def __init__(self, path_or_file, textparser=hjson.load, cwd="."):
+    def __init__(self, path, textparser=hjson.load, cwd="."):
         """Initialize the configuration.
 
         Arguments:
-        path_or_file -- Either a path to the file containing the configuration
-                        or a file-like object of it
+        path -- Path to the file containing the configuration
         textparser -- Callable to be used to parse the text contained in
                       path_or_file
         cwd -- A path to use as the working directory for relative paths in the
                config. The actual working directory of the process might change
                e.g. after submitting to HTCondor
         """
-        if isinstance(path_or_file, str):
-            with open(path_or_file) as f:
-                self._config = textparser(f)
-                path = path_or_file
-        else:
-            self._config = textparser(f)
-            try:
-                path = f.name
-            except AttributeError:
-                path = None
+        self._config_loaded = None
+        self._path = os.path.realpath(path)
         self._cache = {}
         self._overwritten = set()
-        if path is not None:
-            self._config["configdir"] = os.path.dirname(os.path.realpath(path))
-        else:
-            self._config["configdir"] = None
         self._textparser = textparser
-        self._cwd = cwd
+        self._cwd = os.path.realpath(cwd)
 
         logger.debug("Configuration read")
         if "datadir" in self._config:
@@ -64,6 +51,15 @@ class Config(collections.MutableMapping):
             "$STOREDIR": "store",
         }
         self.behaviors = {}
+
+    @property
+    def _config(self):
+        if self._config_loaded is not None:
+            return self._config_loaded
+        with open(self._path) as f:
+            self._config_loaded = self._textparser(f)
+        self._config_loaded["configdir"] = os.path.dirname(self._path)
+        return self._config_loaded
 
     def _replace_special_vars(self, s):
         if isinstance(s, dict):
@@ -141,8 +137,9 @@ class Config(collections.MutableMapping):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        # Do not pickle the cache
+        # Do not pickle the cache or loaded config
         state["_cache"] = {}
+        state["_config_loaded"] = None
         return state
 
     def get_datasets(self, include=None, exclude=None, dstype="any"):

@@ -2,6 +2,7 @@ import os
 import abc
 from dataclasses import dataclass
 from copy import deepcopy
+from functools import partial
 import time
 import parsl
 from parsl.app.app import python_app
@@ -19,6 +20,10 @@ STATEFILE_VERSION = 2
 
 class StateFileError(Exception):
     pass
+
+
+def _wrap_execution(function, item):
+    return item, function(item)
 
 
 @dataclass
@@ -76,9 +81,6 @@ class ResumableExecutor(abc.ABC, coffea.processor.executor.ExecutorBase):
                       "version": STATEFILE_VERSION, "userdata": {}}
 
     def __call__(self, items, function, accumulator):
-        def wrap(item):
-            return item, function(item)
-
         items_done = self.state["items_done"]
         items = [item for item in items if item not in items_done]
 
@@ -90,7 +92,8 @@ class ResumableExecutor(abc.ABC, coffea.processor.executor.ExecutorBase):
         elif self.state["accumulator"] is not None:
             accumulator = self.state["accumulator"]
 
-        res = self._execute(items, wrap, accumulator)
+        res = self._execute(items, partial(_wrap_execution, function),
+                            accumulator)
         if (self.state_file_name is not None
                 and self.remove_state_at_end
                 and os.path.exists(self.state_file_name)):

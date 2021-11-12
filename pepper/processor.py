@@ -39,29 +39,8 @@ class Processor(coffea.processor.ProcessorABC):
             self.eventdir = os.path.realpath(eventdir)
         else:
             self.eventdir = None
-        self.hists = self._get_hists_from_config(
-            self.config, "hists", "hists_to_do")
 
         self.rng_seed = self._load_rng_seed()
-
-        # Construct a dict of datasets for which we are not processing the
-        # relevant dedicated systematic datasets, and so the nominal histograms
-        # need to be copied
-        self.copy_nominal = {}
-        for sysdataset, syst in self.config["dataset_for_systematics"].items():
-            replaced, sysname = syst
-            if sysname not in self.copy_nominal:
-                self.copy_nominal[sysname] = []
-                # Copy all normal mc datasets
-                for dataset in self.config["mc_datasets"].keys():
-                    if dataset in self.config["dataset_for_systematics"]:
-                        continue
-                    self.copy_nominal[sysname].append(dataset)
-            try:
-                # Remove the ones that get replaced by a dedicated dataset
-                self.copy_nominal[sysname].remove(replaced)
-            except ValueError:
-                pass
 
     @staticmethod
     def _check_config_integrity(config):
@@ -257,6 +236,27 @@ class Processor(coffea.processor.ProcessorABC):
         meta = data.metadata
         return meta["filename"], meta["entrystart"], meta["entrystop"]
 
+    def _get_copy_nominal(self):
+        # Construct a dict of datasets for which we are not processing the
+        # relevant dedicated systematic datasets, and so the nominal histograms
+        # need to be copied
+        copy_nominal = {}
+        for sysdataset, syst in self.config["dataset_for_systematics"].items():
+            replaced, sysname = syst
+            if sysname not in copy_nominal:
+                copy_nominal[sysname] = []
+                # Copy all normal mc datasets
+                for dataset in self.config["mc_datasets"].keys():
+                    if dataset in self.config["dataset_for_systematics"]:
+                        continue
+                    copy_nominal[sysname].append(dataset)
+            try:
+                # Remove the ones that get replaced by a dedicated dataset
+                copy_nominal[sysname].remove(replaced)
+            except ValueError:
+                pass
+        return copy_nominal
+
     def process(self, data):
         starttime = time()
         dsname = data.metadata["dataset"]
@@ -298,9 +298,11 @@ class Processor(coffea.processor.ProcessorABC):
         else:
             cuts_to_histogram = None
 
+        hists = self._get_hists_from_config(
+            self.config, "hists", "hists_to_do")
         filler = OutputFiller(
-            output, self.hists, is_mc, dsname, dsname_in_hist, sys_enabled,
-            sys_overwrite=sys_overwrite, copy_nominal=self.copy_nominal,
+            output, hists, is_mc, dsname, dsname_in_hist, sys_enabled,
+            sys_overwrite=sys_overwrite, copy_nominal=self._get_copy_nominal(),
             cuts_to_histogram=cuts_to_histogram)
 
         return filler

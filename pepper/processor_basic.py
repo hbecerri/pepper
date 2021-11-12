@@ -46,123 +46,62 @@ class ProcessorBasicPhysics(pepper.Processor):
         """
         super().__init__(config, eventdir)
 
-        if "top_pt_reweighting" in self.config:
-            self.topptweighter = self.config["top_pt_reweighting"]
-        else:
-            self.topptweighter = None
+    def _check_config_integrity(self, config):
+        """Check integrity of configuration file."""
 
-        if "lumimask" in config:
-            self.lumimask = self.config["lumimask"]
-        else:
+        super()._check_config_integrity(config)
+
+        if "lumimask" not in config:
             logger.warning("No lumimask specified")
-            self.lumimask = None
 
-        if "pileup_reweighting" in self.config:
-            self.puweighter = self.config["pileup_reweighting"]
-        else:
+        if "pileup_reweighting" not in self.config:
             logger.warning("No pileup reweigthing specified")
-            self.puweighter = None
 
-        if ("electron_sf" in self.config
-                and len(self.config["electron_sf"]) > 0):
-            self.electron_sf = self.config["electron_sf"]
-        else:
+        if ("electron_sf" not in self.config
+                or len(self.config["electron_sf"]) == 0):
             logger.warning("No electron scale factors specified")
-            self.electron_sf = []
 
-        if "muon_sf" in self.config and len(self.config["muon_sf"]) > 0:
-            self.muon_sf = self.config["muon_sf"]
-        else:
+        if "muon_sf" not in self.config or len(self.config["muon_sf"]) == 0:
             logger.warning("No muon scale factors specified")
-            self.muon_sf = []
 
-        if "btag_sf" in self.config and len(self.config["btag_sf"]) > 0:
-            self.btagweighters = config["btag_sf"]
-        else:
+        if "btag_sf" not in self.config or len(self.config["btag_sf"]) == 0:
             logger.warning("No btag scale factor specified")
-            self.btagweighters = []
 
-        if "jet_uncertainty" in self.config:
-            self._junc = self.config["jet_uncertainty"]
-        else:
-            if config["compute_systematics"]:
-                logger.warning("No jet uncertainty specified")
-            self._junc = None
+        if ("jet_uncertainty" not in self.config
+                and config["compute_systematics"]):
+            logger.warning("No jet uncertainty specified")
 
-        if "jet_resolution" in self.config and "jet_ressf" in self.config:
-            self._jer = self.config["jet_resolution"]
-            self._jersf = self.config["jet_ressf"]
-        else:
+        if ("jet_resolution" not in self.config
+                or "jet_ressf" not in self.config):
             logger.warning("No jet resolution or no jet resolution scale "
                            "factor specified. This is necessary for "
                            "smearing, even if not computing systematics")
-            self._jer = None
-            self._jersf = None
-        if ("jet_correction_mc" not in config and
-                (self._jer is not None or self._junc is not None or
-                    ("reapply_jec" in self.config
-                     and self.config["reapply_jec"]))):
+        if "jet_correction_mc" not in config and (
+                ("jet_resolution" in self.config
+                    and "jet_ressf" in self.config) or
+                ("reapply_jec" in self.config and self.config["reapply_jec"])):
             raise pepper.config.ConfigError(
                 "Need jet_correction_mc for propagating jet "
                 "smearing/variation to MET or because reapply_jec is true")
-        else:
-            self._jec_mc = self.config["jet_correction_mc"]
         if ("jet_correction_data" not in config
                 and "reapply_jec" in self.config
                 and self.config["reapply_jec"]):
             raise pepper.config.ConfigError(
                 "Need jet_correction_data because reapply_jec is true")
-        elif "reapply_jec" in self.config and self.config["reapply_jec"]:
-            self._jec_data = self.config["jet_correction_data"]
 
-        self.trigger_paths = config["dataset_trigger_map"]
-        self.trigger_order = config["dataset_trigger_order"]
-
-        if "muon_rochester" in self.config:
-            self.muon_roch = self.config["muon_rochester"]
-        else:
+        if "muon_rochester" not in self.config:
             logger.warning("No Rochster corrections for muons specified")
-            self.muon_roch = None
 
-        if "reco_info_file" in self.config:
-            self.reco_info_filepath = self.config["reco_info_file"]
-
-        elif "reco_algorithm" in self.config:
+        if ("reco_algorithm" in self.config
+                and "reco_info_file" not in self.config):
             raise pepper.config.ConfigError(
                 "Need reco_info_file for kinematic reconstruction")
-        self.mc_lumifactors = config["mc_lumifactors"]
 
-        if "drellyan_sf" in self.config:
-            self.drellyan_sf = self.config["drellyan_sf"]
-        else:
-            logger.warning("No Drell-Yan scale factor specified")
-            self.drellyan_sf = None
-
-        if "MET_xy_shifts" in self.config:
-            self.met_xy_shifts = self.config["MET_xy_shifts"]
-        else:
-            self.met_xy_shifts = None
-
-        if "trigger_sfs" in self.config:
-            self.trigger_sfs = self.config["trigger_sfs"]
-        else:
-            logger.warning("No trigger scale factors specified")
-            self.trigger_sfs = None
-
-        if "pdf_types" in config:
-            self.pdf_types = config["pdf_types"]
-        else:
-            if config["compute_systematics"]:
-                logger.warning(
-                    "pdf_type not specified; will not compute pdf "
-                    "uncertainties. (Options are 'Hessian', 'MC' and "
-                    "'MC_Gaussian')")
-            self.pdf_types = None
-
-    def _check_config_integrity(self, config):
-        """Check integrity of configuration file."""
-
-        super()._check_config_integrity(config)
+        if "pdf_types" not in config and config["compute_systematics"]:
+            logger.warning(
+                "pdf_type not specified; will not compute pdf "
+                "uncertainties. (Options are 'Hessian', 'MC' and "
+                "'MC_Gaussian')")
 
         # Skip if no systematics, as currently only checking syst configs
         if not config["compute_systematics"]:
@@ -206,17 +145,19 @@ class ProcessorBasicPhysics(pepper.Processor):
         ret = []
         ret.append(VariationArg("UncMET_up", met="up"))
         ret.append(VariationArg("UncMET_down", met="down"))
-        if self._jer is not None and self._jersf is not None:
+        if ("jet_resolution" not in self.config
+                or "jet_ressf" not in self.config):
             jer = "central"
         else:
             jer = None
-        if self._junc is not None:
+        if "jet_uncertainty" in self.config:
+            junc = self.config["jet_uncertainty"]
             if "junc_sources_to_use" in self.config:
                 levels = self.config["junc_sources_to_use"]
             else:
-                levels = self._junc.levels
+                levels = junc.levels
             for source in levels:
-                if source not in self._junc.levels:
+                if source not in junc.levels:
                     raise pepper.config.ConfigError(
                         f"Source not in jet uncertainties: {source}")
                 if source == "jes":
@@ -227,13 +168,13 @@ class ProcessorBasicPhysics(pepper.Processor):
                     name + "up", junc=("up", source), jer=jer))
                 ret.append(VariationArg(
                     name + "down", junc=("down", source), jer=jer))
-        if self._jer is not None and self._jersf is not None:
+        if "jet_resolution" in self.config and "jet_ressf" in self.config:
             ret.append(VariationArg("Jer_up", jer="up"))
             ret.append(VariationArg("Jer_down", jer="down"))
         return ret
 
     def get_jetmet_nominal_arg(self):
-        if self._jer is not None and self._jersf is not None:
+        if "jet_resolution" in self.config and "jet_ressf" in self.config:
             return VariationArg(None)
         else:
             return VariationArg(None, jer=None)
@@ -249,8 +190,9 @@ class ProcessorBasicPhysics(pepper.Processor):
 
     def do_top_pt_reweighting(self, data):
         pt = data["gent_lc"].pt
-        rwght = self.topptweighter(pt[:, 0], pt[:, 1])
-        if self.topptweighter.sys_only:
+        weiter = self.config["top_pt_reweighting"]
+        rwght = weiter(pt[:, 0], pt[:, 1])
+        if weiter.sys_only:
             if self.config["compute_systematics"]:
                 return np.full(len(data), True), {"Top_pt_reweighting": rwght}
             else:
@@ -321,12 +263,13 @@ class ProcessorBasicPhysics(pepper.Processor):
         if "split_pdf_uncs" in self.config:
             if self.config["split_pdf_uncs"]:
                 split_pdf_uncs = True
-        if (("LHEPdfWeight" not in data.fields) or (self.pdf_types is None)):
+        if ("LHEPdfWeight" not in data.fields
+                or "pdf_types" not in self.config):
             selector.set_systematic("PDF", 1, 1)
             selector.set_systematic("PDF_alpha_s", 1, 1)
         pdfs = data["LHEPdfWeight"]
         pdf_type = None
-        for LHA_ID, _type in self.pdf_types.items():
+        for LHA_ID, _type in self.config["pdf_types"].items():
             if LHA_ID in pdfs.__doc__:
                 pdf_type = _type.lower()
         # Check if sample has alpha_s variations
@@ -386,7 +329,7 @@ class ProcessorBasicPhysics(pepper.Processor):
 
     def crosssection_scale(self, dsname, data):
         num_events = len(data)
-        lumifactors = self.mc_lumifactors
+        lumifactors = self.config["mc_lumifactors"]
         factor = np.full(num_events, lumifactors[dsname])
         if (self.config["compute_systematics"]
                 and dsname not in self.config["dataset_for_systematics"]):
@@ -418,13 +361,14 @@ class ProcessorBasicPhysics(pepper.Processor):
         if is_mc:
             ntrueint = data["Pileup"]["nTrueInt"]
             sys = {}
-            if self.puweighter is not None:
-                weight = self.puweighter(dsname, ntrueint)
+            if "pileup_reweighting" in self.config:
+                weighter = self.config["pileup_reweighting"]
+                weight = weighter(dsname, ntrueint)
                 if self.config["compute_systematics"]:
                     # If central is zero, let up and down factors also be zero
                     weight_nonzero = np.where(weight == 0, np.inf, weight)
-                    up = self.puweighter(dsname, ntrueint, "up")
-                    down = self.puweighter(dsname, ntrueint, "down")
+                    up = weighter(dsname, ntrueint, "up")
+                    down = weighter(dsname, ntrueint, "down")
                     sys["pileup"] = (up / weight_nonzero,
                                      down / weight_nonzero)
             else:
@@ -440,12 +384,12 @@ class ProcessorBasicPhysics(pepper.Processor):
                 return weight, sys
             else:
                 return weight
-        elif self.lumimask is None:
+        elif "lumimask" not in self.config:
             return np.full(len(data), True)
         else:
             run = np.array(data["run"])
             luminosity_block = np.array(data["luminosityBlock"])
-            lumimask = coffea.lumi_tools.LumiMask(self.lumimask)
+            lumimask = coffea.lumi_tools.LumiMask(self.config["lumimask"])
             return lumimask(run, luminosity_block)
 
     def get_era(self, data, is_mc):
@@ -653,14 +597,14 @@ class ProcessorBasicPhysics(pepper.Processor):
     def apply_rochester_corr(self, muons, rng, is_mc):
         """Apply Rochester corrections for muons."""
         if not is_mc:
-            dtSF = self.muon_roch.kScaleDT(
+            dtSF = self.config["muon_rochester"].kScaleDT(
                 muons["charge"], muons["pt"], muons["eta"], muons["phi"]
             )
             muons["pt"] = muons["pt"] * dtSF
         else:
             hasgen = ~np.isnan(ak.fill_none(muons.matched_gen.pt, np.nan))
             # if reco pt has corresponding gen pt
-            mcSF1 = self.muon_roch.kSpreadMC(
+            mcSF1 = self.config["muon_rochester"].kSpreadMC(
                 muons["charge"][hasgen],
                 muons["pt"][hasgen],
                 muons["eta"][hasgen],
@@ -673,7 +617,7 @@ class ProcessorBasicPhysics(pepper.Processor):
             mc_rand = ak.unflatten(mc_rand, counts)
             if pepper.misc.akismasked(muons):
                 mc_rand = ak.mask(mc_rand, ~ak.is_none(muons["pt"]))
-            mcSF2 = self.muon_roch.kSmearMC(
+            mcSF2 = self.config["muon_rochester"].kSmearMC(
                 muons["charge"][~hasgen],
                 muons["pt"][~hasgen],
                 muons["eta"][~hasgen],
@@ -691,7 +635,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         electron = data["Electron"]
         muon = data["Muon"]
         # Apply Rochester corrections to muons
-        if self.muon_roch is not None:
+        if "muon_rochester" in self.config:
             muon = self.apply_rochester_corr(muon, rng, is_mc)
         columns = ["pt", "eta", "phi", "mass", "pdgId"]
         lepton = {}
@@ -714,7 +658,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         weight = np.ones(len(data))
         systematics = {}
         # Electron identification efficiency
-        for i, sffunc in enumerate(self.electron_sf):
+        for i, sffunc in enumerate(self.config["electron_sf"]):
             sceta = eles.eta + eles.deltaEtaSC
             params = {}
             for dimlabel in sffunc.dimlabels:
@@ -732,7 +676,7 @@ class ProcessorBasicPhysics(pepper.Processor):
                 systematics[key] = (up / central, down / central)
             weight = weight * central
         # Muon identification and isolation efficiency
-        for i, sffunc in enumerate(self.muon_sf):
+        for i, sffunc in enumerate(self.config["muon_sf"]):
             params = {}
             for dimlabel in sffunc.dimlabels:
                 if dimlabel == "abseta":
@@ -787,9 +731,9 @@ class ProcessorBasicPhysics(pepper.Processor):
         if raw_factor is None:
             raw_factor = 1 - data["Jet"]["rawFactor"]
         if is_mc:
-            jec = self._jec_mc
+            jec = self.config["jet_correction_mc"]
         else:
-            jec = self._jec_data
+            jec = self.config["jet_correction_data"]
 
         raw_pt = pt * raw_factor
         l1l2l3 = jec.getCorrection(
@@ -801,7 +745,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         """Return jet energy correction uncertainty factor."""
         if variation not in ("up", "down"):
             raise ValueError("variation must be either 'up' or 'down'")
-        if source not in self._junc.levels:
+        if source not in self.config["jet_uncertainty"].levels:
             raise ValueError(f"Jet uncertainty not found: {source}")
         if pt is None:
             pt = data["Jet"].pt
@@ -811,7 +755,8 @@ class ProcessorBasicPhysics(pepper.Processor):
         if ak.sum(counts) == 0:
             return ak.unflatten([], counts)
         # TODO: test this
-        junc = dict(self._junc.getUncertainty(JetPt=pt, JetEta=eta))[source]
+        junc = dict(self.config["jet_uncertainty"].getUncertainty(
+            JetPt=pt, JetEta=eta))[source]
         if variation == "up":
             return junc[:, :, 0]
         else:
@@ -829,9 +774,9 @@ class ProcessorBasicPhysics(pepper.Processor):
         counts = ak.num(pt)
         if ak.sum(counts) == 0:
             return ak.unflatten([], counts)
-        jer = self._jer.getResolution(
+        jer = self.config["jet_resolution"].getResolution(
             JetPt=pt, JetEta=eta, Rho=data["fixedGridRhoFastjetAll"])
-        jersf = self._jersf.getScaleFactor(
+        jersf = self.config["jet_ressf"].getScaleFactor(
             JetPt=pt, JetEta=eta, Rho=data["fixedGridRhoFastjetAll"])
         jersmear = jer * rng.normal(size=len(jer))
         if variation == "central":
@@ -987,13 +932,14 @@ class ProcessorBasicPhysics(pepper.Processor):
         met = data["MET"]
         metx = met.pt * np.cos(met.phi)
         mety = met.pt * np.sin(met.phi)
-        if (self.met_xy_shifts and era != "no_events"):
-            metx = metx - (self.met_xy_shifts["METxcorr"][era][0]
+        if ("MET_xy_shifts" in self.config and era != "no_events"):
+            metshifts = self.config["MET_xy_shifts"]
+            metx = metx - (metshifts["METxcorr"][era][0]
                            * data["PV"]["npvs"]
-                           + self.met_xy_shifts["METxcorr"][era][1])
-            mety = mety - (self.met_xy_shifts["METycorr"][era][0]
+                           + metshifts["METxcorr"][era][1])
+            mety = mety - (metshifts["METycorr"][era][0]
                            * data["PV"]["npvs"]
-                           + self.met_xy_shifts["METycorr"][era][1])
+                           + metshifts["METycorr"][era][1])
 
         if variation == "up":
             metx = metx + met.MetUnclustEnUpDeltaX
@@ -1103,7 +1049,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         discr = jets["btag"]
         weight = np.ones(len(data))
         systematics = {}
-        for i, weighter in enumerate(self.btagweighters):
+        for i, weighter in enumerate(self.config["btag_sf"]):
             central = weighter(wp, flav, eta, pt, discr, "central", efficiency)
             if not never_sys and self.config["compute_systematics"]:
                 light_up = weighter(
@@ -1127,10 +1073,10 @@ class ProcessorBasicPhysics(pepper.Processor):
         """Modifies factors in the systematic table to account for differences
         in b-tag efficiencies. This is only done for variations the efficiency
         ROOT file contains a histogram with the name of the variation."""
-        if len(self.btagweighters) == 0:
+        if "btag_sf" not in self.config or len(self.config["btag_sf"]) == 0:
             return
         available = set.intersection(
-            *(w.available_efficiencies for w in self.btagweighters))
+            *(w.available_efficiencies for w in self.config["btag_sf"]))
         data = selector.data
         systematics = selector.systematics
         central = self.compute_weight_btag(data, never_sys=True)
@@ -1157,7 +1103,8 @@ class ProcessorBasicPhysics(pepper.Processor):
         """Select events with minimum number of b-tagegd jets."""
         num_btagged = ak.sum(data["Jet"]["btagged"], axis=1)
         accept = np.asarray(num_btagged >= self.config["num_atleast_btagged"])
-        if is_mc and len(self.btagweighters) != 0:
+        if is_mc and (
+                "btag_sf" in self.config and len(self.config["btag_sf"]) != 0):
             weight, systematics = self.compute_weight_btag(data[accept])
             accept = accept.astype(float)
             accept[accept.astype(bool)] *= np.asarray(weight)
@@ -1192,7 +1139,7 @@ class ProcessorBasicPhysics(pepper.Processor):
             lambda a, b: a + b, ak.unzip(ak.cartesian([bs, antilep]))).mass
         mass_lb = reduce(
             lambda a, b: a + b, ak.unzip(ak.cartesian([bs_rev, lep]))).mass
-        with uproot.open(self.reco_info_filepath) as f:
+        with uproot.open(self.config["reco_info_file"]) as f:
             mlb_prob = pepper.scale_factors.ScaleFactors.from_hist(f["mlb"])
         p_m_alb = mlb_prob(mlb=mass_alb)
         p_m_lb = mlb_prob(mlb=mass_lb)
@@ -1209,7 +1156,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         antib = data["recob"][:, 1]
         met = data["MET"]
 
-        with uproot.open(self.reco_info_filepath) as f:
+        with uproot.open(self.config["reco_info_file"]) as f:
             if self.config["reco_num_smear"] is None:
                 energyfl = energyfj = 1
                 alphal = alphaj = 0
