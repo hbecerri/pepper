@@ -126,13 +126,6 @@ class ProcessorBasicPhysics(pepper.Processor):
                     raise pepper.config.ConfigError(
                         f"{dsname} in crosssection_uncertainty but not in "
                         "mc_datasets")
-            for dsname in config["mc_datasets"].keys():
-                if dsname in dataset_for_systematics:
-                    continue
-                if dsname not in xsuncerts:
-                    raise pepper.config.ConfigError(
-                        f"{dsname} in mc_datasets but not in "
-                        "crosssection_uncertainty")
 
         # TODO: Check other config variables if necessary
 
@@ -339,6 +332,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         lumifactors = self.config["mc_lumifactors"]
         factor = np.full(num_events, lumifactors[dsname])
         if (self.config["compute_systematics"]
+                and dsname in self.config["crosssection_uncertainty"]
                 and dsname not in self.config["dataset_for_systematics"]):
             xsuncerts = self.config["crosssection_uncertainty"]
             groups = set(v[0] for v in xsuncerts.values() if v is not None)
