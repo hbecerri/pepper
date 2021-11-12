@@ -41,11 +41,17 @@ class Processor(pepper.ProcessorBasicPhysics):
         """
         super().__init__(config, eventdir)
 
+        if "drellyan_sf" not in self.config:
+            logger.warning("No Drell-Yan scale factor specified")
+
+        if "trigger_sfs" not in self.config:
+            logger.warning("No trigger scale factors specified")
+
     def process_selection(self, selector, dsname, is_mc, filler):
         era = self.get_era(selector.data, is_mc)
         if dsname.startswith("TTTo"):
             selector.set_column("gent_lc", self.gentop, lazy=True)
-            if self.topptweighter is not None:
+            if "top_pt_reweighting" in self.config:
                 selector.add_cut(
                     "Top pt reweighting", self.do_top_pt_reweighting,
                     no_callback=True)
@@ -60,7 +66,8 @@ class Processor(pepper.ProcessorBasicPhysics):
         selector.add_cut("Lumi", partial(self.good_lumimask, is_mc, dsname))
 
         pos_triggers, neg_triggers = pepper.misc.get_trigger_paths_for(
-            dsname, is_mc, self.trigger_paths, self.trigger_order, era=era)
+            dsname, is_mc, self.config["dataset_trigger_map"],
+            self.config["dataset_trigger_order"], era=era)
         selector.add_cut("Trigger", partial(
             self.passing_trigger, pos_triggers, neg_triggers))
         if is_mc and self.config["year"] in ("2016", "2017", "ul2016pre",
@@ -88,7 +95,7 @@ class Processor(pepper.ProcessorBasicPhysics):
         selector.add_cut("Opposite sign", self.opposite_sign_lepton_pair)
         selector.add_cut("Chn trig match",
                          partial(self.channel_trigger_matching, era))
-        if self.trigger_sfs is not None and is_mc:
+        if "trigger_sfs" in self.config and is_mc:
             selector.add_cut(
                 "Trigger SFs", partial(self.apply_trigger_sfs, dsname))
         selector.add_cut("Req lep pT", self.lep_pt_requirement)
@@ -136,7 +143,7 @@ class Processor(pepper.ProcessorBasicPhysics):
                            era, variation=variation.met))
         selector.set_multiple_columns(
             partial(self.drellyan_sf_columns, filler))
-        if self.drellyan_sf is not None and is_mc:
+        if "drellyan_sf" in self.config and is_mc:
             selector.add_cut("DY scale", partial(self.apply_dy_sfs, dsname))
         selector.add_cut("Has jet(s)", self.has_jets)
         if (self.config["hem_cut_if_ele"] or self.config["hem_cut_if_muon"]
@@ -183,21 +190,22 @@ class Processor(pepper.ProcessorBasicPhysics):
         ones = np.ones(len(data))
         central = ones
         channels = ["is_ee", "is_em", "is_mm"]
+        trigger_sfs = self.config["trigger_sfs"]
         for channel in channels:
-            sf = self.trigger_sfs[channel](lep1_pt=leps[:, 0].pt,
-                                           lep2_pt=leps[:, 1].pt)
+            sf = trigger_sfs[channel](lep1_pt=leps[:, 0].pt,
+                                      lep2_pt=leps[:, 1].pt)
             central = ak.where(data[channel], sf, central)
         if self.config["compute_systematics"]:
             up = ones
             down = ones
             for channel in channels:
-                sf = self.trigger_sfs[channel](lep1_pt=leps[:, 0].pt,
-                                               lep2_pt=leps[:, 1].pt,
-                                               variation="up")
+                sf = trigger_sfs[channel](lep1_pt=leps[:, 0].pt,
+                                          lep2_pt=leps[:, 1].pt,
+                                          variation="up")
                 up = ak.where(data[channel], sf, up)
-                sf = self.trigger_sfs[channel](lep1_pt=leps[:, 0].pt,
-                                               lep2_pt=leps[:, 1].pt,
-                                               variation="down")
+                sf = trigger_sfs[channel](lep1_pt=leps[:, 0].pt,
+                                          lep2_pt=leps[:, 1].pt,
+                                          variation="down")
                 down = ak.where(data[channel], sf, down)
             return central, {"triggersf": (up / central, down / central)}
         return central
@@ -212,10 +220,11 @@ class Processor(pepper.ProcessorBasicPhysics):
                     pepper.hist_defns.DataPicker(self.config["bin_dy_sfs"])}
             else:
                 params = {"channel": channel}
-            central = self.drellyan_sf(**params)
+            dysf = self.config["drellyan_sf"]
+            central = dysf(**params)
             if self.config["compute_systematics"]:
-                up = self.drellyan_sf(**params, variation="up")
-                down = self.drellyan_sf(**params, variation="down")
+                up = dysf(**params, variation="up")
+                down = dysf(**params, variation="down")
                 return central, {"DYsf": (up / central, down / central)}
             return central
         elif self.config["compute_systematics"]:
