@@ -41,10 +41,15 @@ class Processor(pepper.ProcessorBasicPhysics):
         """
         super().__init__(config, eventdir)
 
-        if "drellyan_sf" not in self.config:
+    def _check_config_integrity(self, config):
+        """Check integrity of configuration file."""
+
+        super()._check_config_integrity(config)
+
+        if "drellyan_sf" not in config:
             logger.warning("No Drell-Yan scale factor specified")
 
-        if "trigger_sfs" not in self.config:
+        if "trigger_sfs" not in config:
             logger.warning("No trigger scale factors specified")
 
     def process_selection(self, selector, dsname, is_mc, filler):

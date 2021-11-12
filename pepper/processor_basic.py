@@ -54,46 +54,41 @@ class ProcessorBasicPhysics(pepper.Processor):
         if "lumimask" not in config:
             logger.warning("No lumimask specified")
 
-        if "pileup_reweighting" not in self.config:
+        if "pileup_reweighting" not in config:
             logger.warning("No pileup reweigthing specified")
 
-        if ("electron_sf" not in self.config
-                or len(self.config["electron_sf"]) == 0):
+        if ("electron_sf" not in config
+                or len(config["electron_sf"]) == 0):
             logger.warning("No electron scale factors specified")
 
-        if "muon_sf" not in self.config or len(self.config["muon_sf"]) == 0:
+        if "muon_sf" not in config or len(config["muon_sf"]) == 0:
             logger.warning("No muon scale factors specified")
 
-        if "btag_sf" not in self.config or len(self.config["btag_sf"]) == 0:
+        if "btag_sf" not in config or len(config["btag_sf"]) == 0:
             logger.warning("No btag scale factor specified")
 
-        if ("jet_uncertainty" not in self.config
-                and config["compute_systematics"]):
+        if ("jet_uncertainty" not in config and config["compute_systematics"]):
             logger.warning("No jet uncertainty specified")
 
-        if ("jet_resolution" not in self.config
-                or "jet_ressf" not in self.config):
+        if ("jet_resolution" not in config or "jet_ressf" not in config):
             logger.warning("No jet resolution or no jet resolution scale "
                            "factor specified. This is necessary for "
                            "smearing, even if not computing systematics")
         if "jet_correction_mc" not in config and (
-                ("jet_resolution" in self.config
-                    and "jet_ressf" in self.config) or
-                ("reapply_jec" in self.config and self.config["reapply_jec"])):
+                ("jet_resolution" in config and "jet_ressf" in config) or
+                ("reapply_jec" in config and config["reapply_jec"])):
             raise pepper.config.ConfigError(
                 "Need jet_correction_mc for propagating jet "
                 "smearing/variation to MET or because reapply_jec is true")
-        if ("jet_correction_data" not in config
-                and "reapply_jec" in self.config
-                and self.config["reapply_jec"]):
+        if ("jet_correction_data" not in config and "reapply_jec" in config
+                and config["reapply_jec"]):
             raise pepper.config.ConfigError(
                 "Need jet_correction_data because reapply_jec is true")
 
-        if "muon_rochester" not in self.config:
+        if "muon_rochester" not in config:
             logger.warning("No Rochster corrections for muons specified")
 
-        if ("reco_algorithm" in self.config
-                and "reco_info_file" not in self.config):
+        if ("reco_algorithm" in config and "reco_info_file" not in config):
             raise pepper.config.ConfigError(
                 "Need reco_info_file for kinematic reconstruction")
 
