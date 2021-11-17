@@ -81,9 +81,11 @@ class DYprocessor(pepper.ProcessorTTbarLL):
         else:
             cuts_to_histogram = None
 
+        hists = self._get_hists_from_config(
+            self.config, "hists", "hists_to_do")
         filler = DYOutputFiller(
-            output, self.hists, is_mc, dsname, dsname_in_hist, sys_enabled,
-            sys_overwrite=sys_overwrite, copy_nominal=self.copy_nominal,
+            output, hists, is_mc, dsname, dsname_in_hist, sys_enabled,
+            sys_overwrite=sys_overwrite, copy_nominal=self._get_copy_nominal(),
             cuts_to_histogram=cuts_to_histogram)
 
         return filler
