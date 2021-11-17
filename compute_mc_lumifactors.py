@@ -35,11 +35,10 @@ def update_counts(f, counts, process_name, geskey, lhesskey, lhepdfskey):
 
 parser = ArgumentParser(description="Compute factors from luminosity and "
                                     "cross sections to scale MC")
-parser.add_argument("lumi", type=float, help="The luminosity in 1/fb")
-parser.add_argument("crosssections", help="Path to the JSON file containing "
-                                          "cross section in fb")
-parser.add_argument("config", help="Path to the JSON config file containing "
-                                   "the MC dataset names")
+parser.add_argument(
+    "config", help="Path to the JSON config file containing the MC dataset "
+    "names, luminosity and cross sections. Latter two should be in 1/fb and "
+    "fb respectively")
 parser.add_argument("out", help="Path to the output file")
 parser.add_argument(
     "-s", "--skip", action="store_true",
@@ -53,7 +52,9 @@ if args.skip and os.path.exists(args.out):
 else:
     factors = {}
 
-config = pepper.Config(args.config)
+config = pepper.ConfigBasicPhysics(args.config)
+lumi = config["luminosity"]
+crosssections = config["crosssections"]
 store, datasets = config[["store", "mc_datasets"]]
 datasets = {k: v for k, v in datasets.items()
             if v is not None and k not in factors}
@@ -62,8 +63,6 @@ if "dataset_for_systematics" in config:
     dsforsys = config["dataset_for_systematics"]
 else:
     dsforsys = {}
-with open(args.crosssections) as f:
-    crosssections = json.load(f)
 counts = defaultdict(int)
 num_files = len(list(chain(*datasets.values())))
 i = 0
@@ -96,7 +95,7 @@ for key in counts.keys():
         xs = crosssections[dsforsys[dsname][0]]
     else:
         xs = crosssections[dsname]
-    factor = xs * args.lumi / counts[key]
+    factor = xs * lumi / counts[key]
     if key.endswith("_LHEScaleSumw") or key.endswith("_LHEPdfSumw"):
         factor = counts[dsname] / counts[key]
     if isinstance(factor, ak.Array):

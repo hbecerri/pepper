@@ -12,6 +12,8 @@
         "b": -0.0005
     },
     "lumimask": "$DATADIR/Cert_314472-325175_13TeV_17SeptEarlyReReco2018ABC_PromptEraD_Collisions18_JSON.txt",
+    "luminosity": 59.74,
+    "crosssections": "$CONFDIR/crosssections.json",
     "pileup_reweighting": "$DATADIR/scale_factors/pileup.root",
     "drellyan_sf": "$DATADIR/scale_factors/dy_lo_inclusive.json",
     "trigger_sfs": [

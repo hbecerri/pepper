@@ -33,6 +33,7 @@ class ConfigBasicPhysics(pepper.Config):
         self.behaviors.update(
             {
                 "year": self._get_year,
+                "crosssections": self._get_maybe_external,
                 "top_pt_reweighting": self._get_top_pt_reweighting,
                 "pileup_reweighting": self._get_pileup_reweighting,
                 "electron_sf": self._get_scalefactors,
