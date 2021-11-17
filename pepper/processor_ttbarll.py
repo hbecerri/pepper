@@ -60,6 +60,8 @@ class Processor(pepper.ProcessorBasicPhysics):
                 selector.add_cut(
                     "Top pt reweighting", self.do_top_pt_reweighting,
                     no_callback=True)
+        selector.add_cut("Pileup reweighting", partial(
+            self.do_pileup_reweighting, is_mc, dsname))
         if self.config["compute_systematics"] and is_mc:
             self.add_generator_uncertainies(dsname, selector)
         if is_mc:

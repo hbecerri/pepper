@@ -191,6 +191,20 @@ class ProcessorBasicPhysics(pepper.Processor):
             else:
                 return rwght
 
+    def do_pileup_reweighting(self, is_mc, dsname, data):
+        if is_mc and "pileup_reweighting" in self.config:
+            ntrueint = data["Pileup"]["nTrueInt"]
+            weighter = self.config["pileup_reweighting"]
+            weight = weighter(dsname, ntrueint)
+            if self.config["compute_systematics"]:
+                # If central is zero, let up and down factors also be zero
+                weight_nonzero = np.where(weight == 0, np.inf, weight)
+                up = weighter(dsname, ntrueint, "up")
+                down = weighter(dsname, ntrueint, "down")
+                sys = {"pileup": (up / weight_nonzero, down / weight_nonzero)}
+                return weight, sys
+            return weight
+
     def add_me_uncertainties(self, dsname, selector, data):
         """Matrix-element renormalization and factorization scale"""
         # Get describtion of individual columns of this branch with
@@ -358,25 +372,13 @@ class ProcessorBasicPhysics(pepper.Processor):
                      np.full(data.size, 1/self.config["blinding_denom"])})
 
     def good_lumimask(self, is_mc, dsname, data):
-        """Keep only data events that are in the golden json files.
-           For MC, compute pileup reweighting and lumi variation here."""
+        """Keep only data events that are in the golden JSON files.
+           For MC, add luminosity uncertainty"""
         if is_mc:
-            ntrueint = data["Pileup"]["nTrueInt"]
-            sys = {}
-            if "pileup_reweighting" in self.config:
-                weighter = self.config["pileup_reweighting"]
-                weight = weighter(dsname, ntrueint)
-                if self.config["compute_systematics"]:
-                    # If central is zero, let up and down factors also be zero
-                    weight_nonzero = np.where(weight == 0, np.inf, weight)
-                    up = weighter(dsname, ntrueint, "up")
-                    down = weighter(dsname, ntrueint, "down")
-                    sys["pileup"] = (up / weight_nonzero,
-                                     down / weight_nonzero)
-            else:
-                weight = np.ones(len(data))
+            weight = np.ones(len(data))
             if (self.config["compute_systematics"]
                     and not self.config["skip_nonshape_systematics"]):
+                sys = {}
                 if self.config["year"] in ("2018", "2016", "ul2018",
                                            "ul2016pre", "ul2016post"):
                     sys["lumi"] = (np.full(len(data), 1 + 0.025),
