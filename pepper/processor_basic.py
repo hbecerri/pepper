@@ -191,19 +191,18 @@ class ProcessorBasicPhysics(pepper.Processor):
             else:
                 return rwght
 
-    def do_pileup_reweighting(self, is_mc, dsname, data):
-        if is_mc and "pileup_reweighting" in self.config:
-            ntrueint = data["Pileup"]["nTrueInt"]
-            weighter = self.config["pileup_reweighting"]
-            weight = weighter(dsname, ntrueint)
-            if self.config["compute_systematics"]:
-                # If central is zero, let up and down factors also be zero
-                weight_nonzero = np.where(weight == 0, np.inf, weight)
-                up = weighter(dsname, ntrueint, "up")
-                down = weighter(dsname, ntrueint, "down")
-                sys = {"pileup": (up / weight_nonzero, down / weight_nonzero)}
-                return weight, sys
-            return weight
+    def do_pileup_reweighting(self, dsname, data):
+        ntrueint = data["Pileup"]["nTrueInt"]
+        weighter = self.config["pileup_reweighting"]
+        weight = weighter(dsname, ntrueint)
+        if self.config["compute_systematics"]:
+            # If central is zero, let up and down factors also be zero
+            weight_nonzero = np.where(weight == 0, np.inf, weight)
+            up = weighter(dsname, ntrueint, "up")
+            down = weighter(dsname, ntrueint, "down")
+            sys = {"pileup": (up / weight_nonzero, down / weight_nonzero)}
+            return weight, sys
+        return weight
 
     def add_me_uncertainties(self, dsname, selector, data):
         """Matrix-element renormalization and factorization scale"""
