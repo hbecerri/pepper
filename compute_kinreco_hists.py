@@ -12,10 +12,12 @@ from pepper.misc import coffeahist2hist
 
 class Processor(pepper.ProcessorTTbarLL):
     def __init__(self, config, destdir):
-        del config["reco_algorithm"]
+        if "reco_algorithm" in config:
+            del config["reco_algorithm"]
         if "reco_info_file" in config:
             del config["reco_info_file"]
-        del config["blinding_denom"]
+        if "blinding_denom" in config:
+            del config["blinding_denom"]
         config["compute_systematics"] = False
         super().__init__(config, None)
 

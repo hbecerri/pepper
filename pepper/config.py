@@ -30,7 +30,7 @@ class Config(collections.MutableMapping):
         self._config_loaded = None
         self._path = os.path.realpath(path)
         self._cache = {}
-        self._overwritten = set()
+        self._overwritten = {}
         self._textparser = textparser
         self._cwd = os.path.realpath(cwd)
 
@@ -70,11 +70,17 @@ class Config(collections.MutableMapping):
         elif isinstance(s, str):
             for name, configvar in self.special_vars.items():
                 if name in s:
-                    if configvar not in self._config:
+                    if configvar in self._overwritten:
+                        configvar = self._overwritten[configvar]
+                    elif configvar in self._config:
+                        configvar = self._config[configvar]
+                    else:
+                        configvar = None
+                    if configvar is None:
                         raise ConfigError(
-                            "{} contained in config but {} was "
-                            "not specified".format(name, configvar))
-                    s = s.replace(name, self._config[configvar])
+                            f"{name} contained in config but {configvar} was "
+                            "not specified")
+                    s = s.replace(name, configvar)
         return s
 
     def _get_path(self, value):
@@ -91,7 +97,10 @@ class Config(collections.MutableMapping):
 
     def _get(self, key):
         if key in self._overwritten:
-            return self._config[key]
+            if self._overwritten[key] is None:
+                raise KeyError(key)
+            else:
+                return self._overwritten[key]
         if key in self._cache:
             return self._cache[key]
 
@@ -116,17 +125,17 @@ class Config(collections.MutableMapping):
             key in self._config and self._config[key] is not None)
 
     def __setitem__(self, key, value):
-        self._config[key] = value
-        self._overwritten.add(key)
+        self._overwritten[key] = value
 
     def __delitem__(self, key):
         if key in self._cache:
             del self._cache[key]
-        if key in self._config:
-            del self._config[key]
+        if ((key in self._config and self._config[key] is not None)
+                or (key in self._overwritten
+                    and self._overwritten[key] is not None)):
+            self._overwritten[key] = None
         else:
             raise KeyError(key)
-        self._overwritten.discard(key)
 
     def __iter__(self):
         for key in self._config:
