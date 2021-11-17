@@ -916,13 +916,16 @@ class ProcessorBasicPhysics(pepper.Processor):
         # applied in the Processor for MET type-1 corrections. However, as
         # NanoAOD doesn't provide a raw factor for low pt jets, assume the
         # difference is negligible.
-        jets["factor"] = ak.ones_like(jets["pt"])
         if junc is not None:
-            jets["factor"] = jets["factor"] * self.compute_junc_factor(
+            jets["juncfac"] = self.compute_junc_factor(
                 data, *junc, pt=jets["pt"], eta=jets["eta"])
+        else:
+            jets["juncfac"] = ak.ones_like(jets["pt"])
         if jer is not None:
-            jets["factor"] = jets["factor"] * self.compute_jer_factor(
+            jets["jerfac"] = self.compute_jer_factor(
                 data, rng, jer, jets["pt"], jets["eta"], False)
+        else:
+            jets["jerfac"] = ak.ones_like(jets["pt"])
 
         jets["emef"] = jets["mass"] = ak.zeros_like(jets["pt"])
         jets.behavior = data["Jet"].behavior
@@ -956,9 +959,11 @@ class ProcessorBasicPhysics(pepper.Processor):
                 "variation must be one of 'central', 'up' or 'down'")
         if "jetfac" in ak.fields(data):
             factors = data["jetfac"]
-            if "jerfac" in ak.fields(data) and (
-                    "smear_met" not in self.config
-                    or not self.config["smear_met"]):
+            if "smear_met" in self.config:
+                smear_met = self.config["smear_met"]
+            else:
+                smear_met = False
+            if "jerfac" in ak.fields(data) and not smear_met:
                 factors = factors / data["jerfac"]
             # Do MET type-1 and smearing corrections
             jets = data["OrigJet"]
@@ -978,7 +983,10 @@ class ProcessorBasicPhysics(pepper.Processor):
                                   & (lowptjets["emef"] < 0.9)]
             # lowptjets lose their type here. Probably a bug, workaround
             lowptjets = ak.with_name(lowptjets, "Jet")
-            lowptfac = lowptjets["factor"] - 1
+            if smear_met:
+                lowptfac = lowptjets["juncfac"] * lowptjets["jerfac"] - 1
+            else:
+                lowptfac = lowptjets["juncfac"] - 1
             metx = metx - (
                 ak.sum(jets.x * jets["factor"], axis=1)
                 + ak.sum(lowptjets.x * lowptfac, axis=1))
