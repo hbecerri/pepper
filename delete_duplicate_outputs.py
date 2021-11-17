@@ -1,5 +1,4 @@
 import os
-import hjson
 from argparse import ArgumentParser
 from tqdm import tqdm
 from pprint import pprint
@@ -13,12 +12,14 @@ import pepper
 @python_app
 def process_dir(dir, delete=False):
     import pepper
-    import glob
     import os
     duplicate_files = []
     corrupted_files = []
     processed_chunks = set()
-    for in_file in glob.glob(os.path.join(dir, "*.hdf5")):
+    for in_file in os.listdir(dir):
+        if not dir.endswith(".hdf5") and not dir.endswith(".h5"):
+            continue
+        in_file = os.path.join(dir, in_file)
         try:
             with pepper.HDF5File(in_file, "r") as f:
                 identifier = f["identifier"]
@@ -43,7 +44,9 @@ parser = ArgumentParser(
     description="Check if any of the samples in the event directory produced"
     " by select_events.py are duplicated or corrupted, and if so, rename or "
     "delete them")
-parser.add_argument("event_dir", help="Directory to check")
+parser.add_argument(
+    "eventdir", help="Directory containing sample directories. Should be the "
+    "same as the eventdir argument when running a processor")
 parser.add_argument(
     "-c", "--condor", type=int, default=100, nargs="?", metavar="simul_jobs",
     help="Number of HTCondor jobs to launch, default 100")
@@ -58,26 +61,38 @@ parser.add_argument(
     "-d", "--delete", action="store_true", help="Delete duplicate or corrupt "
     "files instead of renaming them")
 parser.add_argument(
-    "-p", "--parsl_config", help="JSON file holding a dictionary with the "
-    "keys condor_init and condor_config. Former overwrites the enviroment "
-    "script that is executed at the start of a Condor job. Latter is appended "
-    "to the job submit file.")
+    "-i", "--condorinit",
+    help="Shell script that will be sourced by an HTCondor job after "
+    "starting. This can be used to setup environment variables, if using "
+    "for example CMSSW. If not provided, the local content of the "
+    "environment variable PEPPER_CONDOR_ENV will be used as path to the "
+    "script instead.")
+parser.add_argument(
+    "--condorsubmit",
+    help="Text file containing additional parameters to put into the "
+    "HTCondor job submission file that is used for condor_submit"
+)
 args = parser.parse_args()
 
 
-sample_dir = os.path.realpath(args.event_dir)
-
-if args.parsl_config is not None:
-    with open(args.parsl_config) as f:
-        parsl_config = hjson.load(f)
-    parsl_config = pepper.misc.get_parsl_config(
-        args.condor,
-        condor_submit=parsl_config["condor_config"],
-        condor_init=parsl_config["condor_init"],
-        retries=args.retries)
+if args.condorinit is not None:
+    with open(args.condorinit) as f:
+        condorinit = f.read()
 else:
-    parsl_config = pepper.misc.get_parsl_config(
-        args.condor, retries=args.retries)
+    condorinit = None
+if args.condorsubmit is not None:
+    with open(args.condorsubmit) as f:
+        condorsubmit = f.read()
+else:
+    condorsubmit = None
+
+sample_dir = os.path.realpath(args.eventdir)
+
+parsl_config = pepper.misc.get_parsl_config(
+    args.condor,
+    condor_submit=condorsubmit,
+    condor_init=condorinit,
+    retries=args.retries)
 parsl.load(parsl_config)
 
 dirs = next(os.walk(sample_dir))[1][args.offset:]
