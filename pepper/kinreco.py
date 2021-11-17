@@ -72,8 +72,10 @@ def _smear(fourvec, energyf, alpha, num, rng):
     m = np.broadcast_to(m, (num_events, num))
     if energyf is not None and num is not None:
         e = e * _maybe_sample(energyf, (num_events, num), rng)
+        # Make sure e and m still have same dtype, otherwise numerical problems
+        m = m.astype(e.dtype)
         # Cap energy to something bit above the mass
-        e[e < m] = 1.01 * m[e < m]
+        np.clip(e, 1.01 * m, None, out=e)
     if alpha is not None and num is not None:
         # Rotate around a random orthogonal axis by alpha
         r = _random_orthogonal(p3, rng)
