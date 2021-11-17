@@ -12,6 +12,7 @@ Inside the string values of a configuration variable the following placeholders 
 - `rng_seed_file`: Optional, path. A text file to save to and load (if it exists) an integer from which is used as a seed for the random number generator. This seed will be combined with a number unique to the chunk of events being processed, so that the randomness is still different from chunk to chunk.
 - `blinding_denom`: Optional, float. Only use `1/blinding_denom` of the data events, MC is scaled accordingly.
 - `compute_systematics`: Boolean, if true compute all systematic uncertainties.
+- `skip_nonshape_systematics`: Optional, boolean. If false and `compute_systematics` is true, histograms will be generated even for uncertainties like lumi, that aren't shape uncertainties.
 
 ## Data sets
 - `store`: A string used as value for `$STOREDIR` and is used to find files from plain data set names.

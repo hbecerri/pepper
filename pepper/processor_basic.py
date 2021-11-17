@@ -332,6 +332,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         lumifactors = self.config["mc_lumifactors"]
         factor = np.full(num_events, lumifactors[dsname])
         if (self.config["compute_systematics"]
+                and not self.config["skip_nonshape_systematics"]
                 and dsname in self.config["crosssection_uncertainty"]
                 and dsname not in self.config["dataset_for_systematics"]):
             xsuncerts = self.config["crosssection_uncertainty"]
@@ -374,7 +375,8 @@ class ProcessorBasicPhysics(pepper.Processor):
                                      down / weight_nonzero)
             else:
                 weight = np.ones(len(data))
-            if self.config["compute_systematics"]:
+            if (self.config["compute_systematics"]
+                    and not self.config["skip_nonshape_systematics"]):
                 if self.config["year"] in ("2018", "2016", "ul2018",
                                            "ul2016pre", "ul2016post"):
                     sys["lumi"] = (np.full(len(data), 1 + 0.025),
