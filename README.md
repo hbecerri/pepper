@@ -51,3 +51,12 @@ The main directory of this repository contains several optional scripts to obtai
 Configuration is done via JSON files. Examples can be found in the `example` directory. Additional data needed for configuration, for example scale factors and cross sections, can be found in a separate data repository here https://gitlab.cern.ch/pepper/data
 After downloading it, make sure to set the configuration variable "datadir" to the path where the data repository was downloaded.
 For a detailed explanation on the configuration variables, see `config_ttbarll_documentation.md`.
+
+
+
+## Contributing
+Feel free to submit merge requests to have your code included in this repository! Your code must comply with pep8. You can check this by running the following inside the Pepper directory:
+```sh
+python3 -m pip install pep8-naming --user
+python3 -m flake8 --extend-ignore N806
+```
