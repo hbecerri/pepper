@@ -51,8 +51,8 @@ class ScaleFactors:
         factors_up = factors + sigmas
         factors_down = factors - sigmas
         if len(edges) != len(dimlabels):
-            raise ValueError("Got {} dimenions but {} labels"
-                             .format(len(edges), len(dimlabels)))
+            raise ValueError(
+                f"Got {len(edges)} dimensions but {len(dimlabels)} labels")
         # Set overflow bins to 1 so that events outside the histogram
         # get scaled by 1
         cls._setoverflow(factors, 1)
@@ -100,8 +100,8 @@ class ScaleFactors:
         factors_up = factors + sigmas
         factors_down = factors - sigmas
         if len(edges) != len(dimlabels):
-            raise ValueError("Got {} dimenions but {} labels"
-                             .format(len(edges), len(dimlabels)))
+            raise ValueError(
+                f"Got {len(edges)} dimenions but {len(dimlabels)} labels")
         bins = dict(zip(dimlabels, edges))
         return cls(factors, factors_up, factors_down, bins)
 
@@ -150,7 +150,7 @@ BTAG_WP_CUTS = {
         "2016": WpTuple(0.2217,  0.6321,  0.8953),
         "2017": WpTuple(0.1522,  0.4941,  0.8001),
         "2018": WpTuple(0.1241,  0.4184,  0.7527),
-        "ul2016pre": WpTuple(0.1918, 0.5847, 0.8767),  # placeholder
+        "ul2016pre": WpTuple(0.2027, 0.6001, 0.8819),
         "ul2016post": WpTuple(0.1918, 0.5847, 0.8767),
         "ul2017": WpTuple(0.1355, 0.4506, 0.7738),
         "ul2018": WpTuple(0.1208, 0.4168, 0.7665),
@@ -159,7 +159,7 @@ BTAG_WP_CUTS = {
         "2016": WpTuple(0.0614,  0.3093,  0.7221),
         "2017": WpTuple(0.0521,  0.3033,  0.7489),
         "2018": WpTuple(0.0494,  0.2770,  0.7264),
-        "ul2016pre": WpTuple(0.048, 0.2489, 0.6377),  # placeholder
+        "ul2016pre": WpTuple(0.0508, 0.2598, 0.6502),
         "ul2016post": WpTuple(0.048, 0.2489, 0.6377),
         "ul2017": WpTuple(0.0532, 0.3040, 0.7476),
         "ul2018": WpTuple(0.0490, 0.2783, 0.7100),
@@ -169,21 +169,42 @@ BTAG_WP_CUTS = {
 
 class BTagWeighter:
     def __init__(self, sf_filename, eff_filename, tagger, year,
-                 meastype="mujets"):
-        self.eff_evaluator = get_evaluator(eff_filename)
+                 method="fixedwp", meastype="mujets",
+                 ignore_missing=False):
+
+        if isinstance(method, str):
+            method = method.lower()
+            possible_methods = ("iterativefit", "fixedwp")
+            if method not in possible_methods:
+                raise ValueError(
+                    "Method must be one of: " + ", ".join(possible_methods)
+                )
+        else:
+            raise TypeError(f"Expected str for method, got {method}")
+
+        if method == "fixedwp" and meastype == "iterativefit":
+            raise ValueError(
+                f"Meastype cannot be {meastype} when using fixedWP method"
+            )
 
         self.sf = []
-        for i in range(3):
-            # Note that for light flavor normally only inclusive is available,
-            # thus we fix it to 'incl' here
+        if method == "fixedwp":
+            self.eff_evaluator = get_evaluator(eff_filename)
+            for i in range(3):
+                # Note that for light flavor normally only inclusive is
+                # available, thus we fix it to 'incl' here
+                self.sf.append(BTagScaleFactor(
+                    sf_filename, i, f"{meastype},{meastype},incl"))
+        else:
             self.sf.append(BTagScaleFactor(
-                sf_filename, i, f"{meastype},{meastype},incl"))
+                sf_filename, BTagScaleFactor.RESHAPE,
+                "iterativefit,iterativefit,iterativefit"))
 
+        self.method = method
         self.wps = BTAG_WP_CUTS[tagger][year]
+        self.ignore_missing = ignore_missing
 
-    def __call__(
-            self, wp, jf, eta, pt, discr, variation="central",
-            efficiency="central"):
+    def _fixedwp(self, wp, jf, eta, pt, discr, variation, efficiency):
         if isinstance(wp, str):
             wp = wp.lower()
             if wp == "loose":
@@ -196,7 +217,7 @@ class BTagWeighter:
                 raise ValueError("Invalid value for wp. Expected 'loose', "
                                  "'medium' or 'tight'")
         elif not isinstance(wp, int):
-            raise TypeError("Expected int or str for wp, got {}".format(wp))
+            raise TypeError(f"Expected int or str for wp, got {wp}")
         elif wp > 2:
             raise ValueError(
                 f"Expected value between 0 and 2 for wp, got {wp}")
@@ -204,7 +225,8 @@ class BTagWeighter:
             "central", "light up", "light down", "heavy up", "heavy down")
         if variation not in possible_variations:
             raise ValueError(
-                "variation must be one of: " + ", ".join(possible_variations))
+                "variation must be one of: "
+                + ", ".join(possible_variations))
         light_vari = "central"
         heavy_vari = "central"
         if variation != "central":
@@ -213,12 +235,13 @@ class BTagWeighter:
                 light_vari = direction
             else:
                 heavy_vari = direction
-
-        sf = self.sf[wp].eval(heavy_vari, jf, eta, pt, discr)
+        sf = self.sf[wp].eval(
+            heavy_vari, jf, eta, pt, discr, self.ignore_missing)
         if light_vari != heavy_vari:
             sf = ak.where(
                 jf >= 4, sf,
-                self.sf[wp].eval(light_vari, jf, eta, pt, discr))
+                self.sf[wp].eval(
+                    light_vari, jf, eta, pt, discr, self.ignore_missing))
 
         eff = self.eff_evaluator[efficiency](jf, pt, abs(eta))
         sfeff = sf * eff
@@ -231,6 +254,115 @@ class BTagWeighter:
 
         # TODO: What if one runs into numerical problems here?
         return p_data / p_mc
+
+    def _iterativefit(self, wp, jf, eta, pt, discr, variation):
+        possible_variations = (
+            "central",
+            "up_lf",
+            "down_lf",
+            "up_hf",
+            "down_hf",
+            "up_hfstats1",
+            "down_hfstats1",
+            "up_lfstats1",
+            "down_lfstats1",
+            "up_hfstats2",
+            "down_hfstats2",
+            "up_lfstats2",
+            "down_lfstats2",
+            "up_cferr1",
+            "up_cferr2",
+            "down_cferr1",
+            "down_cferr2",
+            "up_jes",
+            "down_jes",
+            "up_AbsoluteMPFBias",
+            "down_AbsoluteMPFBias",
+            "up_AbsoluteScale",
+            "down_AbsoluteScale",
+            "up_AbsoluteStat",
+            "down_AbsoluteStat",
+            "up_RelativeBal",
+            "down_RelativeBal",
+            "up_RelativeFSR",
+            "down_RelativeFSR",
+            "up_RelativeJEREC1",
+            "down_RelativeJEREC1",
+            "up_RelativeJEREC2",
+            "down_RelativeJEREC2",
+            "up_RelativeJERHF",
+            "down_RelativeJERHF",
+            "up_RelativePtBB",
+            "down_RelativePtBB",
+            "up_RelativePtEC1",
+            "down_RelativePtEC1",
+            "up_RelativePtEC2",
+            "down_RelativePtEC2",
+            "up_RelativePtHF",
+            "down_RelativePtHF",
+            "up_RelativeStatEC",
+            "down_RelativeStatEC",
+            "up_RelativeStatFSR",
+            "down_RelativeStatFSR",
+            "up_RelativeStatHF",
+            "down_RelativeStatHF",
+            "up_PileUpDataMC",
+            "down_PileUpDataMC",
+            "up_PileUpPtBB",
+            "down_PileUpPtBB",
+            "up_PileUpPtEC1",
+            "down_PileUpPtEC1",
+            "up_PileUpPtEC2",
+            "down_PileUpPtEC2",
+            "up_PileUpPtHF",
+            "down_PileUpPtHF",
+            "up_PileUpPtRef",
+            "down_PileUpPtRef",
+            "up_FlavorQCD",
+            "down_FlavorQCD",
+            "up_Fragmentation",
+            "down_Fragmentation",
+            "up_SinglePionECAL",
+            "down_SinglePionECAL",
+            "up_SinglePionHCAL",
+            "down_SinglePionHCAL",
+            "up_TimePtEta",
+            "down_TimePtEta"
+        )
+        if variation not in possible_variations:
+            raise ValueError(
+                "variation must be one of: "
+                + ", ".join(possible_variations))
+        sf = self.sf[0].eval(
+            variation, jf, eta, pt, discr, self.ignore_missing)
+        # Apply a SF of 1. to c-flavored jets
+        is_c = abs(jf) == 4
+        if variation == "central":
+            sf = ak.fill_none(ak.mask(sf, ~is_c), 1.0)
+        # Apply cferr uncertainties only to c-flavored jets,
+        # otherwise use central variation
+        if "cferr" in variation:
+            sf_central = self.sf[0].eval(
+                "central", jf, eta, pt, discr, self.ignore_missing)
+            sf = ak.where(is_c, sf, sf_central)
+        # Apply lf, hf and jes uncertainties only to b- and
+        # usdg-flavored jets, otherwise use central variation
+        if "lf" in variation or "hf" in variation:
+            sf_central = self.sf[0].eval(
+                "central", jf, eta, pt, discr, self.ignore_missing)
+            sf = ak.where(is_c, sf_central, sf)
+        sf = ak.prod(sf, axis=1)
+        return sf
+
+    def __call__(
+            self, wp, jf, eta, pt, discr, variation="central",
+            efficiency="central"):
+        if self.method == "fixedwp":
+            sf = self._fixedwp(
+                wp, jf, eta, pt, discr, variation, efficiency)
+        elif self.method == "iterativefit":
+            sf = self._iterativefit(wp, jf, eta, pt, discr, variation)
+        return sf
 
     @property
     def available_efficiencies(self):

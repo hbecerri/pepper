@@ -102,11 +102,18 @@ class ConfigBasicPhysics(pepper.Config):
         weighters = []
         tagger = self["btag"].split(":")[0]
         year = self["year"]
+        method = ("fixedwp"
+                  if "btag_method" not in self
+                  else self["btag_method"])
+        ignore_missing = (self["btag_ignoremissing"]
+                          if "btag_ignoremissing" in self
+                          else False)
         for weighter_paths in value:
             paths = [self._get_path(path) for path in weighter_paths]
             btagweighter = BTagWeighter(
-                paths[0], paths[1], tagger=tagger, year=year
-            )
+                paths[0], paths[1] if len(paths) > 1 else None,
+                tagger=tagger, year=year,
+                method=method, ignore_missing=ignore_missing)
             weighters.append(btagweighter)
         return weighters
 
