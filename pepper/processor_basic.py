@@ -354,7 +354,8 @@ class ProcessorBasicPhysics(pepper.Processor):
                         var = pepper.hist_defns.DataPicker(sfs["axis"])(data)
                         factor[(var >= edges[i]) & (var < edges[i + 1])] *= fac
         if (self.config["compute_systematics"]
-                and not self.config["skip_nonshape_systematics"]
+                and not ("skip_nonshape_systematics" in self.config
+                         and self.config["skip_nonshape_systematics"])
                 and dsname in self.config["crosssection_uncertainty"]
                 and dsname not in self.config["dataset_for_systematics"]):
             xsuncerts = self.config["crosssection_uncertainty"]
@@ -383,7 +384,8 @@ class ProcessorBasicPhysics(pepper.Processor):
         if is_mc:
             weight = np.ones(len(data))
             if (self.config["compute_systematics"]
-                    and not self.config["skip_nonshape_systematics"]):
+                    and not ("skip_nonshape_systematics" in self.config
+                             and self.config["skip_nonshape_systematics"])):
                 sys = {}
                 if self.config["year"] in ("2018", "2016", "ul2018",
                                            "ul2016pre", "ul2016post"):
