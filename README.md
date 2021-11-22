@@ -33,6 +33,7 @@ The main directory of this repository contains several optional scripts to obtai
 
  - `calculate_DY_SFs.py`: Calculate scale factors for DY reweighting from the output of produce_DY_numbers.py
  - `calculate_triggerSFs.py`: Calculate SFs for ttbar dileptonic triggers using the output of produce_triggerSF_numbers.py by cross-trigger method
+ - `calulate_stitching_factors.py`: Calculate factors to stitch MC samples from an already produced histogram (currently only 1D histograms supported)
  - `compute_kinreco_hists.py`: Generate histograms needed for top-quark kinematic reconstruction
  - `compute_mc_lumifactors.py`: Compute <img align="top" src="https://latex.codecogs.com/gif.latex?{\cal L}\sigma/\sum w_{\mathrm{gen}}" />, the factors needed to scale MC to data
  - `compute_pileup_weights.py`: Compute scale factors for pileup reweighting
