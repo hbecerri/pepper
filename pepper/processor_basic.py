@@ -347,11 +347,12 @@ class ProcessorBasicPhysics(pepper.Processor):
         if "stitching_factors" in self.config:
             for ds, sfs in self.config["stitching_factors"].items():
                 if dsname.startswith(ds):
-                    factor = np.full(num_events, lumifactors[ds + "_inclusive"])
+                    factor = np.full(num_events,
+                                     lumifactors[ds + "_inclusive"])
                     edges = sfs["edges"] + [np.inf]
-                    for i, fact in enumerate(sfs["factors"]):
+                    for i, fac in enumerate(sfs["factors"]):
                         var = pepper.hist_defns.DataPicker(sfs["axis"])(data)
-                        factor[(var >= edges[i]) & (var < edges[i + 1])] *= fact
+                        factor[(var >= edges[i]) & (var < edges[i + 1])] *= fac
         if (self.config["compute_systematics"]
                 and not self.config["skip_nonshape_systematics"]
                 and dsname in self.config["crosssection_uncertainty"]
