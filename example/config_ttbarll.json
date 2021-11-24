@@ -56,9 +56,9 @@
 	    "$DATADIR/scale_factors/DeepJet_102XSF_WP_V1.csv",
 	    "$DATADIR/scale_factors/deepjet_medium_efficiency.root"
     	]
+    ],
     "btag_method": "fixedwp",
     "btag_ignoremissing": false,
-    ],
     "reapply_jec": false,
     "jet_correction_mc": [
         "$DATADIR/scale_factors/Autumn18_V19_MC_L1FastJet_AK4PFchs.txt",
