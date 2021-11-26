@@ -2,15 +2,14 @@
 # steps and outputting histograms and a cutflow with efficiencies.
 # Here we create a very simplified version of the ttbar-to-dilep processor.
 # One can run this processor using
-# 'python3 -m pepper.runproc --debug example_processor.py'
+# 'python3 -m pepper.runproc --debug example_processor.py example_config.json'
 
 import pepper
 import awkward as ak
 from functools import partial
-import awkward
 
 
-# All processors should inherit from pepper.Processor
+# All processors should inherit from pepper.ProcessorBasicPhysics
 class Processor(pepper.ProcessorBasicPhysics):
     # We use the ConfigTTbarLL instead of its base Config, to use some of its
     # predefined extras
@@ -33,6 +32,8 @@ class Processor(pepper.ProcessorBasicPhysics):
         # compute event weights
 
         # Add a cut only allowing events according to the golden JSON
+        # The good_lumimask method is specified in pepper.ProcessorBasicPhysics
+        # It also requires a lumimask to be specified in config
         if not is_mc:
             selector.add_cut("Lumi", partial(
                 self.good_lumimask, is_mc, dsname))
