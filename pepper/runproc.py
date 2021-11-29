@@ -14,6 +14,11 @@ import pepper
 import pepper.executor
 
 
+BUILTIN_PROCESSORS = {
+    "ttbarll": ("pepper.processor_ttbarll", "Processor")
+}
+
+
 def run_processor(processor_class=None, description=None, mconly=False):
     if description is None:
         description = ("Run a processor on files given in configuration and "
@@ -91,16 +96,22 @@ def run_processor(processor_class=None, description=None, mconly=False):
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
-    if processor_class is None:
+    if processor_class is None and args.processor in BUILTIN_PROCESSORS:
+        name, class_name = BUILTIN_PROCESSORS[args.processor]
+        module = importlib.import_module(name)
+        Processor = getattr(module, class_name)
+        logger.debug(f"Using processor from {module.__file__}")
+    elif processor_class is None:
         spec = importlib.util.spec_from_file_location("pepper", args.processor)
+        if spec is None:
+            sys.exit(f"No such processor shortcut or file: {args.processor}")
         proc_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(proc_module)
         try:
             Processor = proc_module.Processor
         except AttributeError:
-            print("Could not find class with name 'Processor' in "
-                  f"{args.processor}")
-            sys.exit(1)
+            sys.exit("Could not find class with name 'Processor' in "
+                     f"{args.processor}")
     else:
         Processor = processor_class
 
@@ -139,8 +150,7 @@ def run_processor(processor_class=None, description=None, mconly=False):
         datasets = {key: [val[0]] for key, val in datasets.items()}
 
     if len(datasets) == 0:
-        print("No datasets found")
-        sys.exit(1)
+        sys.exit("No datasets found")
 
     if args.eventdir is not None:
         # Check for non-empty subdirectories and remove them if wanted
@@ -221,10 +231,9 @@ def run_processor(processor_class=None, description=None, mconly=False):
     userdata = executor.state["userdata"]
     if "chunksize" in userdata:
         if userdata["chunksize"] != args.chunksize:
-            print(
+            sys.exit(
                 f"'{args.statedata}' got different chunksize: "
                 f"{userdata['chunksize']}. Delete it or change --chunksize")
-            sys.exit(1)
     userdata["chunksize"] = args.chunksize
 
     runner = coffea.processor.Runner(
