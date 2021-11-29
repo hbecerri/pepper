@@ -86,7 +86,7 @@ class Processor(coffea.processor.ProcessorABC):
     def accumulator(self):
         self._accumulator = coffea.processor.dict_accumulator({
             "hists": coffea.processor.dict_accumulator(),
-            "cutflows": coffea.processor.dict_accumulator(),
+            "cutflows": pepper.misc.get_nested_defaultdict_accumulator(4, int)
         })
         return self._accumulator
 
@@ -352,7 +352,7 @@ class Processor(coffea.processor.ProcessorABC):
             jsonname = "hists.json"
             hists_forjson = {}
             cut_lists = [list(cutflow.keys()) for cutflow
-                         in output["cutflows"]["all"].values()]
+                         in output["cutflows"]["all"]["all"].values()]
             cuts_precursors = defaultdict(set)
             for cut_list in cut_lists:
                 for i, cut in enumerate(cut_list):

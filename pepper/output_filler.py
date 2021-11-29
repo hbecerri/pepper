@@ -1,8 +1,8 @@
-from functools import partial
+import logging
+from copy import copy
+
 import numpy as np
 import awkward as ak
-import coffea
-import logging
 
 import pepper
 
@@ -20,8 +20,8 @@ class DummyOutputFiller:
 
 class OutputFiller:
     def __init__(self, output, hist_dict, is_mc, dsname, dsname_in_hist,
-                 sys_enabled, sys_overwrite=None, channels=None,
-                 copy_nominal=None, cuts_to_histogram=None):
+                 sys_enabled, sys_overwrite=None, channels={"all"},
+                 regions={"all"}, copy_nominal=None, cuts_to_histogram=None):
         self.output = output
         if hist_dict is None:
             self.hist_dict = {}
@@ -33,16 +33,19 @@ class OutputFiller:
         self.sys_enabled = sys_enabled
         self.sys_overwrite = sys_overwrite
         self.cuts_to_histogram = cuts_to_histogram
-        if channels is None:
-            self.channels = tuple()
-        else:
-            self.channels = channels
+        self.channels = copy(channels)
+        self.regions = copy(regions)
         if copy_nominal is None:
             self.copy_nominal = {}
         else:
             self.copy_nominal = copy_nominal
 
     def fill_cutflows(self, data, systematics, cut, done_steps):
+        def replace_all(slic):
+            if slic == "all":
+                return slice(None)
+            return data[slic]
+
         accumulator = self.output["cutflows"]
         if systematics is not None:
             weight = systematics["weight"]
@@ -50,23 +53,11 @@ class OutputFiller:
             weight = ak.Array(np.ones(len(data)))
             if hasattr(data.layout, "bytemask"):
                 weight = weight.mask[~ak.is_none(data)]
-        if "all" not in accumulator:
-            accumulator["all"] = coffea.processor.defaultdict_accumulator(
-                partial(coffea.processor.defaultdict_accumulator, int))
-        if cut not in accumulator["all"][self.dsname]:
-            count = ak.sum(weight)
-            accumulator["all"][self.dsname][cut] = count
-            rows = len(weight)
-            masked = ak.sum(ak.is_none(weight))
-            logger.info(
-                "Filling cutflow. Current event count: {} ({} rows, {} "
-                "masked)".format(count, rows, masked))
-        for ch in self.channels:
-            if ch not in accumulator:
-                accumulator[ch] = coffea.processor.defaultdict_accumulator(
-                    partial(coffea.processor.defaultdict_accumulator, int))
-            if cut not in accumulator[ch][self.dsname]:
-                accumulator[ch][self.dsname][cut] = ak.sum(weight[data[ch]])
+        for reg in self.regions:
+            for ch in self.channels:
+                if cut not in accumulator[reg][ch][self.dsname]:
+                    accumulator[reg][ch][self.dsname][cut] = \
+                        ak.sum(weight[replace_all(reg)][replace_all(ch)])
 
     def fill_hists(self, data, systematics, cut, done_steps):
         if self.cuts_to_histogram is not None:
@@ -74,6 +65,7 @@ class OutputFiller:
                 return
         accumulator = self.output["hists"]
         channels = self.channels
+        regions = self.regions
         do_systematics = self.sys_enabled and systematics is not None
         if systematics is not None:
             weight = systematics["weight"]
@@ -91,7 +83,7 @@ class OutputFiller:
                         continue
                     try:
                         sys_hist = fill_func(
-                            data=data, channels=channels,
+                            data=data, channels=channels, regions=regions,
                             dsname=self.dsname_in_hist, is_mc=self.is_mc,
                             weight=weight)
                     except pepper.hist_defns.HistFillError:
@@ -102,7 +94,7 @@ class OutputFiller:
                     continue
                 try:
                     accumulator[(cut, histname)] = fill_func(
-                        data=data, channels=channels,
+                        data=data, channels=channels, regions=regions,
                         dsname=self.dsname_in_hist, is_mc=self.is_mc,
                         weight=weight)
                 except pepper.hist_defns.HistFillError:
@@ -114,7 +106,7 @@ class OutputFiller:
                             continue
                         sysweight = weight * systematics[syscol]
                         hist = fill_func(
-                            data=data, channels=channels,
+                            data=data, channels=channels, regions=regions,
                             dsname=self.dsname_in_hist, is_mc=self.is_mc,
                             weight=sysweight)
                         accumulator[(cut, histname, syscol)] = hist

@@ -16,6 +16,13 @@ import parsl
 import parsl.addresses
 
 
+def get_nested_defaultdict_accumulator(depth, default_factory):
+    ret = default_factory
+    for i in range(depth - 1):
+        ret = partial(coffea.processor.defaultdict_accumulator, ret)
+    return coffea.processor.defaultdict_accumulator(ret)
+
+
 def normalize_trigger_path(path):
     if path.startswith("HLT_"):
         path = path[4:]
