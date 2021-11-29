@@ -67,6 +67,11 @@ def run_processor(processor_class=None, description=None, mconly=False):
         "-d", "--debug", action="store_true", help="Enable debug messages and "
         "only process a small amount of files to make debugging feasible")
     parser.add_argument(
+        "-l", "--loglevel",
+        choices=["critical", "error", "warning", "info", "debug"],
+        help="Set log level. Overwrites what is set by --debug. Default is "
+        "'warning'")
+    parser.add_argument(
         "-i", "--condorinit",
         help="Shell script that will be sourced by an HTCondor job after "
         "starting. This can be used to setup environment variables, if using "
@@ -95,6 +100,17 @@ def run_processor(processor_class=None, description=None, mconly=False):
     logger.addHandler(logging.StreamHandler())
     if args.debug:
         logger.setLevel(logging.DEBUG)
+    if args.loglevel is not None:
+        if args.loglevel == "critical":
+            logger.setLevel(logging.CRITICAL)
+        elif args.loglevel == "error":
+            logger.setLevel(logging.ERROR)
+        elif args.loglevel == "warning":
+            logger.setLevel(logging.WARNING)
+        elif args.loglevel == "info":
+            logger.setLevel(logging.INFO)
+        elif args.loglevel == "debug":
+            logger.setLevel(logging.DEBUG)
 
     if processor_class is None and args.processor in BUILTIN_PROCESSORS:
         name, class_name = BUILTIN_PROCESSORS[args.processor]
