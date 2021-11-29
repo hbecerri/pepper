@@ -6,7 +6,7 @@ import importlib
 import coffea
 import shutil
 import parsl
-from argparse import ArgumentParser
+import argparse
 import logging
 from datetime import datetime
 
@@ -19,15 +19,31 @@ BUILTIN_PROCESSORS = {
 }
 
 
+class _ListShortcutsAction(argparse.Action):
+    def __init__(self, option_strings, dest=argparse.SUPPRESS,
+                 default=argparse.SUPPRESS, help=None):
+        super().__init__(option_strings=option_strings, dest=dest,
+                         default=default, nargs=0, help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        shortcuts = ", ".join(BUILTIN_PROCESSORS.keys())
+        print(f"Available shortcuts: {shortcuts}")
+        parser.exit()
+
+
 def run_processor(processor_class=None, description=None, mconly=False):
     if description is None:
         description = ("Run a processor on files given in configuration and "
                        "save the output.")
-    parser = ArgumentParser(description=description)
+    parser = argparse.ArgumentParser(description=description)
     if processor_class is None:
         parser.add_argument(
             "processor", help="Python source code file of the processor to "
-            "run")
+            "run or a shortcut for a processor")
+        parser.add_argument(
+            "--listshortcuts", action=_ListShortcutsAction, help="List the "
+            "available  shortcuts for processors to use in the processor "
+            "argument and exit")
     parser.add_argument("config", help="JSON configuration file")
     parser.add_argument(
         "--eventdir", help="Event destination output directory. If not "
