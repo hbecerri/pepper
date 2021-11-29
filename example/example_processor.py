@@ -3,6 +3,10 @@
 # Here we create a very simplified version of the ttbar-to-dilep processor.
 # One can run this processor using
 # 'python3 -m pepper.runproc --debug example_processor.py example_config.json'
+# Above command probably will need a little bit of time before all cuts are
+# applied once. This is because a chunk of events are processed simultaneously.
+# You change adjust the number of events in a chunk and thereby the memory
+# usage by using the --chunksize parameter (the default value is 500000).
 
 import pepper
 import awkward as ak
@@ -56,6 +60,10 @@ class Processor(pepper.ProcessorBasicPhysics):
 
         # Only accept events that have oppositely changed leptons
         selector.add_cut("OC leptons", self.opposite_sign_lepton_pair)
+
+        # Things that could be done next: Adding cuts on the jets, MET or
+        # only allowing events that have a certain m_ll. A full implementation
+        # can be found in processor_ttbarll.py.
 
     def pick_electrons(self, data):
         ele = data["Electron"]

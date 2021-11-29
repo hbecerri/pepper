@@ -1,3 +1,6 @@
+# Collection of a range of histogram configurations. Some of these are used
+# as input by some of the scripts provided by Pepper, for example for
+# evaluating b-tagging efficiencies.
 {
     "1st_lep_pt": {
         "bins": [
@@ -48,7 +51,7 @@
         "fill": {
             "njet": [
                 "Jet",
-                "counts"
+                {"function": "num"}
             ]
         }
     },

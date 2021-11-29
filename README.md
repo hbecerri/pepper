@@ -20,7 +20,10 @@ Now, `pepper` can be imported as any other python package from any location.
 
 
 ## Usage
-In Pepper an analysis is implemented as a Processor class. A short example of such a Processor can be found in [here](example/example_processor.py). A processor can be run using `python3 -m pepper.runproc example_processor.py`
+
+### Getting started
+
+In Pepper an analysis is implemented as a Processor class. A short example of such a Processor with many explanatory comments can be found in [here](example/example_processor.py). This processor can be run by executing `python3 -m pepper.runproc example_processor.py example_config.json` (when inside the example directory). Also running `python -m pepper.runproc -h` will show the available command line options.
 
 ### Running on HTCondor
 In order to run on HTCondor using `pepper.runproc`, one only has to specify the `--condor` parameter followed by the number of jobs desired. Events will be split across jobs as evenly as possible.

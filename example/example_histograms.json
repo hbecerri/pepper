@@ -1,0 +1,57 @@
+# Here you can find example histograms that work with the example processor
+# There are also more advanced examples in the hist_config.json
+{
+    "leading_electron_pt": {
+        "bins": [
+            {
+                "name": "pt",
+                "label": "Electron $p_{\\mathrm{T}}$ (GeV)",
+                "n_or_arr": 100,
+                "lo": 0,
+                "hi": 400
+            }
+        ],
+        "fill": {
+            "pt": [
+                "Electron",
+                "pt",
+                {"leading": 1}
+            ]
+        }
+    },
+    "number_of_electrons": {
+        "bins": [
+            {
+                "name": "nele",
+                "label": "Number of electrons",
+                "n_or_arr": 5,
+                "lo": 0,
+                "hi": 5
+            }
+        ],
+        "fill": {
+            "nele": [
+                "Electron",
+                {"function": "num"}
+            ]
+        }
+    },
+    "leading_muon_pt": {
+        "bins": [
+            {
+                "name": "pt",
+                "label": "Muon $p_{\\mathrm{T}}$ (GeV)",
+                "n_or_arr": 100,
+                "lo": 0,
+                "hi": 400
+            }
+        ],
+        "fill": {
+            "pt": [
+                "Muon",
+                "pt",
+                {"leading": 1}
+            ]
+        }
+    }
+}

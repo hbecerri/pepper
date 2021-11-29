@@ -1,4 +1,5 @@
 {
+
     "year": "2018",
     "datadir": ".",
     "store": "/pnfs/desy.de/cms/tier2/store",
@@ -87,5 +88,5 @@
     "muon_eta_max": 2.4,
     "good_muon_pt_min": 20.0,
 
-    "hists": "$CONFDIR/hist_config.json",
+    "hists": "$CONFDIR/example_histograms.json",
 }
