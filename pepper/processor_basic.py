@@ -131,13 +131,13 @@ class ProcessorBasicPhysics(pepper.Processor):
 
     def get_jetmet_variation_args(self):
         ret = []
-        ret.append(VariationArg("UncMET_up", met="up"))
-        ret.append(VariationArg("UncMET_down", met="down"))
         if ("jet_resolution" not in self.config
                 or "jet_ressf" not in self.config):
-            jer = "central"
-        else:
             jer = None
+        else:
+            jer = "central"
+        ret.append(VariationArg("UncMET_up", met="up", jer=jer))
+        ret.append(VariationArg("UncMET_down", met="down", jer=jer))
         if "jet_uncertainty" in self.config:
             junc = self.config["jet_uncertainty"]
             if "junc_sources_to_use" in self.config:
