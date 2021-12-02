@@ -7,6 +7,7 @@ from collections import namedtuple
 from collections.abc import Mapping
 from functools import wraps, partial
 from concurrent.futures import ThreadPoolExecutor
+import warnings
 
 import numpy as np
 import awkward as ak
@@ -75,6 +76,10 @@ def get_event_files(eventdir, eventext, datasets):
 
 
 def coffeahist2hist(hist):
+    warnings.warn(
+        "coffeahist2hist is deprecated, use coffea.hist.Hist.to_hist instead",
+        DeprecationWarning
+    )
     axes = []
     cat_pos = []
     for i, axis in enumerate(hist.axes()):

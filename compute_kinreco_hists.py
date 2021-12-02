@@ -7,7 +7,6 @@ import uproot
 import coffea
 
 import pepper
-from pepper.misc import coffeahist2hist
 
 
 class Processor(pepper.ProcessorTTbarLL):
@@ -178,7 +177,7 @@ class Processor(pepper.ProcessorTTbarLL):
             items = ("mlb", "mw", "mt", "alphal", "energyfl", "alphaj",
                      "energyfj")
             for key in items:
-                f[key] = coffeahist2hist(output[key])
+                f[key] = output[key].to_hist()
 
 
 if __name__ == "__main__":

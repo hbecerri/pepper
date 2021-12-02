@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 class Processor(coffea.processor.ProcessorABC):
+    """Class implementing input/output, setup of histograms, and utility
+    classes"""
     config_class = pepper.Config
     schema_class = NanoAODSchema
 
@@ -400,4 +402,4 @@ class Processor(coffea.processor.ProcessorABC):
                             key = "hist"
                         else:
                             key = "_".join(key).replace("/", "_")
-                        f[key] = pepper.misc.coffeahist2hist(hist_integrated)
+                        f[key] = hist_integrated.to_hist()
