@@ -12,7 +12,7 @@ Easy to use and highly configurable.
     install_requires=[
         "coffea",
         "awkward>=1.2",
-        "parsl",
+        "parsl>=1.1",
         "h5py",
         "hdf5plugin",
         "hist",
