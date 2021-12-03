@@ -62,11 +62,12 @@ These determine various calibrations and weightings. In case they are optional a
 - `histogram_format`: Optional, either `"coffea"` or `"root"`. This decides the format which will be used for saving the histograms. Defaults to `"coffea"`.
 ### Histogram definition
 Elements of the `hists` object are objects themselves. They have these keys:
-- `bins`: Optional, array of objects, each defining a binned axis. The object keys and its values agree with the parameters of `coffea.hist.Bin`.
+- `bins`: Optional, array of objects, each defining a binned axis. The object keys and its values agree with the parameters of `coffea.hist.Bin`, except for the optional `"unit"` parameter. If `"unit"` is present, it should be a string to be automatically appended to the axis label to indicate the unit. It may also be used in the `label`.
 - `cats`: Optional, array of objects, each defining a category axis. The purpose of a category axis is to group events by some criteria, like for example data set. The object keys and its values agree with the parameters of `coffea.hist.Cat`. Note that category axes for data set and channel are automatically created and should not be specified here.
 - `fill`: Object, each of its keys must be either a key in `bins` or in `cats`. In latter case, it its elements are objects, where each key names a category and where the value is a data picker defining which events belong to this category. In the former case it is just a data picker, defining the observable to use for the binned axes.
 - `step_requirement`: Optional, string. The histogram will only be created once a specific step is done. This can be either `"cut:"` followed by a cut name, or `"column:"` followed by a column name. The latter requires that a specific column has been set during the processing.
 - `weight`: Optional, data picker. Specifies a customs event weight using a data picker. If it is not present, the event weight will be used.
+- `label`: Optional, string. To use as the label of the bin height axis. If not given, will be chosen so it best matches CMS guidelines (something like "Events / bin").
 ### Data pickers
 Data pickers are arrays, specifying to use something from the `data` array of the processor instance. This is used in histogramming and per-event output. Each element of such a data picker array gives a further specification that is used on the result of the previous element. The fist element will be used upon the data table of the processor. An element can be
 - a column name or an object of the form `{"key": columnname}`,

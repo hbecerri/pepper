@@ -6,10 +6,11 @@
         "bins": [
             {
                 "name": "pt",
-                "label": "Lepton $p_{\\mathrm{T}}$ (GeV)",
+                "label": "Lepton $p_{\\mathrm{T}}$",
                 "n_or_arr": 100,
                 "lo": 0,
-                "hi": 400
+                "hi": 400,
+                "unit": "GeV"
             }
         ],
         "fill": {
@@ -59,10 +60,11 @@
         "bins": [
             {
                 "name": "mll",
-                "label": "$m_{\\mathrm{ll}}$ (GeV)",
+                "label": "$m_{\\mathrm{ll}}$",
                 "n_or_arr": 100,
                 "lo": 0,
-                "hi": 400
+                "hi": 400,
+                "unit": "GeV"
             }
         ],
         "fill": {
@@ -75,10 +77,11 @@
         "bins": [
             {
                 "name": "pt",
-                "label": "MET $p_{\\mathrm{T}}$ (GeV)",
+                "label": "MET $p_{\\mathrm{T}}$",
                 "n_or_arr": 40,
                 "lo": 0,
-                "hi": 200
+                "hi": 200,
+                "unit": "GeV"
             }
         ],
         "fill": {
@@ -92,7 +95,7 @@
         "bins": [
             {
                 "name": "phi",
-                "label": "MET $\\phi$ (GeV)",
+                "label": "MET $\\phi$",
                 "n_or_arr": 40,
                 "lo": -3.14,
                 "hi": 3.14
@@ -135,7 +138,8 @@
             {
                 "name": "pt",
                 "label": "$p_{\\mathrm{T}}$",
-                "n_or_arr": [20,  40,  60,  90, 150, 210, 990]
+                "n_or_arr": [20,  40,  60,  90, 150, 210, 990],
+                "unit": "GeV"
             },
             {
                 "name": "abseta",
@@ -182,12 +186,14 @@
             {
                 "name": "1st lep pt",
                 "label": "1st lep $p_{\\mathrm{T}}$",
-                "n_or_arr": [25, 40, 60, 85, 120, 180, 1000]
+                "n_or_arr": [25, 40, 60, 85, 120, 180, 1000],
+                "unit": "GeV"
             },
             {
                 "name": "2nd lep pt",
                 "label": "2nd lep $p_{\\mathrm{T}}$",
-                "n_or_arr": [20, 40, 60, 85, 120, 1000]
+                "n_or_arr": [20, 40, 60, 85, 120, 1000],
+                "unit": "GeV"
             },
             # Bins for computing systematic variations:
             {
