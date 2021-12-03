@@ -187,6 +187,10 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
                    PEPPER_CONDOR_ENV is also not set, no futher environment
                    will be set up.
     """
+    if num_jobs > 450:
+        raise ValueError(
+            "Due to technical limitations only up to 450 jobs are possible "
+            "right now")
     if hostname is None:
         hostname = parsl.addresses.address_by_hostname()
     if retries is None:
