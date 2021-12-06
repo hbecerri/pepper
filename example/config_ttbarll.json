@@ -401,11 +401,11 @@
     "columns_to_save": [
         [
             "Lepton",
-            "p4"
+            ["pt", "eta", "phi", "mass"]
         ],
         [
             "Jet",
-            "p4"
+            ["pt", "eta", "phi", "mass"]
         ],
         [
             "Jet",
@@ -413,7 +413,7 @@
         ],
         [
             "MET",
-            "p4"
+            ["pt", "phi"]
         ]
     ],
 
