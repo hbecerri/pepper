@@ -84,9 +84,14 @@ class Processor(coffea.processor.ProcessorABC):
 
     @property
     def accumulator(self):
+        if "categories" in self.config:
+            n_cats = len(self.config["categories"])
+        else:
+            n_cats = 0
         self._accumulator = coffea.processor.dict_accumulator({
             "hists": coffea.processor.dict_accumulator(),
-            "cutflows": pepper.misc.get_nested_defaultdict_accumulator(4, int)
+            "cutflows": pepper.misc.get_nested_defaultdict_accumulator(
+                n_cats + 2, int)
         })
         return self._accumulator
 
@@ -297,12 +302,17 @@ class Processor(coffea.processor.ProcessorABC):
             cuts_to_histogram = self.config["cuts_to_histogram"]
         else:
             cuts_to_histogram = None
+        if "categories" in self.config:
+            categories = self.config["categories"]
+        else:
+            categories = None
 
         hists = self._get_hists_from_config(
             self.config, "hists", "hists_to_do")
         filler = OutputFiller(
             output, hists, is_mc, dsname, dsname_in_hist, sys_enabled,
-            sys_overwrite=sys_overwrite, copy_nominal=self._get_copy_nominal(),
+            sys_overwrite=sys_overwrite, categories=categories,
+            copy_nominal=self._get_copy_nominal(),
             cuts_to_histogram=cuts_to_histogram)
 
         return filler
@@ -351,8 +361,12 @@ class Processor(coffea.processor.ProcessorABC):
             # Save histograms with a hist.json describing the hist files
             jsonname = "hists.json"
             hists_forjson = {}
+            cutflow_all = output["cutflows"]
+            if "categories" in self.config:
+                for i in range(len(self.config["categories"])):
+                    cutflow_all = cutflow_all["all"]
             cut_lists = [list(cutflow.keys()) for cutflow
-                         in output["cutflows"]["all"]["all"].values()]
+                         in cutflow_all.values()]
             cuts_precursors = defaultdict(set)
             for cut_list in cut_lists:
                 for i, cut in enumerate(cut_list):

@@ -20,8 +20,8 @@ class DummyOutputFiller:
 
 class OutputFiller:
     def __init__(self, output, hist_dict, is_mc, dsname, dsname_in_hist,
-                 sys_enabled, sys_overwrite=None, channels={"all"},
-                 regions={"all"}, copy_nominal=None, cuts_to_histogram=None):
+                 sys_enabled, sys_overwrite=None, categories=None,
+                 copy_nominal=None, cuts_to_histogram=None):
         self.output = output
         if hist_dict is None:
             self.hist_dict = {}
@@ -33,18 +33,33 @@ class OutputFiller:
         self.sys_enabled = sys_enabled
         self.sys_overwrite = sys_overwrite
         self.cuts_to_histogram = cuts_to_histogram
-        self.channels = copy(channels)
-        self.regions = copy(regions)
+        if isinstance(categories, list):
+            self.categories = {cat: {"all"} for cat in categories}
+        elif isinstance(categories, dict):
+            self.categories = copy(categories)
+        elif categories is None:
+            self.categories = {}
+        else:
+            raise ValueError(
+                "'categories' must be one of a list, a dict, or None")
         if copy_nominal is None:
             self.copy_nominal = {}
         else:
             self.copy_nominal = copy_nominal
 
     def fill_cutflows(self, data, systematics, cut, done_steps):
-        def replace_all(slic):
-            if slic == "all":
-                return slice(None)
-            return data[slic]
+        def fill_recursive(cats, weight, mask, accumulator):
+            if len(cats) > 0:
+                for reg in cats[0]:
+                    if reg == "all":
+                        new_mask = mask
+                    else:
+                        new_mask = mask & data[reg]
+                    fill_recursive(
+                        cats[1:], weight, new_mask, accumulator[reg])
+            else:
+                if cut not in accumulator[self.dsname]:
+                    accumulator[self.dsname][cut] = ak.sum(weight[mask])
 
         accumulator = self.output["cutflows"]
         if systematics is not None:
@@ -53,19 +68,15 @@ class OutputFiller:
             weight = ak.Array(np.ones(len(data)))
             if hasattr(data.layout, "bytemask"):
                 weight = weight.mask[~ak.is_none(data)]
-        for reg in self.regions:
-            for ch in self.channels:
-                if cut not in accumulator[reg][ch][self.dsname]:
-                    accumulator[reg][ch][self.dsname][cut] = \
-                        ak.sum(weight[replace_all(reg)][replace_all(ch)])
+        cats = list(self.categories.values())
+        fill_recursive(cats, weight, np.full(len(data), True), accumulator)
 
     def fill_hists(self, data, systematics, cut, done_steps):
         if self.cuts_to_histogram is not None:
             if cut not in self.cuts_to_histogram:
                 return
         accumulator = self.output["hists"]
-        channels = self.channels
-        regions = self.regions
+        categories = self.categories
         do_systematics = self.sys_enabled and systematics is not None
         if systematics is not None:
             weight = systematics["weight"]
@@ -83,7 +94,7 @@ class OutputFiller:
                         continue
                     try:
                         sys_hist = fill_func(
-                            data=data, channels=channels, regions=regions,
+                            data=data, categories=categories,
                             dsname=self.dsname_in_hist, is_mc=self.is_mc,
                             weight=weight)
                     except pepper.hist_defns.HistFillError:
@@ -94,7 +105,7 @@ class OutputFiller:
                     continue
                 try:
                     accumulator[(cut, histname)] = fill_func(
-                        data=data, channels=channels, regions=regions,
+                        data=data, categories=categories,
                         dsname=self.dsname_in_hist, is_mc=self.is_mc,
                         weight=weight)
                 except pepper.hist_defns.HistFillError:
@@ -106,7 +117,7 @@ class OutputFiller:
                             continue
                         sysweight = weight * systematics[syscol]
                         hist = fill_func(
-                            data=data, channels=channels, regions=regions,
+                            data=data, categories=categories,
                             dsname=self.dsname_in_hist, is_mc=self.is_mc,
                             weight=sysweight)
                         accumulator[(cut, histname, syscol)] = hist

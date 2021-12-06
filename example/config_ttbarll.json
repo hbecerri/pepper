@@ -417,6 +417,8 @@
         ]
     ],
 
+    "categories": ["channel"],
+
     "apply_met_filters": true,
     "mc_lumifactors": "$DATADIR/2018ttbar_mclumifactors.json",
 

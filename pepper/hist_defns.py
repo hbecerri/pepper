@@ -73,8 +73,6 @@ class HistDefinition:
     def __init__(self, config):
         self.ylabel = "Counts"
         self.dataset_axis = coffea.hist.Cat("dataset", "Dataset name")
-        self.channel_axis = coffea.hist.Cat("channel", "Channel")
-        self.region_axis = coffea.hist.Cat("region", "Region")
         if "bins" in config:
             bins = [coffea.hist.Bin(**kwargs) for kwargs in config["bins"]]
         else:
@@ -154,17 +152,14 @@ class HistDefinition:
             prepared[key] = np.asarray(ak.flatten(data[mask], axis=None))
         return prepared
 
-    def __call__(self, data, channels, regions, dsname, is_mc, weight):
+    def __call__(self, data, categories, dsname, is_mc, weight):
         axes = self.axes.copy()
         cat_present = {}
-        channels = {ch for ch in channels if ch != "all"}
-        regions = {reg for reg in regions if reg != "all"}
-        if channels is not None and len(channels) > 0:
-            axes.append(self.channel_axis)
-            cat_present["channel"] = {ch: data[ch] for ch in channels}
-        if regions is not None and len(regions) > 0:
-            axes.append(self.region_axis)
-            cat_present["region"] = {reg: data[reg] for reg in regions}
+        for cat, regs in categories.items():
+            regs = {reg for reg in regs if reg != "all"}
+            if len(regs) > 0:
+                cat_present[cat] = {reg: data[reg] for reg in regs}
+                axes.append(coffea.hist.Cat(cat, cat))
         hist = coffea.hist.Hist(self.ylabel, self.dataset_axis, *axes)
 
         fill_vals = {name: DataPicker(method)(data)

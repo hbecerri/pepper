@@ -148,7 +148,17 @@ class Selector:
             cb(data=data, systematics=systematics, cut=self.cutnames[-1],
                done_steps=self.done_steps)
 
-    def add_cut(self, name, accept, systematics=None, no_callback=False):
+    def get_category_mask(self, categories):
+        mask = np.full(len(self.data), True)
+        for cat, regs in categories.items():
+            cat_mask = np.full(len(self.data), False)
+            for reg in regs:
+                cat_mask = cat_mask | self.data[reg]
+            mask = mask & cat_mask
+        return mask
+
+    def add_cut(self, name, accept, systematics=None, no_callback=False,
+                categories=None):
         """Adds a cut and applies it if `self.applying_cuts` is True, otherwise
         the cut will be stored in `self.unapplied_cuts`. Applying in this
         context means that rows of `self.data` are discarded accordingly.
@@ -175,9 +185,18 @@ class Selector:
         no_callback -- A bool whether not to call the callbacks, which usually
                        fill histograms etc.
         """
+        def pad_cats(mask, arr):
+            full_arr = np.full(len(self.data), 1, dtype=arr.dtype)
+            full_arr[mask] = arr
+            return full_arr
+
         logger.info(f"Adding cut '{name}'"
                     + (" (no callback)" if no_callback else ""))
-        if callable(accept):
+        if categories is not None:
+            cats_mask = self.get_category_mask(categories)
+            if callable(accept):
+                accept = accept(self.data[cats_mask])
+        elif callable(accept):
             accept = accept(self.data)
         if isinstance(accept, tuple):
             accept, systematics = accept
@@ -186,6 +205,8 @@ class Selector:
         self.cutnames.append(name)
         if not isinstance(accept, np.ndarray):
             accept = np.array(accept)
+        if categories is not None:
+            accept = pad_cats(cats_mask, accept)
         if accept.dtype == bool:
             accept_weighted = accept.astype(float)
         else:
@@ -205,6 +226,8 @@ class Selector:
                 values = []
                 n = self.num
                 for value_old in values_old:
+                    if categories is not None:
+                        value_old = pad_cats(cats_mask, value_old)
                     if len(value_old) != n:
                         if self.applying_cuts:
                             value = value_old[accept]
@@ -292,7 +315,7 @@ class Selector:
             return ak.pad_none(column, len(mask), axis=0)
 
     def set_column(self, column_name, column, all_cuts=False,
-                   no_callback=False, lazy=False):
+                   no_callback=False, lazy=False, categories=None):
         """Sets a column of `self.data`.
 
         Arguments:
@@ -317,6 +340,11 @@ class Selector:
         else:
             data = self.data
             mask = None
+
+        if categories is not None:
+            cats_mask = self.get_category_mask(categories)
+            data = data[cats_mask]
+
         if callable(column):
             if lazy:
                 column = pepper.misc.VirtualArrayCopier(data).wrap_with_copy(
@@ -324,6 +352,8 @@ class Selector:
                 column = ak.virtual(column, cache={}, length=len(data))
             else:
                 column = column(data)
+        if categories is not None:
+            column = self._mask(column, cats_mask)
         if mask is not None:
             column = self._mask(column, mask)
         if lazy:
@@ -336,7 +366,8 @@ class Selector:
         if not no_callback:
             self._invoke_callbacks()
 
-    def set_multiple_columns(self, columns, all_cuts=False, no_callback=False):
+    def set_multiple_columns(self, columns, all_cuts=False, no_callback=False,
+                             categories=None):
         """Sets multiple columns of `self.data` at once.
 
         Arguments:
@@ -351,20 +382,18 @@ class Selector:
         if callable(columns):
             if all_cuts and not self.applying_cuts:
                 data = self.final
-                mask = ~ak.is_none(data)
                 data = ak.flatten(self.final, axis=0)
             else:
                 data = self.data
-                mask = None
+            if categories is not None:
+                cats_mask = self.get_category_mask(categories)
+                data = data[cats_mask]
             columns = columns(data)
-        else:
-            mask = None
         if isinstance(columns, ak.Array):
             columns = {k: columns[k] for k in ak.fields(columns)}
         for name, column in columns.items():
-            if mask is not None:
-                column = self._mask(column, mask)
-            self.set_column(name, column, no_callback=True)
+            self.set_column(name, column, all_cuts, no_callback=True,
+                            categories=categories)
         if not no_callback:
             self._invoke_callbacks()
 
