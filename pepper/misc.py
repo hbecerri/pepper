@@ -18,8 +18,14 @@ import parsl.addresses
 
 
 def normalize_trigger_path(path):
+    # Remove HLT and L1 prefixes
     if path.startswith("HLT_"):
         path = path[4:]
+    elif path.startswith("L1_"):
+        path = path[3:]
+    # Remove _v suffix
+    if path.endswith("_v"):
+        path = path[:-2]
     return path
 
 
