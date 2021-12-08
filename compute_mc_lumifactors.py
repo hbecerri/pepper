@@ -71,18 +71,10 @@ for process_name, proc_datasets in tqdm(datasets.items(), desc="Total"):
         print("Could not find crosssection for {}".format(process_name))
         continue
     for path in tqdm(proc_datasets, desc="Per dataset"):
-        f = uproot.open(path)
-        if "genEventSumw_" in f["Runs"]:
-            # inconsistent naming in NanoAODv6
-            geskey = "genEventSumw_"
-            lhesskey = "LHEScaleSumw_"
-            lhepdfskey = "LHEPdfSumw_"
-        else:
-            geskey = "genEventSumw"
-            lhesskey = "LHEScaleSumw"
-            lhepdfskey = "LHEPdfSumw"
-        counts = update_counts(f, counts, process_name,
-                               geskey, lhesskey, lhepdfskey)
+        with uproot.open(path) as f:
+            counts = update_counts(
+                f, counts, process_name, "genEventSumw", "LHEScaleSumw",
+                "LHEPdfSumw")
         i += 1
     print("\033[F\033[F")  # Workaround for tqdm adding a new line
 print("")
