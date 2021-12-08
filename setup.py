@@ -10,8 +10,8 @@ Easy to use and highly configurable.
 """,
     packages=find_packages(),
     install_requires=[
-        "coffea",
         "awkward>=1.2",
+        "coffea>=0.7.11",
         "parsl>=1.1",
         "h5py",
         "hdf5plugin",
