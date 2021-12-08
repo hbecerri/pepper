@@ -61,7 +61,11 @@ def run_processor(processor_class=None, description=None, mconly=False):
         "specified multiple times.")
     if not mconly:
         parser.add_argument(
-            "--mc", action="store_true", help="Only process MC files")
+            "--mc", action="store_true", help="Only process MC files. Ignored "
+                                              "if --file is present")
+        parser.add_argument(
+            "--nomc", action="store_true", help="Skip MC files. Ignored if "
+                                                "--file is present")
     parser.add_argument(
         "-c", "--condor", type=int, const=10, nargs="?", metavar="simul_jobs",
         help="Split and submit to HTCondor. By default a maximum of 10 condor "
@@ -158,8 +162,11 @@ def run_processor(processor_class=None, description=None, mconly=False):
             exclude = config["dataset_for_systematics"].keys()
         else:
             exclude = None
+        if args.mc and args.nomc:
+            sys.exit("--mc and --nomc cannot both be present")
         datasets = config.get_datasets(
-            args.dataset, exclude, "mc" if mconly or args.mc else "any")
+            args.dataset, exclude, "mc" if mconly or args.mc else
+                                   "data" if args.nomc else "any")
     else:
         datasets = {}
         for customfile in args.file:
