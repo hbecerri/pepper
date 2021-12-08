@@ -26,8 +26,32 @@ def get_evaluator(filename, fileform=None, filetype=None):
 
 class ScaleFactors:
     def __init__(self, factors, factors_up, factors_down, bins):
+        """Create a new ScaleFactors instance. Useful for binned scale factors.
+
+        Arguments:
+        factors -- Numpy array with the scale factors for the central variation
+        factors_up -- Numpy array with the scale factors for the up variation
+        factors_down -- Numpy array with the scale factors for the down
+                        variation
+        bins -- A dict whose length is equal to the number of dimensions of
+                factors. Its nth key gives a name to the nth dimension, so
+                that it can be used as a kwarg in the __call__ method of this
+                class. "variation" can not be a key. Its values are Numpy
+                arrays and determine the edges of the binnding used for the
+                factors.
+        """
         if "variation" in bins:
             raise ValueError("'variation' must not be in bins")
+        for i, (axis, edges) in enumerate(bins.items()):
+            if factors.shape[i] + 1 != len(edges):
+                raise ValueError(
+                    f"axis '{axis}' should have {factors.shape[i] + 1} "
+                    f"edges but has {len(edges)}")
+        if (factors_up is not None and factors_down is not None and
+            (factors.shape != factors_up.shape
+                or factors.shape != factors_down.shape)):
+            raise ValueError(
+                "factors_up or factors_down have inconsistent shape")
         self._factors = factors
         self._factors_up = factors_up
         self._factors_down = factors_down
