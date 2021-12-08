@@ -177,7 +177,7 @@ class Config(collections.MutableMapping):
         for dataset in set(datasets.keys()):
             if ((dstype == "mc" and dataset not in self["mc_datasets"])
                     or (dstype == "data"
-                        and dataset not in self["expdatasets"])
+                        and dataset not in self["exp_datasets"])
                     or (include is not None and dataset not in include)
                     or (exclude is not None and dataset in exclude)):
                 del datasets[dataset]
