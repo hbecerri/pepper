@@ -5,8 +5,11 @@ import coffea
 from coffea.lookup_tools.extractor import file_converters
 from coffea.btag_tools import BTagScaleFactor
 import awkward as ak
+import correctionlib
 from collections import namedtuple
 import warnings
+
+from pepper.misc import onedimeval
 
 
 def get_evaluator(filename, fileform=None, filetype=None):
@@ -191,6 +194,13 @@ BTAG_WP_CUTS = {
 }
 
 
+BTAG_TAGGER_NAMES = {
+    # tagger names with capitalization as it appears in the correction JSON
+    "deepcsv": "deepCSV",
+    "deepjet": "deepJet"
+}
+
+
 class BTagWeighter:
     def __init__(self, sf_filename, eff_filename, tagger, year,
                  method="fixedwp", meastype="mujets",
@@ -211,18 +221,33 @@ class BTagWeighter:
                 f"Meastype cannot be {meastype} when using fixedWP method"
             )
 
-        self.sf = []
-        if method == "fixedwp":
-            self.eff_evaluator = get_evaluator(eff_filename)
-            for i in range(3):
-                # Note that for light flavor normally only inclusive is
-                # available, thus we fix it to 'incl' here
+        tagger = tagger.lower()
+
+        if sf_filename.endswith(".csv"):
+            self.filetype = "csv"
+            self.sf = []
+            if method == "fixedwp":
+                self.eff_evaluator = get_evaluator(eff_filename)
+                for i in range(3):
+                    # Note that for light flavor normally only inclusive is
+                    # available, thus we fix it to 'incl' here
+                    self.sf.append(BTagScaleFactor(
+                        sf_filename, i, f"{meastype},{meastype},incl"))
+            else:
                 self.sf.append(BTagScaleFactor(
-                    sf_filename, i, f"{meastype},{meastype},incl"))
-        else:
-            self.sf.append(BTagScaleFactor(
-                sf_filename, BTagScaleFactor.RESHAPE,
-                "iterativefit,iterativefit,iterativefit"))
+                    sf_filename, BTagScaleFactor.RESHAPE,
+                    "iterativefit,iterativefit,iterativefit"))
+        elif sf_filename.endswith(".json") or sf_filename.endswith(".json.gz"):
+            self.filetype = "json"
+            if method == "fixedwp":
+                self.eff_evaluator = get_evaluator(eff_filename)
+                correset = correctionlib.CorrectionSet.from_file(sf_filename)
+                tagger_json = BTAG_TAGGER_NAMES[tagger]
+                self.sf = [correset[f"{tagger_json}_{meastype}"],
+                           correset[f"{tagger_json}_incl"]]
+            else:
+                raise NotImplementedError(
+                    "iterativefit with json format is not implemented")
 
         self.method = method
         self.wps = BTAG_WP_CUTS[tagger][year]
@@ -249,8 +274,7 @@ class BTagWeighter:
             "central", "light up", "light down", "heavy up", "heavy down")
         if variation not in possible_variations:
             raise ValueError(
-                "variation must be one of: "
-                + ", ".join(possible_variations))
+                "variation must be one of: " + ", ".join(possible_variations))
         light_vari = "central"
         heavy_vari = "central"
         if variation != "central":
@@ -277,6 +301,57 @@ class BTagWeighter:
             (1 - sfeff)[~is_tagged], axis=1)
 
         # TODO: What if one runs into numerical problems here?
+        return p_data / p_mc
+
+    def _fixedwp_json(self, wp, jf, eta, pt, discr, variation, efficiency):
+        def evaluate_two_flavor(jf, abseta, pt):
+            is_light = jf == 0
+            isnt_light = ~is_light
+            sf = np.empty(len(is_light))
+            sf[isnt_light] = self.sf[0].evaluate(
+                heavy_vari, wp, jf[isnt_light], abseta[isnt_light],
+                pt[isnt_light])
+            sf[is_light] = self.sf[1].evaluate(
+                light_vari, wp, jf[is_light], abseta[is_light], pt[is_light])
+            return sf
+
+        wp = wp.lower()
+        wp_val = getattr(self.wps, wp)
+        if wp == "loose":
+            wp = "l"
+        elif wp == "medium":
+            wp = "m"
+        elif wp == "tight":
+            wp = "t"
+        else:
+            raise ValueError("Invalid value for wp. Expected 'loose', "
+                             "'medium' or 'tight'")
+        wp = wp.upper()
+        possible_variations = (
+            "central", "light up", "light down", "heavy up", "heavy down")
+        if variation not in possible_variations:
+            raise ValueError(
+                "variation must be one of: " + ", ".join(possible_variations))
+        light_vari = "central"
+        heavy_vari = "central"
+        if variation != "central":
+            vari_type, direction = variation.split(" ")
+            if vari_type == "light":
+                light_vari = direction
+            else:
+                heavy_vari = direction
+        abseta = abs(eta)
+        sf = onedimeval(evaluate_two_flavor, jf, abseta, pt)
+
+        eff = self.eff_evaluator[efficiency](jf, pt, abseta)
+        sfeff = sf * eff
+        is_tagged = discr > wp_val
+
+        p_mc = ak.prod(eff[is_tagged], axis=1) * ak.prod(
+            (1 - eff)[~is_tagged], axis=1)
+        p_data = ak.prod(sfeff[is_tagged], axis=1) * ak.prod(
+            (1 - sfeff)[~is_tagged], axis=1)
+
         return p_data / p_mc
 
     def _iterativefit(self, wp, jf, eta, pt, discr, variation):
@@ -381,11 +456,16 @@ class BTagWeighter:
     def __call__(
             self, wp, jf, eta, pt, discr, variation="central",
             efficiency="central"):
-        if self.method == "fixedwp":
+        if self.method == "fixedwp" and self.filetype == "csv":
             sf = self._fixedwp(
+                wp, jf, eta, pt, discr, variation, efficiency)
+        elif self.method == "fixedwp" and self.filetype == "json":
+            sf = self._fixedwp_json(
                 wp, jf, eta, pt, discr, variation, efficiency)
         elif self.method == "iterativefit":
             sf = self._iterativefit(wp, jf, eta, pt, discr, variation)
+        else:
+            raise ValueError("Unknown method or filetype")
         return sf
 
     @property
