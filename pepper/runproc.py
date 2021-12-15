@@ -6,7 +6,7 @@ import importlib
 import coffea
 import shutil
 import parsl
-from argparse import ArgumentParser
+import argparse
 import logging
 from datetime import datetime
 
@@ -14,15 +14,36 @@ import pepper
 import pepper.executor
 
 
+BUILTIN_PROCESSORS = {
+    "ttbarll": ("pepper.processor_ttbarll", "Processor")
+}
+
+
+class _ListShortcutsAction(argparse.Action):
+    def __init__(self, option_strings, dest=argparse.SUPPRESS,
+                 default=argparse.SUPPRESS, help=None):
+        super().__init__(option_strings=option_strings, dest=dest,
+                         default=default, nargs=0, help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        shortcuts = ", ".join(BUILTIN_PROCESSORS.keys())
+        print(f"Available shortcuts: {shortcuts}")
+        parser.exit()
+
+
 def run_processor(processor_class=None, description=None, mconly=False):
     if description is None:
         description = ("Run a processor on files given in configuration and "
                        "save the output.")
-    parser = ArgumentParser(description=description)
+    parser = argparse.ArgumentParser(description=description)
     if processor_class is None:
         parser.add_argument(
             "processor", help="Python source code file of the processor to "
-            "run")
+            "run or a shortcut for a processor")
+        parser.add_argument(
+            "--listshortcuts", action=_ListShortcutsAction, help="List the "
+            "available  shortcuts for processors to use in the processor "
+            "argument and exit")
     parser.add_argument("config", help="JSON configuration file")
     parser.add_argument(
         "--eventdir", help="Event destination output directory. If not "
@@ -40,7 +61,11 @@ def run_processor(processor_class=None, description=None, mconly=False):
         "specified multiple times.")
     if not mconly:
         parser.add_argument(
-            "--mc", action="store_true", help="Only process MC files")
+            "--mc", action="store_true", help="Only process MC files. Ignored "
+                                              "if --file is present")
+        parser.add_argument(
+            "--nomc", action="store_true", help="Skip MC files. Ignored if "
+                                                "--file is present")
     parser.add_argument(
         "-c", "--condor", type=int, const=10, nargs="?", metavar="simul_jobs",
         help="Split and submit to HTCondor. By default a maximum of 10 condor "
@@ -61,6 +86,11 @@ def run_processor(processor_class=None, description=None, mconly=False):
     parser.add_argument(
         "-d", "--debug", action="store_true", help="Enable debug messages and "
         "only process a small amount of files to make debugging feasible")
+    parser.add_argument(
+        "-l", "--loglevel",
+        choices=["critical", "error", "warning", "info", "debug"],
+        help="Set log level. Overwrites what is set by --debug. Default is "
+        "'warning'")
     parser.add_argument(
         "-i", "--condorinit",
         help="Shell script that will be sourced by an HTCondor job after "
@@ -90,17 +120,34 @@ def run_processor(processor_class=None, description=None, mconly=False):
     logger.addHandler(logging.StreamHandler())
     if args.debug:
         logger.setLevel(logging.DEBUG)
+    if args.loglevel is not None:
+        if args.loglevel == "critical":
+            logger.setLevel(logging.CRITICAL)
+        elif args.loglevel == "error":
+            logger.setLevel(logging.ERROR)
+        elif args.loglevel == "warning":
+            logger.setLevel(logging.WARNING)
+        elif args.loglevel == "info":
+            logger.setLevel(logging.INFO)
+        elif args.loglevel == "debug":
+            logger.setLevel(logging.DEBUG)
 
-    if processor_class is None:
+    if processor_class is None and args.processor in BUILTIN_PROCESSORS:
+        name, class_name = BUILTIN_PROCESSORS[args.processor]
+        module = importlib.import_module(name)
+        Processor = getattr(module, class_name)
+        logger.debug(f"Using processor from {module.__file__}")
+    elif processor_class is None:
         spec = importlib.util.spec_from_file_location("pepper", args.processor)
+        if spec is None:
+            sys.exit(f"No such processor shortcut or file: {args.processor}")
         proc_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(proc_module)
         try:
             Processor = proc_module.Processor
         except AttributeError:
-            print("Could not find class with name 'Processor' in "
-                  f"{args.processor}")
-            sys.exit(1)
+            sys.exit("Could not find class with name 'Processor' in "
+                     f"{args.processor}")
     else:
         Processor = processor_class
 
@@ -115,8 +162,11 @@ def run_processor(processor_class=None, description=None, mconly=False):
             exclude = config["dataset_for_systematics"].keys()
         else:
             exclude = None
+        if args.mc and args.nomc:
+            sys.exit("--mc and --nomc cannot both be present")
         datasets = config.get_datasets(
-            args.dataset, exclude, "mc" if mconly or args.mc else "any")
+            args.dataset, exclude, "mc" if mconly or args.mc else
+                                   "data" if args.nomc else "any")
     else:
         datasets = {}
         for customfile in args.file:
@@ -139,8 +189,7 @@ def run_processor(processor_class=None, description=None, mconly=False):
         datasets = {key: [val[0]] for key, val in datasets.items()}
 
     if len(datasets) == 0:
-        print("No datasets found")
-        sys.exit(1)
+        sys.exit("No datasets found")
 
     if args.eventdir is not None:
         # Check for non-empty subdirectories and remove them if wanted
@@ -199,6 +248,7 @@ def run_processor(processor_class=None, description=None, mconly=False):
         print("Spawning jobs. This can take a while")
         parsl_config = pepper.misc.get_parsl_config(
             args.condor,
+            retries=args.retries,
             condor_submit=condorsubmit,
             condor_init=condorinit)
         parsl.load(parsl_config)
@@ -221,10 +271,9 @@ def run_processor(processor_class=None, description=None, mconly=False):
     userdata = executor.state["userdata"]
     if "chunksize" in userdata:
         if userdata["chunksize"] != args.chunksize:
-            print(
+            sys.exit(
                 f"'{args.statedata}' got different chunksize: "
                 f"{userdata['chunksize']}. Delete it or change --chunksize")
-            sys.exit(1)
     userdata["chunksize"] = args.chunksize
 
     runner = coffea.processor.Runner(

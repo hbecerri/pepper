@@ -7,6 +7,7 @@ from collections import namedtuple
 from collections.abc import Mapping
 from functools import wraps, partial
 from concurrent.futures import ThreadPoolExecutor
+import warnings
 
 import numpy as np
 import awkward as ak
@@ -17,8 +18,14 @@ import parsl.addresses
 
 
 def normalize_trigger_path(path):
+    # Remove HLT and L1 prefixes
     if path.startswith("HLT_"):
         path = path[4:]
+    elif path.startswith("L1_"):
+        path = path[3:]
+    # Remove _v suffix
+    if path.endswith("_v"):
+        path = path[:-2]
     return path
 
 
@@ -75,6 +82,10 @@ def get_event_files(eventdir, eventext, datasets):
 
 
 def coffeahist2hist(hist):
+    warnings.warn(
+        "coffeahist2hist is deprecated, use coffea.hist.Hist.to_hist instead",
+        DeprecationWarning
+    )
     axes = []
     cat_pos = []
     for i, axis in enumerate(hist.axes()):
@@ -182,6 +193,10 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
                    PEPPER_CONDOR_ENV is also not set, no futher environment
                    will be set up.
     """
+    if num_jobs > 450:
+        raise ValueError(
+            "Due to technical limitations only up to 450 jobs are possible "
+            "right now")
     if hostname is None:
         hostname = parsl.addresses.address_by_hostname()
     if retries is None:
@@ -336,21 +351,33 @@ def chunked_calls(array_param, returns_multiple=False, chunksize=10000,
     return decorator
 
 
-def onedimeval(func, array, tonumpy=True):
-    flattened = array
-    counts = []
-    for i in range(flattened.ndim - 1):
-        if isinstance(flattened.type.type, ak.types.RegularType):
-            counts.append(flattened.type.type.size)
-        else:
-            counts.append(ak.num(flattened))
-        flattened = ak.flatten(flattened)
-    res = func(np.asarray(flattened) if tonumpy else flattened)
-    for count in reversed(counts):
+def onedimeval(func, *arrays, tonumpy=True, output_like=0):
+    """Evaluate the callable `func` on the flattened versions of arrays. These
+    are converted into numpy arrays if `tonumpy` is true. The return value is
+    the result of `func` converted into an awkward array, unflattened and with
+    the parameters and behavior of the array at position `output_like`.
+    """
+    counts_all_arrays = []
+    flattened_arrays = []
+    for array in arrays:
+        flattened = array
+        counts = []
+        for i in range(flattened.ndim - 1):
+            if isinstance(flattened.type.type, ak.types.RegularType):
+                counts.append(flattened.type.type.size)
+            else:
+                counts.append(ak.num(flattened))
+            flattened = ak.flatten(flattened)
+        if tonumpy:
+            flattened = np.asarray(flattened)
+        counts_all_arrays.append(counts)
+        flattened_arrays.append(flattened)
+    res = func(*flattened_arrays)
+    for count in reversed(counts_all_arrays[output_like]):
         res = ak.unflatten(res, count)
-    for name, val in ak.parameters(array).items():
+    for name, val in ak.parameters(arrays[output_like]).items():
         res = ak.with_parameter(res, name, val)
-    res.behavior = array.behavior
+    res.behavior = arrays[output_like].behavior
     return res
 
 

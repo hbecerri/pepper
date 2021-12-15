@@ -27,9 +27,9 @@ class Processor(pepper.ProcessorBasicPhysics):
         # Need to call parent init to make histograms and such ready
         super().__init__(config, eventdir)
 
-        self.lumimask = self.config["lumimask"]
-        self.trigger_paths = config["dataset_trigger_map"]
-        self.trigger_order = config["dataset_trigger_order"]
+        # It is not recommended to put anything as member variable into a
+        # a Processor because the Processor instance is sent as raw bytes
+        # between nodes when running on HTCondor.
 
     def process_selection(self, selector, dsname, is_mc, filler):
         # Implement the selection steps: add cuts, define objects and/or
@@ -46,7 +46,8 @@ class Processor(pepper.ProcessorBasicPhysics):
         # This also takes into account a trigger order to avoid triggering
         # the same event if it's in two different data datasets.
         pos_triggers, neg_triggers = pepper.misc.get_trigger_paths_for(
-            dsname, is_mc, self.trigger_paths, self.trigger_order)
+            dsname, is_mc, self.config["dataset_trigger_map"],
+            self.config["dataset_trigger_order"])
         selector.add_cut("Trigger", partial(
             self.passing_trigger, pos_triggers, neg_triggers))
 

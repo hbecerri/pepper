@@ -87,7 +87,7 @@ class Processor(pepper.Processor):
 
     @staticmethod
     def _save_hists(hist, datahist, datahistup, datahistdown, filename):
-        hist = pepper.misc.coffeahist2hist(hist)
+        hist = hist.to_hist()
 
         with uproot.recreate(filename) as f:
             for dataset in hist.axes["dataset"]:

@@ -367,6 +367,8 @@ class Selector:
                 column = ak.virtual(column, cache={}, length=len(data))
             else:
                 column = column(data)
+        if column is None:
+            raise ValueError("column content must be an array, not None")
         if categories is not None:
             column = self._mask(column, cats_mask)
         if mask is not None:

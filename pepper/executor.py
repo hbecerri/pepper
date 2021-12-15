@@ -81,7 +81,7 @@ class ResumableExecutor(abc.ABC, coffea.processor.executor.ExecutorBase):
                       "version": STATEFILE_VERSION, "userdata": {}}
 
     def __call__(self, items, function, accumulator):
-        items_done = self.state["items_done"]
+        items_done = set(self.state["items_done"])
         items = [item for item in items if item not in items_done]
 
         if accumulator is not None and self.state["accumulator"] is not None:

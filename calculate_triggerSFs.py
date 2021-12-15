@@ -8,7 +8,6 @@ import uproot
 import coffea
 import numpy as np
 
-import pepper
 from pepper.misc import HistCollection
 
 
@@ -63,9 +62,11 @@ with open(args.config) as f:
 
 with open(args.histsfile) as f:
     hists = HistCollection.from_json(f)
-hist = pepper.misc.coffeahist2hist(coffea.util.load(os.path.join(
-    hists._path,
-    hists[{"cut": args.cut, "hist": args.histname, "variation": None}])))
+hist = coffea.util.load(os.path.join(hists._path, hists[{
+    "cut": args.cut,
+    "hist": args.histname,
+    "variation": None
+}])).to_hist()
 
 sel = {"njet": sum, "nPV": sum, "MET": sum, "MET triggers": "yes"}
 data_sel = {"dataset": list(config["MET_trigger_datasets"].keys())}

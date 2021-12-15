@@ -72,12 +72,18 @@ class HistFillError(ValueError):
 
 class HistDefinition:
     def __init__(self, config):
-        self.ylabel = "Counts"
+        self._label = config.get("label", None)
         self.dataset_axis = coffea.hist.Cat("dataset", "Dataset name")
+        bins = []
         if "bins" in config:
-            bins = [coffea.hist.Bin(**kwargs) for kwargs in config["bins"]]
-        else:
-            bins = []
+            for bin_config in config["bins"]:
+                unit = bin_config.pop("unit", None)
+                if unit is not None:
+                    bin_config["label"] = \
+                        bin_config.get("label", "") + f" ({unit})"
+                bin = coffea.hist.Bin(**bin_config)
+                bin.unit = unit
+                bins.append(bin)
         if "cats" in config:
             cats = [coffea.hist.Cat(**kwargs) for kwargs in config["cats"]]
         else:
@@ -160,7 +166,7 @@ class HistDefinition:
         categories = {name: {cat: [cat] for cat in cats}
                       for name, cats in categories.items()}
         categories.update(self.cat_fills)
-        hist = coffea.hist.Hist(self.ylabel, self.dataset_axis, *axes)
+        hist = coffea.hist.Hist(self.label, self.dataset_axis, *axes)
 
         fill_vals = {name: DataPicker(method)(data)
                      for name, method in self.bin_fills.items()}
@@ -204,6 +210,30 @@ class HistDefinition:
                     hist.fill(dataset=dsname, **combination, **prepared)
 
         return hist
+
+    @property
+    def label(self):
+        # Make this a property so that if the axes change, label is updated
+        if self._label is not None:
+            return self._label
+        bins = [ax for ax in self.axes if isinstance(ax, coffea.hist.Bin)]
+        if len(bins) == 1 and bins[0]._uniform:
+            # This is a 1d, fixed-bin-width histogram.
+            edges = bins[0].edges()
+            width = (edges[-1] - edges[0]) / (bins[0].size - 3)
+            unit = bins[0].unit
+            if unit is None:
+                unit = "unit" if width == 1 else "units"
+            width = f"{width:.3g}"
+            if "e" in width:
+                width = width.replace("e", r"\times 10^{") + "}"
+            return f"Events / ${width}$ {unit}"
+        else:
+            return "Events / bin"
+
+    @label.setter
+    def label(self, value):
+        self._label = value
 
 
 class DataPicker:

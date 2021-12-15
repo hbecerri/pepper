@@ -5,10 +5,11 @@
         "bins": [
             {
                 "name": "pt",
-                "label": "Electron $p_{\\mathrm{T}}$ (GeV)",
+                "label": "Electron $p_{\\mathrm{T}}$",
                 "n_or_arr": 100,
                 "lo": 0,
-                "hi": 400
+                "hi": 400,
+                "unit": "GeV"
             }
         ],
         "fill": {
@@ -40,10 +41,11 @@
         "bins": [
             {
                 "name": "pt",
-                "label": "Muon $p_{\\mathrm{T}}$ (GeV)",
+                "label": "Muon $p_{\\mathrm{T}}$",
                 "n_or_arr": 100,
                 "lo": 0,
-                "hi": 400
+                "hi": 400,
+                "unit": "GeV"
             }
         ],
         "fill": {
