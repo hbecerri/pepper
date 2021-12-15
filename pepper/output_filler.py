@@ -144,10 +144,8 @@ class OutputFiller:
 
     @property
     def channels(self):
-        print("channels accessed")
         return self.cats["channels"]
 
     @channels.setter
     def channels(self, value):
-        print("channels set")
         self.cats["channels"] = value
