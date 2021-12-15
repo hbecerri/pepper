@@ -248,6 +248,7 @@ def run_processor(processor_class=None, description=None, mconly=False):
         print("Spawning jobs. This can take a while")
         parsl_config = pepper.misc.get_parsl_config(
             args.condor,
+            retries=args.retries,
             condor_submit=condorsubmit,
             condor_init=condorinit)
         parsl.load(parsl_config)
