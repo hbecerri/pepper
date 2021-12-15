@@ -185,6 +185,13 @@ class Selector:
                        ignored if a systematics dict is given with `accept`.
         no_callback -- A bool whether not to call the callbacks, which usually
                        fill histograms etc.
+        categories -- If not None, ignore events that are not part of any of
+                      the specified categorizations. This is done by specifying
+                      a dict of lists. A key gives the name of the
+                      categorization, while the list contains field names
+                      of `self.data`. These fields needs to be flat bool
+                      arrays. An event is considered to be part of a
+                      categorization if any of the fields are True.
         """
         def pad_cats(mask, arr):
             full_arr = np.full(self.num, 1, dtype=arr.dtype)
@@ -330,6 +337,13 @@ class Selector:
         lazy -- If True, column must be a callable and the column will be
                 inserted as a virtual array, making the callable only called
                 when the data array determines it has to.
+        categories -- If not None, ignore events that are not part of any of
+                      the specified categorizations. This is done by specifying
+                      a dict of lists. A key gives the name of the
+                      categorization, while the list contains field names
+                      of `self.data`. These fields needs to be flat bool
+                      arrays. An event is considered to be part of a
+                      categorization if any of the fields are True.
         """
 
         logger.info(
@@ -379,6 +393,13 @@ class Selector:
                     passing all cuts (including unapplied cuts).
         no_callback -- A bool whether not to call the callbacks, which usually
                        fill histograms etc.
+        categories -- If not None, ignore events that are not part of any of
+                      the specified categorizations. This is done by specifying
+                      a dict of lists. A key gives the name of the
+                      categorization, while the list contains field names
+                      of `self.data`. These fields needs to be flat bool
+                      arrays. An event is considered to be part of a
+                      categorization if any of the fields are True.
         """
         if callable(columns):
             if all_cuts and not self.applying_cuts:

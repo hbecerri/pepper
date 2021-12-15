@@ -384,7 +384,6 @@ class Processor(coffea.processor.ProcessorABC):
             # Save histograms with a hist.json describing the hist files
             jsonname = "hists.json"
             hists_forjson = {}
-            cutflow_all = output["cutflows"]
             cuts = self._get_cuts(output)
             for key, hist in hists.items():
                 if hist.values() == {}:

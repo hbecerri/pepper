@@ -1,5 +1,4 @@
 import logging
-from copy import copy
 import numpy as np
 import awkward as ak
 import coffea.hist
@@ -69,14 +68,16 @@ class OutputFiller:
                     masks.append(np.asarray(ak.fill_none(data[pos], False)))
                 mask = np.bitwise_and.reduce(masks, axis=0)
                 count = ak.sum(weight[mask])
-                args = {name: pos for name, pos in zip(cats.keys(), cat_position)}
+                args = {name: pos
+                        for name, pos in zip(cats.keys(), cat_position)}
                 hist.fill(**args, weight=count)
         else:
             hist.fill(weight=ak.sum(weight))
         count = hist.project().values()[()]
         num_rows = len(data)
         num_masked = ak.sum(ak.is_none(data))
-        logger.info(f"Filling cutflow. Current event count: {count} ({num_rows} rows, {num_masked} masked)")
+        logger.info(f"Filling cutflow. Current event count: {count} "
+                    f"({num_rows} rows, {num_masked} masked)")
         accumulator[self.dsname][cut] = hist
 
     def fill_hists(self, data, systematics, cut, done_steps):
