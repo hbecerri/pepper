@@ -17,5 +17,6 @@ Easy to use and highly configurable.
         "hdf5plugin",
         "hist",
         "hjson",
+        "correctionlib"
     ],
 )
