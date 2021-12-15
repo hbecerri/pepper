@@ -93,7 +93,7 @@ class Processor(pepper.ProcessorBasicPhysics):
         # Wait with hists filling after channel masks are available
         selector.add_cut("At least 2 leps", partial(self.lepton_pair, is_mc),
                          no_callback=True)
-        filler.categories["channel"].update({"is_ee", "is_em", "is_mm"})
+        filler.set_cat("channels", {"is_ee", "is_em", "is_mm"})
         selector.set_multiple_columns(self.channel_masks)
         selector.set_column("mll", self.mass_lepton_pair)
         selector.set_column("dilep_pt", self.dilep_pt, lazy=True)
@@ -109,13 +109,13 @@ class Processor(pepper.ProcessorBasicPhysics):
         selector.add_cut("Req lep pT", self.lep_pt_requirement)
         selector.add_cut("m_ll", self.good_mass_lepton_pair)
         selector.add_cut("Z window", self.z_window,
-                         categories={"channel": ["is_ee", "is_mm"]})
+                         categories={"channels": ["is_ee", "is_mm"]})
 
         if (is_mc and self.config["compute_systematics"]
                 and dsname not in self.config["dataset_for_systematics"]):
             if hasattr(filler, "sys_overwrite"):
                 assert filler.sys_overwrite is None
-            channels = filler.channels
+            cats = filler.cats
             for variarg in self.get_jetmet_variation_args():
                 selector_copy = copy(selector)
                 filler.sys_overwrite = variarg.name
@@ -126,7 +126,7 @@ class Processor(pepper.ProcessorBasicPhysics):
                                  f" {variarg.name}")
                     self.save_per_event_info(
                         dsname + "_" + variarg.name, selector_copy, False)
-                filler.channels = channels
+                filler.cats = cats
             filler.sys_overwrite = None
 
         # Do normal, no-variation run
@@ -163,7 +163,7 @@ class Processor(pepper.ProcessorBasicPhysics):
             self.scale_systematics_for_btag(selector, variation, dsname)
         selector.add_cut("Has btag(s)", partial(self.btag_cut, is_mc))
         selector.add_cut("Req MET", self.met_requirement,
-                         categories={"channel": ["is_ee", "is_mm"]})
+                         categories={"channels": ["is_ee", "is_mm"]})
 
         if "reco_algorithm" in self.config:
             reco_alg = self.config["reco_algorithm"]

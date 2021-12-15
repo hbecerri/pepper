@@ -148,10 +148,11 @@ class Selector:
             cb(data=data, systematics=systematics, cut=self.cutnames[-1],
                done_steps=self.done_steps)
 
-    def get_category_mask(self, categories):
-        mask = np.full(len(self.data), True)
+    def _get_category_mask(self, categories):
+        num = self.num
+        mask = np.full(num, True)
         for cat, regs in categories.items():
-            cat_mask = np.full(len(self.data), False)
+            cat_mask = np.full(num, False)
             for reg in regs:
                 cat_mask = cat_mask | self.data[reg]
             mask = mask & cat_mask
@@ -186,14 +187,14 @@ class Selector:
                        fill histograms etc.
         """
         def pad_cats(mask, arr):
-            full_arr = np.full(len(self.data), 1, dtype=arr.dtype)
+            full_arr = np.full(self.num, 1, dtype=arr.dtype)
             full_arr[mask] = arr
             return full_arr
 
         logger.info(f"Adding cut '{name}'"
                     + (" (no callback)" if no_callback else ""))
         if categories is not None:
-            cats_mask = self.get_category_mask(categories)
+            cats_mask = self._get_category_mask(categories)
             if callable(accept):
                 accept = accept(self.data[cats_mask])
         elif callable(accept):
@@ -342,7 +343,7 @@ class Selector:
             mask = None
 
         if categories is not None:
-            cats_mask = self.get_category_mask(categories)
+            cats_mask = self._get_category_mask(categories)
             data = data[cats_mask]
 
         if callable(column):
@@ -386,7 +387,7 @@ class Selector:
             else:
                 data = self.data
             if categories is not None:
-                cats_mask = self.get_category_mask(categories)
+                cats_mask = self._get_category_mask(categories)
                 data = data[cats_mask]
             columns = columns(data)
         if isinstance(columns, ak.Array):

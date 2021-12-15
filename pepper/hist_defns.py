@@ -1,6 +1,7 @@
 import coffea.hist
 import awkward as ak
 import numpy as np
+from collections import defaultdict
 
 
 def not_arr(arr):
@@ -154,12 +155,11 @@ class HistDefinition:
 
     def __call__(self, data, categories, dsname, is_mc, weight):
         axes = self.axes.copy()
-        cat_present = {}
-        for cat, regs in categories.items():
-            regs = {reg for reg in regs if reg != "all"}
-            if len(regs) > 0:
-                cat_present[cat] = {reg: data[reg] for reg in regs}
-                axes.append(coffea.hist.Cat(cat, cat))
+        for cat in categories.keys():
+            axes.append(coffea.hist.Cat(cat, cat))
+        categories = {name: {cat: [cat] for cat in cats}
+                      for name, cats in categories.items()}
+        categories.update(self.cat_fills)
         hist = coffea.hist.Hist(self.ylabel, self.dataset_axis, *axes)
 
         fill_vals = {name: DataPicker(method)(data)
@@ -171,12 +171,12 @@ class HistDefinition:
         if any(val is None for val in fill_vals.values()):
             none_keys = [k for k, v in fill_vals.items() if v is None]
             raise HistFillError(f"No fill for axes: {', '.join(none_keys)}")
-        cat_masks = {name: {cat: DataPicker(method)(data)
-                            for cat, method in val.items()}
-                     for name, val in self.cat_fills.items()}
 
-        cat_present.update(cat_masks)
-        for name, val in cat_masks.items():
+        cat_present = defaultdict(dict)
+        for name, val in categories.items():
+            for cat, method in val.items():
+                cat_present[name][cat] = DataPicker(method)(data)
+        for name, val in cat_present.items():
             if any(mask is None for mask in val.values()):
                 cat_present[name] = {"All": np.full(len(data), True)}
         if len(cat_present) == 0:

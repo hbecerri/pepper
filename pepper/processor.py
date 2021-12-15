@@ -82,19 +82,6 @@ class Processor(coffea.processor.ProcessorABC):
                 f.write(str(rng_seed))
             return rng_seed
 
-    @property
-    def accumulator(self):
-        if "categories" in self.config:
-            n_cats = len(self.config["categories"])
-        else:
-            n_cats = 0
-        self._accumulator = coffea.processor.dict_accumulator({
-            "hists": coffea.processor.dict_accumulator(),
-            "cutflows": pepper.misc.get_nested_defaultdict_accumulator(
-                n_cats + 2, int)
-        })
-        return self._accumulator
-
     def preprocess(self, datasets):
         return datasets
 
@@ -284,7 +271,6 @@ class Processor(coffea.processor.ProcessorABC):
         return filler.output
 
     def setup_outputfiller(self, dsname, is_mc):
-        output = self.accumulator.identity()
         sys_enabled = self.config["compute_systematics"]
 
         if dsname in self.config["dataset_for_systematics"]:
@@ -302,17 +288,12 @@ class Processor(coffea.processor.ProcessorABC):
             cuts_to_histogram = self.config["cuts_to_histogram"]
         else:
             cuts_to_histogram = None
-        if "categories" in self.config:
-            categories = self.config["categories"]
-        else:
-            categories = None
 
         hists = self._get_hists_from_config(
             self.config, "hists", "hists_to_do")
         filler = OutputFiller(
-            output, hists, is_mc, dsname, dsname_in_hist, sys_enabled,
-            sys_overwrite=sys_overwrite, categories=categories,
-            copy_nominal=self._get_copy_nominal(),
+            hists, is_mc, dsname, dsname_in_hist, sys_enabled,
+            sys_overwrite=sys_overwrite, copy_nominal=self._get_copy_nominal(),
             cuts_to_histogram=cuts_to_histogram)
 
         return filler
@@ -341,10 +322,52 @@ class Processor(coffea.processor.ProcessorABC):
                   structured if needed
         """
 
+    @staticmethod
+    def _get_cuts(output):
+        cutflow_all = output["cutflows"]
+        cut_lists = [list(cutflow.keys()) for cutflow
+                     in cutflow_all.values()]
+        cuts_precursors = defaultdict(set)
+        for cut_list in cut_lists:
+            for i, cut in enumerate(cut_list):
+                cuts_precursors[cut].update(set(cut_list[:i]))
+        cuts = []
+        while len(cuts_precursors) > 0:
+            for cut, precursors in cuts_precursors.items():
+                if len(precursors) == 0:
+                    cuts.append(cut)
+                    for p in cuts_precursors.values():
+                        p.discard(cut)
+                    cuts_precursors.pop(cut)
+                    break
+            else:
+                raise ValueError("No well-defined ordering of cuts "
+                                 "for all datasets found")
+        return cuts
+
+    @staticmethod
+    def _prepare_cutflows(output):
+        cutflows = output["cutflows"]
+        output = {}
+        for dataset, cf1 in cutflows.items():
+            output[dataset] = {"all": defaultdict(float)}
+            for cut, cf2 in cf1.items():
+                cf = cf2.values()
+                for cat_position, value in cf.items():
+                    output_for_cat = output[dataset]
+                    for cat_coordinate in cat_position:
+                        if cat_coordinate not in output_for_cat:
+                            output_for_cat[cat_coordinate] = {}
+                        output_for_cat = output_for_cat[cat_coordinate]
+                    if len(cat_position) > 0:
+                        output_for_cat[cut] = float(value)
+                    output[dataset]["all"][cut] += value
+        return output
+
     def save_output(self, output, dest):
         # Save cutflows
         with open(os.path.join(dest, "cutflows.json"), "w") as f:
-            json.dump(output["cutflows"], f, indent=4)
+            json.dump(self._prepare_cutflows(output), f, indent=4)
 
         if "histogram_format" in self.config:
             hform = self.config["histogram_format"].lower()
@@ -362,27 +385,7 @@ class Processor(coffea.processor.ProcessorABC):
             jsonname = "hists.json"
             hists_forjson = {}
             cutflow_all = output["cutflows"]
-            if "categories" in self.config:
-                for i in range(len(self.config["categories"])):
-                    cutflow_all = cutflow_all["all"]
-            cut_lists = [list(cutflow.keys()) for cutflow
-                         in cutflow_all.values()]
-            cuts_precursors = defaultdict(set)
-            for cut_list in cut_lists:
-                for i, cut in enumerate(cut_list):
-                    cuts_precursors[cut].update(set(cut_list[:i]))
-            cuts = []
-            while len(cuts_precursors) > 0:
-                for cut, precursors in cuts_precursors.items():
-                    if len(precursors) == 0:
-                        cuts.append(cut)
-                        for p in cuts_precursors.values():
-                            p.discard(cut)
-                        cuts_precursors.pop(cut)
-                        break
-                else:
-                    raise ValueError("No well-defined ordering of cuts "
-                                     "for all datasets found")
+            cuts = self._get_cuts(output)
             for key, hist in hists.items():
                 if hist.values() == {}:
                     continue
