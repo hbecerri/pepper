@@ -72,7 +72,7 @@ class TriggerSFProducer(pepper.ProcessorTTbarLL):
         selector.set_multiple_columns(self.channel_masks)
         selector.set_column("dilep triggers", partial(
             self.dilep_triggers, dsname, era))
-        selector.set_column("mll", self.mll)
+        selector.set_column("mll", self.mass_lepton_pair)
         selector.set_column("dilep_pt", self.dilep_pt, lazy=True)
 
         selector.add_cut("Opposite sign", self.opposite_sign_lepton_pair)
@@ -81,17 +81,20 @@ class TriggerSFProducer(pepper.ProcessorTTbarLL):
         # Set jets and MET now so the can be used in sys calculations if
         # Mll cut used as WP
         variation = self.get_jetmet_nominal_arg()
-        if is_mc:
-            selector.set_multiple_columns(partial(
-                self.compute_jet_factors, variation.junc, variation.jer,
-                selector.rng))
+        reapply_jec = ("reapply_jec" in self.config
+                       and self.config["reapply_jec"])
+        selector.set_multiple_columns(partial(
+            self.compute_jet_factors, is_mc, reapply_jec, variation.junc,
+            variation.jer, selector.rng))
         selector.set_column("OrigJet", selector.data["Jet"])
         selector.set_column("Jet", self.build_jet_column)
+        smear_met = "smear_met" in self.config and self.config["smear_met"]
         selector.set_column(
-            "MET", partial(self.build_met_column, variation.junc, is_mc,
-                           dsname, era, variation=variation.met))
+            "MET", partial(self.build_met_column, is_mc, variation.junc,
+                           variation.jer if smear_met else None, selector.rng,
+                           era, variation=variation.met))
 
-        selector.add_cut("m_ll", self.good_mll)
+        selector.add_cut("m_ll", self.good_mass_lepton_pair)
         selector.add_cut("Z window", self.z_window)
 
         selector.add_cut("Has jet(s)", self.has_jets)
@@ -104,7 +107,8 @@ class TriggerSFProducer(pepper.ProcessorTTbarLL):
 
     def dilep_triggers(self, dsname, era, data):
         pos_triggers, neg_triggers = pepper.misc.get_trigger_paths_for(
-            dsname, True, self.trigger_paths, self.trigger_order, era=era)
+            dsname, True, self.config["dataset_trigger_map"],
+            self.config["dataset_trigger_order"], era=era)
         trig = self.passing_trigger(pos_triggers, neg_triggers, data)
         chmatch = self.channel_trigger_matching(era, data)
         return (trig & chmatch)
