@@ -72,10 +72,11 @@ class OutputFiller:
         else:
             hist.fill(weight=ak.sum(weight))
         count = hist.project().values()[()]
-        num_rows = len(data)
-        num_masked = ak.sum(ak.is_none(data))
-        logger.info(f"Filling cutflow. Current event count: {count} "
-                    f"({num_rows} rows, {num_masked} masked)")
+        if logger.getEffectiveLevel() <= logging.INFO:
+            num_rows = len(data)
+            num_masked = ak.sum(ak.is_none(data))
+            logger.info(f"Filling cutflow. Current event count: {count} "
+                        f"({num_rows} rows, {num_masked} masked)")
         accumulator[self.dsname][cut] = hist
 
     def fill_hists(self, data, systematics, cut, done_steps, cats):
