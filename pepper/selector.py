@@ -85,6 +85,7 @@ class Selector:
         self.done_steps = set()
 
         self.rng = np.random.default_rng(rng_seed)
+        self.cats = {}
 
         self._applying_cuts = True
         self.add_cut("Before cuts", np.full(self.num, True))
@@ -141,17 +142,22 @@ class Selector:
         else:
             return ak.sum(self.unapplied_product != 0)
 
+    def set_cat(self, name, categories):
+        self.cats[name] = categories
+
     def _invoke_callbacks(self):
         data = self.final
         systematics = self.final_systematics
         for cb in self.on_update:
             cb(data=data, systematics=systematics, cut=self.cutnames[-1],
-               done_steps=self.done_steps)
+               done_steps=self.done_steps, cats=self.cats)
 
     def _get_category_mask(self, categories):
         num = self.num
         mask = np.full(num, True)
         for cat, regs in categories.items():
+            if cat not in self.cats:
+                raise ValueError(f"Unknown categorization {cat}")
             cat_mask = np.full(num, False)
             for reg in regs:
                 cat_mask = cat_mask | self.data[reg]
@@ -439,6 +445,7 @@ class Selector:
         s.unapplied_cuts = copy(self.unapplied_cuts)
         s.cut_systematic_map = copy(self.cut_systematic_map)
         s.done_steps = copy(self.done_steps)
+        s.cats = {k: v.copy() for k, v in self.cats.items()}
         return s
 
     def copy(self):

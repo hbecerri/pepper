@@ -159,13 +159,13 @@ class HistDefinition:
             prepared[key] = np.asarray(ak.flatten(data[mask], axis=None))
         return prepared
 
-    def __call__(self, data, categories, dsname, is_mc, weight):
+    def __call__(self, data, categorizations, dsname, is_mc, weight):
         axes = self.axes.copy()
-        for cat in categories.keys():
+        for cat in categorizations.keys():
             axes.append(coffea.hist.Cat(cat, cat))
-        categories = {name: {cat: [cat] for cat in cats}
-                      for name, cats in categories.items()}
-        categories.update(self.cat_fills)
+        categorizations = {name: {cat: [cat] for cat in cats}
+                           for name, cats in categorizations.items()}
+        categorizations.update(self.cat_fills)
         hist = coffea.hist.Hist(self.label, self.dataset_axis, *axes)
 
         fill_vals = {name: DataPicker(method)(data)
@@ -179,7 +179,7 @@ class HistDefinition:
             raise HistFillError(f"No fill for axes: {', '.join(none_keys)}")
 
         cat_present = defaultdict(dict)
-        for name, val in categories.items():
+        for name, val in categorizations.items():
             for cat, method in val.items():
                 cat_present[name][cat] = DataPicker(method)(data)
         for name, val in cat_present.items():

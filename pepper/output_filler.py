@@ -21,9 +21,9 @@ class DummyOutputFiller:
 
 
 class OutputFiller:
-    def __init__(self, hist_dict, is_mc, dsname, dsname_in_hist,
-                 sys_enabled, sys_overwrite=None, cats=None,
-                 copy_nominal=None, cuts_to_histogram=None):
+    def __init__(self, hist_dict, is_mc, dsname, dsname_in_hist, sys_enabled,
+                 sys_overwrite=None, copy_nominal=None,
+                 cuts_to_histogram=None):
         self.output = {
             "hists": {},
             # Cutflows should keep order of cuts. Due to how Coffea accumulates
@@ -40,13 +40,12 @@ class OutputFiller:
         self.sys_enabled = sys_enabled
         self.sys_overwrite = sys_overwrite
         self.cuts_to_histogram = cuts_to_histogram
-        self.cats = {} if cats is None else cats
         if copy_nominal is None:
             self.copy_nominal = {}
         else:
             self.copy_nominal = copy_nominal
 
-    def fill_cutflows(self, data, systematics, cut, done_steps):
+    def fill_cutflows(self, data, systematics, cut, done_steps, cats):
         if self.sys_overwrite is not None:
             return
         accumulator = self.output["cutflows"]
@@ -58,7 +57,6 @@ class OutputFiller:
             weight = ak.Array(np.ones(len(data)))
             if hasattr(data.layout, "bytemask"):
                 weight = weight.mask[~ak.is_none(data)]
-        cats = self.cats
         axes = [coffea.hist.Cat(cat, cat) for cat in cats.keys()]
         hist = coffea.hist.Hist("Counts", *axes)
         if len(cats) > 0:
@@ -80,12 +78,11 @@ class OutputFiller:
                     f"({num_rows} rows, {num_masked} masked)")
         accumulator[self.dsname][cut] = hist
 
-    def fill_hists(self, data, systematics, cut, done_steps):
+    def fill_hists(self, data, systematics, cut, done_steps, cats):
         if self.cuts_to_histogram is not None:
             if cut not in self.cuts_to_histogram:
                 return
         accumulator = self.output["hists"]
-        categories = self.cats
         do_systematics = self.sys_enabled and systematics is not None
         if systematics is not None:
             weight = systematics["weight"]
@@ -103,7 +100,7 @@ class OutputFiller:
                         continue
                     try:
                         sys_hist = fill_func(
-                            data=data, categories=categories,
+                            data=data, categorizations=cats,
                             dsname=self.dsname_in_hist, is_mc=self.is_mc,
                             weight=weight)
                     except pepper.hist_defns.HistFillError:
@@ -114,7 +111,7 @@ class OutputFiller:
                     continue
                 try:
                     accumulator[(cut, histname)] = fill_func(
-                        data=data, categories=categories,
+                        data=data, categorizations=cats,
                         dsname=self.dsname_in_hist, is_mc=self.is_mc,
                         weight=weight)
                 except pepper.hist_defns.HistFillError:
@@ -126,7 +123,7 @@ class OutputFiller:
                             continue
                         sysweight = weight * systematics[syscol]
                         hist = fill_func(
-                            data=data, categories=categories,
+                            data=data, categorizations=cats,
                             dsname=self.dsname_in_hist, is_mc=self.is_mc,
                             weight=sysweight)
                         accumulator[(cut, histname, syscol)] = hist
@@ -139,13 +136,7 @@ class OutputFiller:
     def get_callbacks(self):
         return [self.fill_cutflows, self.fill_hists]
 
-    def set_cat(self, name, categories):
-        self.cats[name] = categories
-
     @property
     def channels(self):
-        return self.cats["channels"]
-
-    @channels.setter
-    def channels(self, value):
-        self.cats["channels"] = value
+        raise AttributeError("'channels' is not used anymore. Use "
+                             "Selector.set_cat('channels', [...])")

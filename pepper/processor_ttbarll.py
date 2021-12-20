@@ -93,7 +93,7 @@ class Processor(pepper.ProcessorBasicPhysics):
         # Wait with hists filling after channel masks are available
         selector.add_cut("At least 2 leps", partial(self.lepton_pair, is_mc),
                          no_callback=True)
-        filler.set_cat("channels", {"is_ee", "is_em", "is_mm"})
+        selector.set_cat("channels", {"is_ee", "is_em", "is_mm"})
         selector.set_multiple_columns(self.channel_masks)
         selector.set_column("mll", self.mass_lepton_pair)
         selector.set_column("dilep_pt", self.dilep_pt, lazy=True)
@@ -115,7 +115,6 @@ class Processor(pepper.ProcessorBasicPhysics):
                 and dsname not in self.config["dataset_for_systematics"]):
             if hasattr(filler, "sys_overwrite"):
                 assert filler.sys_overwrite is None
-            cats = filler.cats
             for variarg in self.get_jetmet_variation_args():
                 selector_copy = copy(selector)
                 filler.sys_overwrite = variarg.name
@@ -126,7 +125,6 @@ class Processor(pepper.ProcessorBasicPhysics):
                                  f" {variarg.name}")
                     self.save_per_event_info(
                         dsname + "_" + variarg.name, selector_copy, False)
-                filler.cats = cats
             filler.sys_overwrite = None
 
         # Do normal, no-variation run
