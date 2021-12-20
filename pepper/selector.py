@@ -85,6 +85,7 @@ class Selector:
         self.done_steps = set()
 
         self.rng = np.random.default_rng(rng_seed)
+        self.cats = {}
 
         self._applying_cuts = True
         self.add_cut("Before cuts", np.full(self.num, True))
@@ -141,14 +142,30 @@ class Selector:
         else:
             return ak.sum(self.unapplied_product != 0)
 
+    def set_cat(self, name, categories):
+        self.cats[name] = categories
+
     def _invoke_callbacks(self):
         data = self.final
         systematics = self.final_systematics
         for cb in self.on_update:
             cb(data=data, systematics=systematics, cut=self.cutnames[-1],
-               done_steps=self.done_steps)
+               done_steps=self.done_steps, cats=self.cats)
 
-    def add_cut(self, name, accept, systematics=None, no_callback=False):
+    def _get_category_mask(self, categories):
+        num = self.num
+        mask = np.full(num, True)
+        for cat, regs in categories.items():
+            if cat not in self.cats:
+                raise ValueError(f"Unknown categorization {cat}")
+            cat_mask = np.full(num, False)
+            for reg in regs:
+                cat_mask = cat_mask | self.data[reg]
+            mask = mask & cat_mask
+        return mask
+
+    def add_cut(self, name, accept, systematics=None, no_callback=False,
+                categories=None):
         """Adds a cut and applies it if `self.applying_cuts` is True, otherwise
         the cut will be stored in `self.unapplied_cuts`. Applying in this
         context means that rows of `self.data` are discarded accordingly.
@@ -174,10 +191,26 @@ class Selector:
                        ignored if a systematics dict is given with `accept`.
         no_callback -- A bool whether not to call the callbacks, which usually
                        fill histograms etc.
+        categories -- If not None, ignore events that are not part of any of
+                      the specified categorizations. This is done by specifying
+                      a dict of lists. A key gives the name of the
+                      categorization, while the list contains field names
+                      of `self.data`. These fields needs to be flat bool
+                      arrays. An event is considered to be part of a
+                      categorization if any of the fields are True.
         """
+        def pad_cats(mask, arr):
+            full_arr = np.full(self.num, 1, dtype=arr.dtype)
+            full_arr[mask] = arr
+            return full_arr
+
         logger.info(f"Adding cut '{name}'"
                     + (" (no callback)" if no_callback else ""))
-        if callable(accept):
+        if categories is not None:
+            cats_mask = self._get_category_mask(categories)
+            if callable(accept):
+                accept = accept(self.data[cats_mask])
+        elif callable(accept):
             accept = accept(self.data)
         if isinstance(accept, tuple):
             accept, systematics = accept
@@ -186,6 +219,8 @@ class Selector:
         self.cutnames.append(name)
         if not isinstance(accept, np.ndarray):
             accept = np.array(accept)
+        if categories is not None:
+            accept = pad_cats(cats_mask, accept)
         if accept.dtype == bool:
             accept_weighted = accept.astype(float)
         else:
@@ -205,6 +240,8 @@ class Selector:
                 values = []
                 n = self.num
                 for value_old in values_old:
+                    if categories is not None:
+                        value_old = pad_cats(cats_mask, value_old)
                     if len(value_old) != n:
                         if self.applying_cuts:
                             value = value_old[accept]
@@ -292,7 +329,7 @@ class Selector:
             return ak.pad_none(column, len(mask), axis=0)
 
     def set_column(self, column_name, column, all_cuts=False,
-                   no_callback=False, lazy=False):
+                   no_callback=False, lazy=False, categories=None):
         """Sets a column of `self.data`.
 
         Arguments:
@@ -306,6 +343,13 @@ class Selector:
         lazy -- If True, column must be a callable and the column will be
                 inserted as a virtual array, making the callable only called
                 when the data array determines it has to.
+        categories -- If not None, ignore events that are not part of any of
+                      the specified categorizations. This is done by specifying
+                      a dict of lists. A key gives the name of the
+                      categorization, while the list contains field names
+                      of `self.data`. These fields needs to be flat bool
+                      arrays. An event is considered to be part of a
+                      categorization if any of the fields are True.
         """
 
         logger.info(
@@ -317,6 +361,11 @@ class Selector:
         else:
             data = self.data
             mask = None
+
+        if categories is not None:
+            cats_mask = self._get_category_mask(categories)
+            data = data[cats_mask]
+
         if callable(column):
             if lazy:
                 column = pepper.misc.VirtualArrayCopier(data).wrap_with_copy(
@@ -326,6 +375,8 @@ class Selector:
                 column = column(data)
         if column is None:
             raise ValueError("column content must be an array, not None")
+        if categories is not None:
+            column = self._mask(column, cats_mask)
         if mask is not None:
             column = self._mask(column, mask)
         if lazy:
@@ -338,7 +389,8 @@ class Selector:
         if not no_callback:
             self._invoke_callbacks()
 
-    def set_multiple_columns(self, columns, all_cuts=False, no_callback=False):
+    def set_multiple_columns(self, columns, all_cuts=False, no_callback=False,
+                             categories=None):
         """Sets multiple columns of `self.data` at once.
 
         Arguments:
@@ -349,24 +401,29 @@ class Selector:
                     passing all cuts (including unapplied cuts).
         no_callback -- A bool whether not to call the callbacks, which usually
                        fill histograms etc.
+        categories -- If not None, ignore events that are not part of any of
+                      the specified categorizations. This is done by specifying
+                      a dict of lists. A key gives the name of the
+                      categorization, while the list contains field names
+                      of `self.data`. These fields needs to be flat bool
+                      arrays. An event is considered to be part of a
+                      categorization if any of the fields are True.
         """
         if callable(columns):
             if all_cuts and not self.applying_cuts:
                 data = self.final
-                mask = ~ak.is_none(data)
                 data = ak.flatten(self.final, axis=0)
             else:
                 data = self.data
-                mask = None
+            if categories is not None:
+                cats_mask = self._get_category_mask(categories)
+                data = data[cats_mask]
             columns = columns(data)
-        else:
-            mask = None
         if isinstance(columns, ak.Array):
             columns = {k: columns[k] for k in ak.fields(columns)}
         for name, column in columns.items():
-            if mask is not None:
-                column = self._mask(column, mask)
-            self.set_column(name, column, no_callback=True)
+            self.set_column(name, column, all_cuts, no_callback=True,
+                            categories=categories)
         if not no_callback:
             self._invoke_callbacks()
 
@@ -388,6 +445,7 @@ class Selector:
         s.unapplied_cuts = copy(self.unapplied_cuts)
         s.cut_systematic_map = copy(self.cut_systematic_map)
         s.done_steps = copy(self.done_steps)
+        s.cats = {k: v.copy() for k, v in self.cats.items()}
         return s
 
     def copy(self):

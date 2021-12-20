@@ -1,8 +1,10 @@
-from functools import partial
+import logging
 import numpy as np
 import awkward as ak
-import coffea
-import logging
+import coffea.hist
+from coffea.processor import dict_accumulator
+import itertools
+from collections import defaultdict
 
 import pepper
 
@@ -19,10 +21,15 @@ class DummyOutputFiller:
 
 
 class OutputFiller:
-    def __init__(self, output, hist_dict, is_mc, dsname, dsname_in_hist,
-                 sys_enabled, sys_overwrite=None, channels=None,
-                 copy_nominal=None, cuts_to_histogram=None):
-        self.output = output
+    def __init__(self, hist_dict, is_mc, dsname, dsname_in_hist, sys_enabled,
+                 sys_overwrite=None, copy_nominal=None,
+                 cuts_to_histogram=None):
+        self.output = {
+            "hists": {},
+            # Cutflows should keep order of cuts. Due to how Coffea accumulates
+            # currently for this a dict_accumulator is needed.
+            "cutflows": defaultdict(dict_accumulator)
+        }
         if hist_dict is None:
             self.hist_dict = {}
         else:
@@ -33,47 +40,54 @@ class OutputFiller:
         self.sys_enabled = sys_enabled
         self.sys_overwrite = sys_overwrite
         self.cuts_to_histogram = cuts_to_histogram
-        if channels is None:
-            self.channels = tuple()
-        else:
-            self.channels = channels
         if copy_nominal is None:
             self.copy_nominal = {}
         else:
             self.copy_nominal = copy_nominal
 
-    def fill_cutflows(self, data, systematics, cut, done_steps):
+    def fill_cutflows(self, data, systematics, cut, done_steps, cats):
+        if self.sys_overwrite is not None:
+            return
         accumulator = self.output["cutflows"]
+        if cut in accumulator[self.dsname]:
+            return
         if systematics is not None:
             weight = systematics["weight"]
         else:
             weight = ak.Array(np.ones(len(data)))
             if hasattr(data.layout, "bytemask"):
                 weight = weight.mask[~ak.is_none(data)]
-        if "all" not in accumulator:
-            accumulator["all"] = coffea.processor.defaultdict_accumulator(
-                partial(coffea.processor.defaultdict_accumulator, int))
-        if cut not in accumulator["all"][self.dsname]:
-            count = ak.sum(weight)
-            accumulator["all"][self.dsname][cut] = count
-            rows = len(weight)
-            masked = ak.sum(ak.is_none(weight))
-            logger.info(
-                "Filling cutflow. Current event count: {} ({} rows, {} "
-                "masked)".format(count, rows, masked))
-        for ch in self.channels:
-            if ch not in accumulator:
-                accumulator[ch] = coffea.processor.defaultdict_accumulator(
-                    partial(coffea.processor.defaultdict_accumulator, int))
-            if cut not in accumulator[ch][self.dsname]:
-                accumulator[ch][self.dsname][cut] = ak.sum(weight[data[ch]])
+        data_fields = ak.fields(data)
+        # Skip cats that are missing in data
+        cats = {k: v for k, v in cats.items()
+                if all(field in data_fields for field in v)}
+        axes = [coffea.hist.Cat(cat, cat) for cat in cats.keys()]
+        hist = coffea.hist.Hist("Counts", *axes)
+        if len(cats) > 0:
+            for cat_position in itertools.product(*list(cats.values())):
+                masks = []
+                for pos in cat_position:
+                    masks.append(np.asarray(ak.fill_none(data[pos], False)))
+                mask = np.bitwise_and.reduce(masks, axis=0)
+                count = ak.sum(weight[mask])
+                args = {name: pos
+                        for name, pos in zip(cats.keys(), cat_position)}
+                hist.fill(**args, weight=count)
+        else:
+            hist.fill(weight=ak.sum(weight))
+        count = hist.project().values()[()]
+        if logger.getEffectiveLevel() <= logging.INFO:
+            num_rows = len(data)
+            num_masked = ak.sum(ak.is_none(data))
+            logger.info(f"Filling cutflow. Current event count: {count} "
+                        f"({num_rows} rows, {num_masked} masked)")
+        accumulator[self.dsname][cut] = hist
 
-    def fill_hists(self, data, systematics, cut, done_steps):
+    def fill_hists(self, data, systematics, cut, done_steps, cats):
         if self.cuts_to_histogram is not None:
             if cut not in self.cuts_to_histogram:
                 return
         accumulator = self.output["hists"]
-        channels = self.channels
         do_systematics = self.sys_enabled and systematics is not None
         if systematics is not None:
             weight = systematics["weight"]
@@ -91,7 +105,7 @@ class OutputFiller:
                         continue
                     try:
                         sys_hist = fill_func(
-                            data=data, channels=channels,
+                            data=data, categorizations=cats,
                             dsname=self.dsname_in_hist, is_mc=self.is_mc,
                             weight=weight)
                     except pepper.hist_defns.HistFillError:
@@ -102,7 +116,7 @@ class OutputFiller:
                     continue
                 try:
                     accumulator[(cut, histname)] = fill_func(
-                        data=data, channels=channels,
+                        data=data, categorizations=cats,
                         dsname=self.dsname_in_hist, is_mc=self.is_mc,
                         weight=weight)
                 except pepper.hist_defns.HistFillError:
@@ -114,7 +128,7 @@ class OutputFiller:
                             continue
                         sysweight = weight * systematics[syscol]
                         hist = fill_func(
-                            data=data, channels=channels,
+                            data=data, categorizations=cats,
                             dsname=self.dsname_in_hist, is_mc=self.is_mc,
                             weight=sysweight)
                         accumulator[(cut, histname, syscol)] = hist
@@ -126,3 +140,8 @@ class OutputFiller:
 
     def get_callbacks(self):
         return [self.fill_cutflows, self.fill_hists]
+
+    @property
+    def channels(self):
+        raise AttributeError("'channels' is not used anymore. Use "
+                             "Selector.set_cat('channels', [...])")

@@ -1,6 +1,7 @@
 import coffea.hist
 import awkward as ak
 import numpy as np
+from collections import defaultdict
 
 
 def not_arr(arr):
@@ -73,7 +74,6 @@ class HistDefinition:
     def __init__(self, config):
         self._label = config.get("label", None)
         self.dataset_axis = coffea.hist.Cat("dataset", "Dataset name")
-        self.channel_axis = coffea.hist.Cat("channel", "Channel")
         bins = []
         if "bins" in config:
             for bin_config in config["bins"]:
@@ -159,12 +159,13 @@ class HistDefinition:
             prepared[key] = np.asarray(ak.flatten(data[mask], axis=None))
         return prepared
 
-    def __call__(self, data, channels, dsname, is_mc, weight):
+    def __call__(self, data, categorizations, dsname, is_mc, weight):
         axes = self.axes.copy()
-        cat_present = {}
-        if channels is not None and len(channels) > 0:
-            axes.append(self.channel_axis)
-            cat_present["channel"] = {ch: data[ch] for ch in channels}
+        for cat in categorizations.keys():
+            axes.append(coffea.hist.Cat(cat, cat))
+        categorizations = {name: {cat: [cat] for cat in cats}
+                           for name, cats in categorizations.items()}
+        categorizations.update(self.cat_fills)
         hist = coffea.hist.Hist(self.label, self.dataset_axis, *axes)
 
         fill_vals = {name: DataPicker(method)(data)
@@ -176,12 +177,12 @@ class HistDefinition:
         if any(val is None for val in fill_vals.values()):
             none_keys = [k for k, v in fill_vals.items() if v is None]
             raise HistFillError(f"No fill for axes: {', '.join(none_keys)}")
-        cat_masks = {name: {cat: DataPicker(method)(data)
-                            for cat, method in val.items()}
-                     for name, val in self.cat_fills.items()}
 
-        cat_present.update(cat_masks)
-        for name, val in cat_masks.items():
+        cat_present = defaultdict(dict)
+        for name, val in categorizations.items():
+            for cat, method in val.items():
+                cat_present[name][cat] = DataPicker(method)(data)
+        for name, val in cat_present.items():
             if any(mask is None for mask in val.values()):
                 cat_present[name] = {"All": np.full(len(data), True)}
         if len(cat_present) == 0:
