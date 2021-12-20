@@ -57,6 +57,10 @@ class OutputFiller:
             weight = ak.Array(np.ones(len(data)))
             if hasattr(data.layout, "bytemask"):
                 weight = weight.mask[~ak.is_none(data)]
+        data_fields = ak.fields(data)
+        # Skip cats that are missing in data
+        cats = {k: v for k, v in cats.items()
+                if all(field in data_fields for field in v)}
         axes = [coffea.hist.Cat(cat, cat) for cat in cats.keys()]
         hist = coffea.hist.Hist("Counts", *axes)
         if len(cats) > 0:
