@@ -46,6 +46,95 @@ class Processor(pepper.ProcessorBasicPhysics):
 
         super()._check_config_integrity(config)
 
+        if "lumimask" not in config:
+            logger.warning("No lumimask specified")
+
+        if "pileup_reweighting" not in config:
+            logger.warning("No pileup reweigthing specified")
+
+        if ("electron_sf" not in config
+                or len(config["electron_sf"]) == 0):
+            logger.warning("No electron scale factors specified")
+
+        if "muon_sf" not in config or len(config["muon_sf"]) == 0:
+            logger.warning("No muon scale factors specified")
+
+        if "btag_sf" not in config or len(config["btag_sf"]) == 0:
+            logger.warning("No btag scale factor specified")
+
+        if ("jet_uncertainty" not in config and config["compute_systematics"]):
+            logger.warning("No jet uncertainty specified")
+
+        if ("jet_resolution" not in config or "jet_ressf" not in config):
+            logger.warning("No jet resolution or no jet resolution scale "
+                           "factor specified. This is necessary for "
+                           "smearing, even if not computing systematics")
+        if "jet_correction_mc" not in config and (
+                ("jet_resolution" in config and "jet_ressf" in config) or
+                ("reapply_jec" in config and config["reapply_jec"])):
+            raise pepper.config.ConfigError(
+                "Need jet_correction_mc for propagating jet "
+                "smearing/variation to MET or because reapply_jec is true")
+        if ("jet_correction_data" not in config and "reapply_jec" in config
+                and config["reapply_jec"]):
+            raise pepper.config.ConfigError(
+                "Need jet_correction_data because reapply_jec is true")
+
+        if "muon_rochester" not in config:
+            logger.warning("No Rochster corrections for muons specified")
+
+        if ("reco_algorithm" in config and "reco_info_file" not in config):
+            raise pepper.config.ConfigError(
+                "Need reco_info_file for kinematic reconstruction")
+
+        if "pdf_types" not in config and config["compute_systematics"]:
+            logger.warning(
+                "pdf_type not specified; will not compute pdf "
+                "uncertainties. (Options are 'Hessian', 'MC' and "
+                "'MC_Gaussian')")
+
+        # Skip if no systematics, as currently only checking syst configs
+        if not config["compute_systematics"]:
+            return
+        inv_datasets_for_systematics = {}
+        dataset_for_systematics = config["dataset_for_systematics"]
+        for sysds, (replaceds, variation) in dataset_for_systematics.items():
+            if sysds not in config["mc_datasets"]:
+                raise pepper.config.ConfigError(
+                    "Got systematic dataset that is not mentioned in "
+                    f"mc_datasets: {sysds}")
+            if replaceds not in config["mc_datasets"]:
+                raise pepper.config.ConfigError(
+                    "Got dataset to be replaced by a systematic dataset and "
+                    f"that is not mentioned in mc_datasets: {replaceds}")
+            if (replaceds, variation) in inv_datasets_for_systematics:
+                prevds = inv_datasets_for_systematics[(replaceds, variation)]
+                raise pepper.config.ConfigError(
+                    f"{replaceds} already being replaced for {variation} by "
+                    f"{prevds} but is being repeated with {sysds}")
+            inv_datasets_for_systematics[(replaceds, variation)] = sys
+
+        if "crosssection_uncertainty" in config:
+            xsuncerts = config["crosssection_uncertainty"]
+            for dsname in xsuncerts.keys():
+                if dsname not in config["mc_datasets"]:
+                    raise pepper.config.ConfigError(
+                        f"{dsname} in crosssection_uncertainty but not in "
+                        "mc_datasets")
+
+        for dsname in config["mc_datasets"].keys():
+            if dsname not in config["mc_lumifactors"]:
+                raise pepper.config.ConfigError(
+                    f"{dsname} is not in mc_lumifactors")
+
+        for dsname in config["exp_datasets"].keys():
+            if dsname not in config["dataset_trigger_map"]:
+                raise pepper.config.ConfigError(
+                    f"{dsname} is not in dataset_trigger_map")
+            if dsname not in config["dataset_trigger_order"]:
+                raise pepper.config.ConfigError(
+                    f"{dsname} is not in dataset_trigger_order")
+
         if "drellyan_sf" not in config:
             logger.warning("No Drell-Yan scale factor specified")
 
