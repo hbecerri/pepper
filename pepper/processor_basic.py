@@ -286,9 +286,10 @@ class ProcessorBasicPhysics(pepper.Processor):
         if split_pdf_uncs:
             # Just output variations - user
             # will need to combine these for limit setting
+            num_variation = len(pdfs[0]) + (n_offset or 0)
             selector.set_systematic(
                 "PDF",
-                *[pdfs[:, i] for i in range(1, ak.num(pdfs)[0] - 2)],
+                *[pdfs[:, i] for i in range(1, num_variation)],
                 scheme="numeric",
             )
         else:
