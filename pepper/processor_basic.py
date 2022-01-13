@@ -1,6 +1,4 @@
-import sys
 from functools import reduce
-from collections import namedtuple
 import numpy as np
 import awkward as ak
 import coffea
@@ -8,23 +6,21 @@ import coffea.lumi_tools
 import coffea.jetmet_tools
 import uproot
 import logging
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import pepper
 from pepper import sonnenschein, betchart
 import pepper.config
 
 
-if sys.version_info >= (3, 7):
-    VariationArg = namedtuple(
-        "VariationArgs", ["name", "junc", "jer", "met"],
-        defaults=(None, "central", "central"))
-else:
-    # defaults in nampedtuple were introduced in python 3.7
-    # As soon as CMSSW offers 3.7 or newer, remove this
-    class VariationArg(
-            namedtuple("VariationArg", ["name", "junc", "jer", "met"])):
-        def __new__(cls, name, junc=None, jer="central", met="central"):
-            return cls.__bases__[0].__new__(cls, name, junc, jer, met)
+@dataclass
+class VariationArg:
+    name: Optional[str] = None
+    junc: Optional[Tuple[str, str]] = None
+    jer: Optional[str] = "central"
+    met: Optional[str] = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -862,7 +858,10 @@ class ProcessorBasicPhysics(pepper.Processor):
 
     def build_met_column(self, is_mc, junc, jer, rng, era, data,
                          variation="central"):
-        """Build a column for missing transverse energy."""
+        """Build a column for missing transverse energy.
+        If varation is 'up' or 'down', the unclustered MET varation (up or
+        down) will be applied. If it is None or 'central', nominal MET is
+        used."""
         met = data["MET"]
         metx = met.pt * np.cos(met.phi)
         mety = met.pt * np.sin(met.phi)
@@ -881,9 +880,9 @@ class ProcessorBasicPhysics(pepper.Processor):
         elif variation == "down":
             metx = metx - met.MetUnclustEnUpDeltaX
             mety = mety - met.MetUnclustEnUpDeltaY
-        elif variation != "central":
+        elif variation != "central" and variation is not None:
             raise ValueError(
-                "variation must be one of 'central', 'up' or 'down'")
+                "variation must be one of None, 'central', 'up' or 'down'")
         if "jetfac" in ak.fields(data):
             factors = data["jetfac"]
             if "smear_met" in self.config:

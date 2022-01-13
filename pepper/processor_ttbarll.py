@@ -1,6 +1,5 @@
 import sys
 from functools import partial
-from collections import namedtuple
 import numpy as np
 import awkward as ak
 import logging
@@ -9,18 +8,6 @@ from copy import copy
 import pepper
 import pepper.config
 
-
-if sys.version_info >= (3, 7):
-    VariationArg = namedtuple(
-        "VariationArgs", ["name", "junc", "jer", "met"],
-        defaults=(None, "central", "central"))
-else:
-    # defaults in nampedtuple were introduced in python 3.7
-    # As soon as CMSSW offers 3.7 or newer, remove this
-    class VariationArg(
-            namedtuple("VariationArg", ["name", "junc", "jer", "met"])):
-        def __new__(cls, name, junc=None, jer="central", met="central"):
-            return cls.__bases__[0].__new__(cls, name, junc, jer, met)
 
 logger = logging.getLogger(__name__)
 
