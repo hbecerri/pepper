@@ -14,7 +14,6 @@ from pepper.scale_factors import (
     get_evaluator,
     ScaleFactors,
 )
-from pepper import HistDefinition
 
 
 class ConfigBasicPhysics(pepper.Config):
@@ -54,7 +53,6 @@ class ConfigBasicPhysics(pepper.Config):
                 "MET_xy_shifts": self._get_maybe_external,
                 "mc_lumifactors": self._get_maybe_external,
                 "crosssection_uncertainty": self._get_maybe_external,
-                "hists": self._get_hists,
                 "reco_info_file": self._get_path,
                 "store": self._get_path,
                 "lumimask": self._get_path,
@@ -150,7 +148,3 @@ class ConfigBasicPhysics(pepper.Config):
     def _get_jet_general(self, value, evaltype, cls):
         evaluator = get_evaluator(self._get_path(value), "txt", evaltype)
         return cls(**evaluator)
-
-    def _get_hists(self, value):
-        hist_config = self._get_maybe_external(value)
-        return {k: HistDefinition(c) for k, c in hist_config.items()}

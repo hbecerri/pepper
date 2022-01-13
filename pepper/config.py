@@ -6,6 +6,7 @@ import logging
 import collections
 
 import pepper
+from pepper import HistDefinition
 
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,9 @@ class Config(collections.MutableMapping):
             "$CONFDIR": "configdir",
             "$STOREDIR": "store",
         }
-        self.behaviors = {}
+        self.behaviors = {
+            "hists": self._get_hists
+        }
 
     @property
     def _config(self):
@@ -94,6 +97,10 @@ class Config(collections.MutableMapping):
             with open(self._get_path(value)) as f:
                 value = self._textparser(f)
         return value
+
+    def _get_hists(self, value):
+        hist_config = self._get_maybe_external(value)
+        return {k: HistDefinition(c) for k, c in hist_config.items()}
 
     def _get(self, key):
         if key in self._overwritten:
