@@ -169,7 +169,7 @@ class Processor(pepper.ProcessorBasicPhysics):
         # Wait with hists filling after channel masks are available
         selector.add_cut("At least 2 leps", partial(self.lepton_pair, is_mc),
                          no_callback=True)
-        selector.set_cat("channels", {"is_ee", "is_em", "is_mm"})
+        selector.set_cat("channel", {"is_ee", "is_em", "is_mm"})
         selector.set_multiple_columns(self.channel_masks)
         selector.set_column("mll", self.mass_lepton_pair)
         selector.set_column("dilep_pt", self.dilep_pt, lazy=True)
@@ -185,7 +185,7 @@ class Processor(pepper.ProcessorBasicPhysics):
         selector.add_cut("Req lep pT", self.lep_pt_requirement)
         selector.add_cut("m_ll", self.good_mass_lepton_pair)
         selector.add_cut("Z window", self.z_window,
-                         categories={"channels": ["is_ee", "is_mm"]})
+                         categories={"channel": ["is_ee", "is_mm"]})
 
         if (is_mc and self.config["compute_systematics"]
                 and dsname not in self.config["dataset_for_systematics"]):
@@ -237,7 +237,7 @@ class Processor(pepper.ProcessorBasicPhysics):
             self.scale_systematics_for_btag(selector, variation, dsname)
         selector.add_cut("Has btag(s)", partial(self.btag_cut, is_mc))
         selector.add_cut("Req MET", self.met_requirement,
-                         categories={"channels": ["is_ee", "is_mm"]})
+                         categories={"channel": ["is_ee", "is_mm"]})
 
         if "reco_algorithm" in self.config:
             reco_alg = self.config["reco_algorithm"]

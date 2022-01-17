@@ -144,4 +144,4 @@ class OutputFiller:
     @property
     def channels(self):
         raise AttributeError("'channels' is not used anymore. Use "
-                             "Selector.set_cat('channels', [...])")
+                             "Selector.set_cat('channel', [...])")
