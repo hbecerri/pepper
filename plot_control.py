@@ -231,10 +231,16 @@ for histfilename in histfiles:
     mc_dsnames = config["mc_datasets"].keys()
     if axis_labelmap is not None:
         pred_hist = hist.group(dsaxis, proc_axis, axis_labelmap)
-        used_datasets = [d for d2 in axis_labelmap.values() for d in d2[0]]
+        used_datasets = {d for d2 in axis_labelmap.values() for d in d2[0]}
         for key, syshist in syshists.items():
-            syshists[key] = [h.integrate(
-                "dataset", int_range=used_datasets) for h in syshist]
+            grouped_hists = []
+            for h in syshist:
+                not_present = used_datasets - set(idn.name for idn in syshist[0].identifiers("dataset"))
+                grouped = h.integrate("dataset", int_range=list(used_datasets - not_present))
+                if len(not_present) > 0:
+                    grouped.add(hist.integrate("dataset", int_range=list(not_present)))
+                grouped_hists.append(grouped)
+            syshists[key] = grouped_hists
     else:
         mapping = {key: (key,) for key in mc_dsnames}
         pred_hist = hist.group(dsaxis, proc_axis, mapping)
