@@ -235,10 +235,13 @@ for histfilename in histfiles:
         for key, syshist in syshists.items():
             grouped_hists = []
             for h in syshist:
-                not_present = used_datasets - set(idn.name for idn in syshist[0].identifiers("dataset"))
-                grouped = h.integrate("dataset", int_range=list(used_datasets - not_present))
+                not_present = used_datasets - set(
+                    idn.name for idn in syshist[0].identifiers("dataset"))
+                grouped = h.integrate("dataset", int_range=list(
+                    used_datasets - not_present))
                 if len(not_present) > 0:
-                    grouped.add(hist.integrate("dataset", int_range=list(not_present)))
+                    grouped.add(hist.integrate("dataset", int_range=list(
+                        not_present)))
                 grouped_hists.append(grouped)
             syshists[key] = grouped_hists
     else:
