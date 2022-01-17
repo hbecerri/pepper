@@ -225,7 +225,7 @@ class Processor(pepper.ProcessorBasicPhysics):
                            variation.jer if smear_met else None, selector.rng,
                            era, variation=variation.met))
         selector.set_multiple_columns(
-            partial(self.drellyan_sf_columns, filler))
+            partial(self.drellyan_sf_columns, selector))
         if "drellyan_sf" in self.config and is_mc:
             selector.add_cut("DY scale", partial(self.apply_dy_sfs, dsname))
         selector.add_cut("Has jet(s)", self.has_jets)
@@ -316,7 +316,7 @@ class Processor(pepper.ProcessorBasicPhysics):
             return np.full(len(data), True), {"DYsf": (ones, ones)}
         return np.full(len(data), True)
 
-    def drellyan_sf_columns(self, data, filler):
+    def drellyan_sf_columns(self, data, selector):
         # Dummy function, overwritten when computing DY SFs
         return {}
 
