@@ -64,7 +64,7 @@ class ProcessorBasicPhysics(pepper.Processor):
                 if source == "jes":
                     name = "Junc_"
                 else:
-                    name = f"Junc{source}_"
+                    name = f"Junc{source.replace('_', '')}_"
                 ret.append(VariationArg(
                     name + "up", junc=("up", source), jer=jer))
                 ret.append(VariationArg(
