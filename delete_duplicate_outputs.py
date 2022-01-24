@@ -17,7 +17,7 @@ def process_dir(dir, delete=False):
     corrupted_files = []
     processed_chunks = set()
     for in_file in os.listdir(dir):
-        if not dir.endswith(".hdf5") and not dir.endswith(".h5"):
+        if not in_file.endswith(".hdf5") and not in_file.endswith(".h5"):
             continue
         in_file = os.path.join(dir, in_file)
         try:
