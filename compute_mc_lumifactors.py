@@ -13,23 +13,22 @@ import pepper
 
 
 def update_counts(f, counts, process_name, geskey, lhesskey, lhepdfskey):
-    gen_event_sumw = f["Runs"][geskey].array()[0]
-    has_lhe = len(f["Runs"][lhesskey].array()[0]) != 0
+    runs = f["Runs"]
+    gen_event_sumw = runs[geskey].array()[0]
+    lhe_scale_sumw = runs[lhesskey].array()[0]
+    has_lhe = len(lhe_scale_sumw) != 0
     if has_lhe:
-        lhe_scale_sumw = f["Runs"][lhesskey].array()[0]
-        # Workaround for a bug NanoAODv6 and earlier.
-        # This only works if NanoAOD bug #537 is not present at the same time
-        if len(lhe_scale_sumw) == 9:
-            lhe_scale_sumw = lhe_scale_sumw / lhe_scale_sumw[4]
         lhe_scale_sumw = lhe_scale_sumw * gen_event_sumw
-        lhe_pdf_sumw = f["Runs"][lhepdfskey].array()[0] * gen_event_sumw
+        if lhepdfskey is not None:
+            lhe_pdf_sumw = runs[lhepdfskey].array()[0] * gen_event_sumw
 
     counts[process_name] += gen_event_sumw
     if has_lhe:
         counts[process_name + "_LHEScaleSumw"] =\
             counts[process_name + "_LHEScaleSumw"] + lhe_scale_sumw
-        counts[process_name + "_LHEPdfSumw"] =\
-            counts[process_name + "_LHEPdfSumw"] + lhe_pdf_sumw
+        if lhepdfskey is not None:
+            counts[process_name + "_LHEPdfSumw"] =\
+                counts[process_name + "_LHEPdfSumw"] + lhe_pdf_sumw
     return counts
 
 
@@ -44,6 +43,9 @@ parser.add_argument(
     "-s", "--skip", action="store_true",
     help="If out exists, skip the data sets that are already in the output "
          "file")
+parser.add_argument(
+    "-p", "--pdfsumw", action="store_true", help="Add PdfSumw to the output "
+    "file")
 args = parser.parse_args()
 
 if args.skip and os.path.exists(args.out):
@@ -68,13 +70,13 @@ num_files = len(list(chain(*datasets.values())))
 i = 0
 for process_name, proc_datasets in tqdm(datasets.items(), desc="Total"):
     if process_name not in crosssections and process_name not in dsforsys:
-        print("Could not find crosssection for {}".format(process_name))
+        print(f"Could not find crosssection for {process_name}")
         continue
     for path in tqdm(proc_datasets, desc="Per dataset"):
         with uproot.open(path) as f:
             counts = update_counts(
                 f, counts, process_name, "genEventSumw", "LHEScaleSumw",
-                "LHEPdfSumw")
+                "LHEPdfSumw" if args.pdfsumw else None)
         i += 1
     print("\033[F\033[F")  # Workaround for tqdm adding a new line
 print("")
@@ -94,10 +96,8 @@ for key in counts.keys():
         factor = list(factor)
     factors[key] = factor
     if key == dsname:
-        print("{}: {} fb, {} events, factor of {:.3e}".format(key,
-                                                              xs,
-                                                              counts[key],
-                                                              factors[key]))
+        print(f"{key}: {xs} fb, {counts[key]} events, factor of "
+              f"{factors[key]:.3e}")
 
 with open(args.out, "w") as f:
     json.dump(factors, f, indent=4)
