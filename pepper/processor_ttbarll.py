@@ -118,7 +118,13 @@ class Processor(pepper.ProcessorBasicPhysics):
             if dsname not in config["dataset_trigger_map"]:
                 raise pepper.config.ConfigError(
                     f"{dsname} is not in dataset_trigger_map")
-            if dsname not in config["dataset_trigger_order"]:
+            if isinstance(config["dataset_trigger_order"], dict):
+                trigorder = set()
+                for datasets in config["dataset_trigger_order"].values():
+                    trigorder |= set(datasets)
+            else:
+                trigorder = config["dataset_trigger_order"]
+            if dsname not in trigorder:
                 raise pepper.config.ConfigError(
                     f"{dsname} is not in dataset_trigger_order")
 
