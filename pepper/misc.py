@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from functools import wraps, partial
 from concurrent.futures import ThreadPoolExecutor
 import warnings
+import traceback
 
 import numpy as np
 import awkward as ak
@@ -15,6 +16,7 @@ import coffea
 import hist as hi
 import parsl
 import parsl.addresses
+import pepper.parsl_high_throughput
 
 
 def normalize_trigger_path(path):
@@ -175,7 +177,8 @@ def hist_counts(hist):
 
 
 def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
-                     hostname=None, *, condor_submit=None, condor_init=None):
+                     hostname=None, *, condor_submit=None, condor_init=None,
+                     workers_per_job=1):
     """Get a parsl HTCondor config for a host.
 
     Arguments:
@@ -192,11 +195,14 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
                    PEPPER_CONDOR_ENV and its contents instead. If
                    PEPPER_CONDOR_ENV is also not set, no futher environment
                    will be set up.
+    workers_per_job -- Number of workers (processes) the job on Condor will
+                       simultaneously run.
     """
-    if num_jobs > 450:
-        raise ValueError(
-            "Due to technical limitations only up to 450 jobs are possible "
-            "right now")
+    def retry_handler(e, task_record):
+        # Simply print the exception to inform the user
+        traceback.print_exception(type(e), e, e.__traceback__)
+        return 1
+
     if hostname is None:
         hostname = parsl.addresses.address_by_hostname()
     if retries is None:
@@ -242,17 +248,20 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
                   "{address_probe_timeout_string} "
                   "--hb_threshold={heartbeat_threshold} "
                   "--cpu-affinity {cpu_affinity} ")
-    parsl_executor = parsl.executors.HighThroughputExecutor(
+    parsl_executor = pepper.parsl_high_throughput.HighThroughputExecutor(
         label="HTCondor",
         launch_cmd=launch_cmd,
         address=hostname,
-        max_workers=1,
+        max_workers=workers_per_job,
         provider=provider,
+        worker_debug=False,
     )
     parsl_config = parsl.config.Config(
         executors=[parsl_executor],
+        strategy="htex_auto_scale",
         # Set retries to a large number to retry infinitely
         retries=retries,
+        retry_handler=retry_handler
     )
     return parsl_config
 

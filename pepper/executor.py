@@ -1,6 +1,7 @@
 import os
 import abc
 from dataclasses import dataclass
+from typing import Optional
 from copy import deepcopy
 from functools import partial
 import time
@@ -40,7 +41,7 @@ class ResumableExecutor(abc.ABC, coffea.processor.executor.ExecutorBase):
                      after the completion of an item
     """
 
-    state_file_name: str = None
+    state_file_name: Optional[str] = None
     remove_state_at_end: bool = False
     save_interval: int = 300
 
@@ -163,6 +164,7 @@ class ParslExecutor(ResumableExecutor):
     """Same as coffea.processor.parsl_executor while being resumable"""
 
     tailtimeout: int = None
+    allow_scalein: bool = True
 
     def _execute(self, items, function, accumulator):
         if len(items) == 0:
@@ -171,7 +173,10 @@ class ParslExecutor(ResumableExecutor):
         if self.compression is not None:
             function = _compression_wrapper(self.compression, function)
 
-        parsl.dfk()
+        dfk = parsl.dfk()
+        for exec in dfk.config.executors:
+            if hasattr(exec, "allow_scalein"):
+                exec.allow_scalein = self.allow_scalein
 
         app = timeout(python_app(function))
 
