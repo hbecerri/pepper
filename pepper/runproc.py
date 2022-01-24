@@ -2,6 +2,7 @@
 
 import os
 import sys
+from functools import partial
 import importlib
 import coffea
 import shutil
@@ -102,6 +103,12 @@ def run_processor(processor_class=None, description=None, mconly=False):
         "--condorsubmit",
         help="Text file containing additional parameters to put into the "
         "HTCondor job submission file that is used for condor_submit"
+    )
+    parser.add_argument(
+        "-w", "--condorworkers", type=int, default=1,
+        help="Number of workers (processes) to run in parallel inside a "
+        "single HTCondor job. More workers allow faster processing but also "
+        "increases memory usage inside the job. Default is 1."
     )
     parser.add_argument(
         "--metadata", help="File to cache metadata in. This allows speeding "
@@ -234,7 +241,10 @@ def run_processor(processor_class=None, description=None, mconly=False):
     processor = Processor(config, args.eventdir)
     datasets = processor.preprocess(datasets)
     if args.condor is not None:
-        executor_class = pepper.executor.ParslExecutor
+        executor_class_pre = partial(
+            pepper.executor.ParslExecutor, allow_scalein=False)
+        executor_class = partial(
+            pepper.executor.ParslExecutor, allow_scalein=True)
         if args.condorinit is not None:
             with open(args.condorinit) as f:
                 condorinit = f.read()
@@ -250,14 +260,15 @@ def run_processor(processor_class=None, description=None, mconly=False):
             args.condor,
             retries=args.retries,
             condor_submit=condorsubmit,
-            condor_init=condorinit)
+            condor_init=condorinit,
+            workers_per_job=args.condorworkers)
         parsl.load(parsl_config)
     else:
         if args.condorinit is not None or args.condorsubmit is not None:
             print(
                 "Ignoring condor parameters because --condor is not specified")
-        executor_class = pepper.executor.IterativeExecutor
-    pre_executor = executor_class(state_file_name=args.metadata)
+        executor_class = executor_class_pre = pepper.executor.IterativeExecutor
+    pre_executor = executor_class_pre(state_file_name=args.metadata)
     executor = executor_class(state_file_name=args.statedata)
 
     try:
