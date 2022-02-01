@@ -76,7 +76,7 @@ def run_processor(processor_class=None, description=None, mconly=False):
         "-r", "--retries", type=int, help="Number of times to retry if there "
         "is exception in an HTCondor job. If not given, retry infinitely.")
     parser.add_argument(
-        "--chunksize", type=int, default=500000, help="Number of events to "
+        "--chunksize", type=int, help="Number of events to "
         "process at once. A smaller value means less memory usage. Defaults "
         "to 5*10^5")
     parser.add_argument(
@@ -86,7 +86,8 @@ def run_processor(processor_class=None, description=None, mconly=False):
         "reading slower.")
     parser.add_argument(
         "-d", "--debug", action="store_true", help="Enable debug messages and "
-        "only process a small amount of files to make debugging feasible")
+        "only process a small amount of events to make debugging fast. This "
+        "changes the default of --chunksize to 10000")
     parser.add_argument(
         "-l", "--loglevel",
         choices=["critical", "error", "warning", "info", "debug"],
@@ -192,7 +193,7 @@ def run_processor(processor_class=None, description=None, mconly=False):
             f"Got a total of {num_files} files of which {num_mc_files} are MC")
 
     if args.debug:
-        print("Processing only one file per dataset because of --debug")
+        print("Processing only one chunk per dataset because of --debug")
         datasets = {key: [val[0]] for key, val in datasets.items()}
 
     if len(datasets) == 0:
@@ -287,8 +288,11 @@ def run_processor(processor_class=None, description=None, mconly=False):
                 f"{userdata['chunksize']}. Delete it or change --chunksize")
     userdata["chunksize"] = args.chunksize
 
+    maxchunks = 1 if args.debug else None
+    chunksize = args.chunksize or (args.debug and 10000) or 500000
+
     runner = coffea.processor.Runner(
-        executor, pre_executor, chunksize=args.chunksize,
+        executor, pre_executor, chunksize=chunksize, maxchunks=maxchunks,
         align_clusters=not args.force_chunksize, schema=processor.schema_class)
     output = runner(datasets, "Events", processor)
     processor.save_output(output, args.output)
