@@ -34,7 +34,7 @@ class Processor(pepper.ProcessorTTbarLL):
             "mw", r"$m_{\mathrm{W}}$ (GeV)", 160, 40, 120)
         mw = coffea.hist.Hist("Counts", mw_axis)
         mt_axis = coffea.hist.Bin(
-            "mt", r"$m_{\mathrm{t}}$ (GeV)", 180, 160, 190)
+            "mt", r"$m_{\mathrm{t}}$ (GeV)", 60, 160, 190)
         mt = coffea.hist.Hist("Counts", mt_axis)
         alphal_axis = coffea.hist.Bin("alpha", r"$\alpha$ (rad)", 20, 0, 0.02)
         alphal = coffea.hist.Hist("Counts", alphal_axis)
