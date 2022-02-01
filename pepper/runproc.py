@@ -169,7 +169,7 @@ def run_processor(processor_class=None, description=None, mconly=False):
             exclude = config["dataset_for_systematics"].keys()
         else:
             exclude = None
-        if args.mc and args.nomc:
+        if not mconly and args.mc and args.nomc:
             sys.exit("--mc and --nomc cannot both be present")
         datasets = config.get_datasets(
             args.dataset, exclude, "mc" if mconly or args.mc else
