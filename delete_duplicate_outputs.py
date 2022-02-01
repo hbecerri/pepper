@@ -1,7 +1,6 @@
 import os
 from argparse import ArgumentParser
 from tqdm import tqdm
-from pprint import pprint
 
 import parsl
 from parsl import python_app
@@ -9,7 +8,6 @@ from parsl import python_app
 import pepper
 
 
-@python_app
 def process_dir(dir, delete=False):
     import pepper
     import os
@@ -48,8 +46,8 @@ parser.add_argument(
     "eventdir", help="Directory containing sample directories. Should be the "
     "same as the eventdir argument when running a processor")
 parser.add_argument(
-    "-c", "--condor", type=int, default=100, nargs="?", metavar="simul_jobs",
-    help="Number of HTCondor jobs to launch, default 100")
+    "-c", "--condor", type=int, metavar="simul_jobs",
+    help="Number of HTCondor jobs to launch")
 parser.add_argument(
     "-r", "--retries", type=int, help="Number of times to retry if there is "
     "exception in an HTCondor job. If not given, retry infinitely."
@@ -88,22 +86,35 @@ else:
 
 sample_dir = os.path.realpath(args.eventdir)
 
-parsl_config = pepper.misc.get_parsl_config(
-    args.condor,
-    condor_submit=condorsubmit,
-    condor_init=condorinit,
-    retries=args.retries)
-parsl.load(parsl_config)
-
 dirs = next(os.walk(sample_dir))[1][args.offset:]
-print(f"Number of sample directories to run over: {len(dirs)}")
 
-futures = {}
-for d in dirs:
-    futures[d] = process_dir(os.path.join(sample_dir, d), args.delete)
 results = {}
-for d, future in tqdm(futures.items()):
-    results[d] = future.result()
+if args.condor is None:
+    for d in tqdm(dirs):
+        results[d] = process_dir(os.path.join(sample_dir, d), args.delete)
+else:
+    process_dir = python_app(process_dir)
+
+    parsl_config = pepper.misc.get_parsl_config(
+        args.condor,
+        condor_submit=condorsubmit,
+        condor_init=condorinit,
+        retries=args.retries)
+    parsl.load(parsl_config)
+
+    futures = {}
+    for d in dirs:
+        futures[d] = process_dir(os.path.join(sample_dir, d), args.delete)
+    for d, future in tqdm(futures.items()):
+        results[d] = future.result()
 
 print("Duplicate or corrupted files: ")
-pprint(results)
+have_moved = False
+for d, (dups, corrupt) in results.items():
+    moved_files = dups + corrupt
+    if len(moved_files) == 0:
+        continue
+    print(f"{d}: {', '.join(moved_files)}")
+    have_moved = True
+if not have_moved:
+    print("None")
