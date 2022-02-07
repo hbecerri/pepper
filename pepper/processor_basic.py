@@ -353,7 +353,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         w = data["L1PreFiringWeight"]
         nom = w["Nom"]
         if self.config["compute_systematics"]:
-            sys = {"L1 prefiring": (w["Up"] / nom, w["Dn"] / nom)}
+            sys = {"L1prefiring": (w["Up"] / nom, w["Dn"] / nom)}
             return nom, sys
         return nom
 
