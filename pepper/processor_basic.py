@@ -611,11 +611,20 @@ class ProcessorBasicPhysics(pepper.Processor):
                 else:
                     params[dimlabel] = getattr(muons, dimlabel)
             central = ak.prod(sffunc(**params), axis=1)
-            key = "muonsf{}".format(i)
+            key = f"muonsf{i}"
             if self.config["compute_systematics"]:
-                up = ak.prod(sffunc(**params, variation="up"), axis=1)
-                down = ak.prod(sffunc(**params, variation="down"), axis=1)
-                systematics[key] = (up / central, down / central)
+                if ("split_muon_uncertainty" not in self.config
+                        or not self.config["split_muon_uncertainty"]):
+                    unctypes = ("",)
+                else:
+                    unctypes = ("stat ", "syst ")
+                for unctype in unctypes:
+                    up = ak.prod(sffunc(
+                        **params, variation=f"{unctype}up"), axis=1)
+                    down = ak.prod(sffunc(
+                        **params, variation=f"{unctype}down"), axis=1)
+                    systematics[key + unctype.replace(" ", "")] = (
+                        up / central, down / central)
             weight = weight * central
         return weight, systematics
 
