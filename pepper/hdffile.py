@@ -1,7 +1,6 @@
 import h5py
 import hdf5plugin
-from collections.abc import Mapping
-from collections import MutableMapping
+from collections.abc import Mapping, MutableMapping
 import numpy as np
 import awkward as ak
 import json

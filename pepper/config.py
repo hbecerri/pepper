@@ -3,7 +3,7 @@
 import hjson
 import os
 import logging
-import collections
+from collections.abc import MutableMapping
 
 import pepper
 from pepper import HistDefinition
@@ -16,7 +16,7 @@ class ConfigError(RuntimeError):
     pass
 
 
-class Config(collections.MutableMapping):
+class Config(MutableMapping):
     def __init__(self, path, textparser=hjson.load, cwd="."):
         """Initialize the configuration.
 
