@@ -373,7 +373,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         if year in ("ul2018", "ul2017"):
             passing_filters = (
                 passing_filters & data["Flag"]["ecalBadCalibFilter"])
-        if year in ("ul2018", "ul2017", "ul2016"):
+        if year in ("ul2018", "ul2017", "ul2016post", "ul2016pre"):
             passing_filters = (
                 passing_filters & data["Flag"]["eeBadScFilter"])
 
