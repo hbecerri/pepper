@@ -144,11 +144,6 @@ class ProcessorBasicPhysics(pepper.Processor):
                     data["LHEScaleWeight"][:, 5] * norm[5],
                     data["LHEScaleWeight"][:, 3] * norm[3],
                 )
-        else:
-            selector.set_systematic(
-                "MEren", np.ones(len(data)), np.ones(len(data)))
-            selector.set_systematic(
-                "MEfac", np.ones(len(data)), np.ones(len(data)))
 
     def add_ps_uncertainties(self, selector, data):
         """Parton shower scale uncertainties"""
@@ -168,19 +163,12 @@ class ProcessorBasicPhysics(pepper.Processor):
                     "PSisr", psweight[:, 2], psweight[:, 0])
                 selector.set_systematic(
                     "PSfsr", psweight[:, 3], psweight[:, 1])
-        else:
-            selector.set_systematic(
-                "PSisr", np.ones(len(data)), np.ones(len(data)))
-            selector.set_systematic(
-                "PSfsr", np.ones(len(data)), np.ones(len(data)))
 
     def add_pdf_uncertainties(self, selector, data):
         """Add PDF uncertainties, using the methods described here:
         https://arxiv.org/pdf/1510.03865.pdf#section.6"""
         if ("LHEPdfWeight" not in data.fields
                 or "pdf_types" not in self.config):
-            selector.set_systematic("PDF", 1, 1)
-            selector.set_systematic("PDFalphas", 1, 1)
             return
 
         split_pdf_uncs = False
@@ -243,9 +231,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         # Add PDF alpha_s uncertainties
         if has_as_unc:
             unc = (pdfs[:, -1] - pdfs[:, -2]) / 2
-        else:
-            unc = np.zeros(len(data))
-        selector.set_systematic("PDFalphas", 1 + unc, 1 - unc)
+            selector.set_systematic("PDFalphas", 1 + unc, 1 - unc)
 
     def add_generator_uncertainies(self, dsname, selector):
         """Add MC generator uncertainties: ME, PS and PDF"""
@@ -277,9 +263,8 @@ class ProcessorBasicPhysics(pepper.Processor):
             systematics = {}
             for group in groups:
                 if xsuncerts[dsname] is None or group != xsuncerts[dsname][0]:
-                    uncert = 0
-                else:
-                    uncert = xsuncerts[dsname][1]
+                    continue
+                uncert = xsuncerts[dsname][1]
                 systematics[group + "XS"] = (np.full(num_events, 1 + uncert),
                                              np.full(num_events, 1 - uncert))
             return factor, systematics
