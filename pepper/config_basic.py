@@ -13,6 +13,7 @@ from pepper.scale_factors import (
     BTagWeighter,
     get_evaluator,
     ScaleFactors,
+    MuonScaleFactor,
 )
 
 
@@ -36,7 +37,7 @@ class ConfigBasicPhysics(pepper.Config):
                 "top_pt_reweighting": self._get_top_pt_reweighting,
                 "pileup_reweighting": self._get_pileup_reweighting,
                 "electron_sf": self._get_scalefactors,
-                "muon_sf": self._get_scalefactors,
+                "muon_sf": self._get_muonscalefactor,
                 "muon_rochester": self._get_rochester_corr,
                 "btag_sf": self._get_btag_sf,
                 "jet_correction_mc": self._get_jet_correction,
@@ -71,6 +72,23 @@ class ConfigBasicPhysics(pepper.Config):
 
     def _get_scalefactors(self, value):
         return [self._get_scalefactor(sfpath) for sfpath in value]
+
+    def _get_muonscalefactor(self, value):
+        if ("split_muon_uncertainty" not in self
+                or not self["split_muon_uncertainty"]):
+            return self._get_scalefactors(value)
+
+        sfs = []
+        for sfpath in value:
+            nominal = self._get_scalefactor(sfpath)
+            sfpath_stat = sfpath.copy()
+            sfpath_stat[1] += "_stat"
+            stat = self._get_scalefactor(sfpath_stat)
+            sfpath_syst = sfpath.copy()
+            sfpath_syst[1] += "_syst"
+            syst = self._get_scalefactor(sfpath_syst)
+            sfs.append(MuonScaleFactor(nominal, stat, syst))
+        return sfs
 
     @staticmethod
     def _get_year(value):

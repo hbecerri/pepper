@@ -169,6 +169,31 @@ class ScaleFactors:
         return self._bins.keys()
 
 
+class MuonScaleFactor:
+    def __init__(self, nominal, stat, syst):
+        self.nominal = nominal
+        self.stat = stat
+        self.syst = syst
+
+    def __call__(self, variation="central", **kwargs):
+        if variation not in ("central", "up", "down", "syst up", "syst down",
+                             "stat up", "stat down"):
+            raise ValueError(f"Invalid variation '{variation}'")
+        if variation in ("central", "up", "down"):
+            sf = self.nominal
+        else:
+            unctype, variation = variation.split(" ")
+            if unctype == "syst":
+                sf = self.syst
+            else:
+                sf = self.stat
+        return sf(variation=variation, **kwargs)
+
+    @property
+    def dimlabels(self):
+        return self.nominal.dimlabels
+
+
 WpTuple = namedtuple("WpTuple", ("loose", "medium", "tight"))
 
 
