@@ -203,8 +203,7 @@ BTAG_TAGGER_NAMES = {
 
 class BTagWeighter:
     def __init__(self, sf_filename, eff_filename, tagger, year,
-                 method="fixedwp", meastype="mujets",
-                 ignore_missing=False):
+                 method="fixedwp", meastype="mujets", ignore_missing=False):
 
         if isinstance(method, str):
             method = method.lower()
@@ -271,7 +270,11 @@ class BTagWeighter:
             raise ValueError(
                 f"Expected value between 0 and 2 for wp, got {wp}")
         possible_variations = (
-            "central", "light up", "light down", "heavy up", "heavy down")
+            "central", "light up", "light down", "heavy up", "heavy down",
+            "light up_correlated", "light up_uncorrelated",
+            "light down_correlated", "light down_uncorrelated",
+            "heavy up_correlated", "heavy up_uncorrelated",
+            "heavy down_correlated", "heavy down_uncorrelated")
         if variation not in possible_variations:
             raise ValueError(
                 "variation must be one of: " + ", ".join(possible_variations))
@@ -328,7 +331,11 @@ class BTagWeighter:
                              "'medium' or 'tight'")
         wp = wp.upper()
         possible_variations = (
-            "central", "light up", "light down", "heavy up", "heavy down")
+            "central", "light up", "light down", "heavy up", "heavy down",
+            "light up_correlated", "light up_uncorrelated",
+            "light down_correlated", "light down_uncorrelated",
+            "heavy up_correlated", "heavy up_uncorrelated",
+            "heavy down_correlated", "heavy down_uncorrelated")
         if variation not in possible_variations:
             raise ValueError(
                 "variation must be one of: " + ", ".join(possible_variations))
