@@ -972,6 +972,12 @@ class ProcessorBasicPhysics(pepper.Processor):
             n[mask] += np.asarray(pt_min < data["Jet"].pt[mask, i]).astype(int)
         return n >= self.config["jet_pt_num_satisfied"]
 
+    def compute_btag_sys(self, central, up_name, down_name, weighter, wp, flav,
+                         eta, pt, discr, efficiency):
+        up = weighter(wp, flav, eta, pt, discr, up_name, efficiency)
+        down = weighter(wp, flav, eta, pt, discr, down_name, efficiency)
+        return (up / central, down / central)
+
     def compute_weight_btag(self, data, efficiency="central", never_sys=False):
         jets = data["Jet"]
         wp = self.config["btag"].split(":", 1)[1]
@@ -984,17 +990,20 @@ class ProcessorBasicPhysics(pepper.Processor):
         for i, weighter in enumerate(self.config["btag_sf"]):
             central = weighter(wp, flav, eta, pt, discr, "central", efficiency)
             if not never_sys and self.config["compute_systematics"]:
-                light_up = weighter(
-                    wp, flav, eta, pt, discr, "light up", efficiency)
-                light_down = weighter(
-                    wp, flav, eta, pt, discr, "light down", efficiency)
-                up = weighter(
-                    wp, flav, eta, pt, discr, "heavy up", efficiency)
-                down = weighter(
-                    wp, flav, eta, pt, discr, "heavy down", efficiency)
-                systematics[f"btagsf{i}"] = (up / central, down / central)
-                systematics[f"btagsf{i}light"] = (
-                    light_up / central, light_down / central)
+                if ("split_btag_year_corr" in self.config and
+                        self.config["split_btag_year_corr"]):
+                    unc_splits = {"corr": "_correlated",
+                                  "uncorr": "_uncorrelated"}
+                else:
+                    unc_splits = {"": ""}
+                for name, split in unc_splits.items():
+                    systematics[f"btagsf{i}" + name] = self.compute_btag_sys(
+                        central, "heavy up" + split, "heavy down" + split,
+                        weighter, wp, flav, eta, pt, discr, efficiency)
+                    systematics[f"btagsf{i}light" + name] = \
+                        self.compute_btag_sys(
+                            central, "light up" + split, "light down" + split,
+                            weighter, wp, flav, eta, pt, discr, efficiency)
             weight = weight * central
         if never_sys:
             return weight
