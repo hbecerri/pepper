@@ -144,11 +144,6 @@ class ProcessorBasicPhysics(pepper.Processor):
                     data["LHEScaleWeight"][:, 5] * norm[5],
                     data["LHEScaleWeight"][:, 3] * norm[3],
                 )
-        else:
-            selector.set_systematic(
-                "MEren", np.ones(len(data)), np.ones(len(data)))
-            selector.set_systematic(
-                "MEfac", np.ones(len(data)), np.ones(len(data)))
 
     def add_ps_uncertainties(self, selector, data):
         """Parton shower scale uncertainties"""
@@ -168,19 +163,12 @@ class ProcessorBasicPhysics(pepper.Processor):
                     "PSisr", psweight[:, 2], psweight[:, 0])
                 selector.set_systematic(
                     "PSfsr", psweight[:, 3], psweight[:, 1])
-        else:
-            selector.set_systematic(
-                "PSisr", np.ones(len(data)), np.ones(len(data)))
-            selector.set_systematic(
-                "PSfsr", np.ones(len(data)), np.ones(len(data)))
 
     def add_pdf_uncertainties(self, selector, data):
         """Add PDF uncertainties, using the methods described here:
         https://arxiv.org/pdf/1510.03865.pdf#section.6"""
         if ("LHEPdfWeight" not in data.fields
                 or "pdf_types" not in self.config):
-            selector.set_systematic("PDF", 1, 1)
-            selector.set_systematic("PDFalphas", 1, 1)
             return
 
         split_pdf_uncs = False
@@ -243,9 +231,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         # Add PDF alpha_s uncertainties
         if has_as_unc:
             unc = (pdfs[:, -1] - pdfs[:, -2]) / 2
-        else:
-            unc = np.zeros(len(data))
-        selector.set_systematic("PDFalphas", 1 + unc, 1 - unc)
+            selector.set_systematic("PDFalphas", 1 + unc, 1 - unc)
 
     def add_generator_uncertainies(self, dsname, selector):
         """Add MC generator uncertainties: ME, PS and PDF"""
@@ -277,9 +263,8 @@ class ProcessorBasicPhysics(pepper.Processor):
             systematics = {}
             for group in groups:
                 if xsuncerts[dsname] is None or group != xsuncerts[dsname][0]:
-                    uncert = 0
-                else:
-                    uncert = xsuncerts[dsname][1]
+                    continue
+                uncert = xsuncerts[dsname][1]
                 systematics[group + "XS"] = (np.full(num_events, 1 + uncert),
                                              np.full(num_events, 1 - uncert))
             return factor, systematics
@@ -388,7 +373,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         if year in ("ul2018", "ul2017"):
             passing_filters = (
                 passing_filters & data["Flag"]["ecalBadCalibFilter"])
-        if year in ("ul2018", "ul2017", "ul2016"):
+        if year in ("ul2018", "ul2017", "ul2016post", "ul2016pre"):
             passing_filters = (
                 passing_filters & data["Flag"]["eeBadScFilter"])
 
@@ -611,11 +596,20 @@ class ProcessorBasicPhysics(pepper.Processor):
                 else:
                     params[dimlabel] = getattr(muons, dimlabel)
             central = ak.prod(sffunc(**params), axis=1)
-            key = "muonsf{}".format(i)
+            key = f"muonsf{i}"
             if self.config["compute_systematics"]:
-                up = ak.prod(sffunc(**params, variation="up"), axis=1)
-                down = ak.prod(sffunc(**params, variation="down"), axis=1)
-                systematics[key] = (up / central, down / central)
+                if ("split_muon_uncertainty" not in self.config
+                        or not self.config["split_muon_uncertainty"]):
+                    unctypes = ("",)
+                else:
+                    unctypes = ("stat ", "syst ")
+                for unctype in unctypes:
+                    up = ak.prod(sffunc(
+                        **params, variation=f"{unctype}up"), axis=1)
+                    down = ak.prod(sffunc(
+                        **params, variation=f"{unctype}down"), axis=1)
+                    systematics[key + unctype.replace(" ", "")] = (
+                        up / central, down / central)
             weight = weight * central
         return weight, systematics
 
@@ -978,6 +972,12 @@ class ProcessorBasicPhysics(pepper.Processor):
             n[mask] += np.asarray(pt_min < data["Jet"].pt[mask, i]).astype(int)
         return n >= self.config["jet_pt_num_satisfied"]
 
+    def compute_btag_sys(self, central, up_name, down_name, weighter, wp, flav,
+                         eta, pt, discr, efficiency):
+        up = weighter(wp, flav, eta, pt, discr, up_name, efficiency)
+        down = weighter(wp, flav, eta, pt, discr, down_name, efficiency)
+        return (up / central, down / central)
+
     def compute_weight_btag(self, data, efficiency="central", never_sys=False):
         jets = data["Jet"]
         wp = self.config["btag"].split(":", 1)[1]
@@ -990,17 +990,20 @@ class ProcessorBasicPhysics(pepper.Processor):
         for i, weighter in enumerate(self.config["btag_sf"]):
             central = weighter(wp, flav, eta, pt, discr, "central", efficiency)
             if not never_sys and self.config["compute_systematics"]:
-                light_up = weighter(
-                    wp, flav, eta, pt, discr, "light up", efficiency)
-                light_down = weighter(
-                    wp, flav, eta, pt, discr, "light down", efficiency)
-                up = weighter(
-                    wp, flav, eta, pt, discr, "heavy up", efficiency)
-                down = weighter(
-                    wp, flav, eta, pt, discr, "heavy down", efficiency)
-                systematics[f"btagsf{i}"] = (up / central, down / central)
-                systematics[f"btagsf{i}light"] = (
-                    light_up / central, light_down / central)
+                if ("split_btag_year_corr" in self.config and
+                        self.config["split_btag_year_corr"]):
+                    unc_splits = {"corr": "_correlated",
+                                  "uncorr": "_uncorrelated"}
+                else:
+                    unc_splits = {"": ""}
+                for name, split in unc_splits.items():
+                    systematics[f"btagsf{i}" + name] = self.compute_btag_sys(
+                        central, "heavy up" + split, "heavy down" + split,
+                        weighter, wp, flav, eta, pt, discr, efficiency)
+                    systematics[f"btagsf{i}light" + name] = \
+                        self.compute_btag_sys(
+                            central, "light up" + split, "light down" + split,
+                            weighter, wp, flav, eta, pt, discr, efficiency)
             weight = weight * central
         if never_sys:
             return weight
