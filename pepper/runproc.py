@@ -289,7 +289,12 @@ def run_processor(processor_class=None, description=None, mconly=False):
     userdata["chunksize"] = args.chunksize
 
     maxchunks = 1 if args.debug else None
-    chunksize = args.chunksize or (args.debug and 10000) or 500000
+    if args.chunksize is not None:
+        chunksize = args.chunksize
+    elif args.debug:
+        chunksize = 10000
+    else:
+        chunksize = 500000
 
     runner = coffea.processor.Runner(
         executor, pre_executor, chunksize=chunksize, maxchunks=maxchunks,
