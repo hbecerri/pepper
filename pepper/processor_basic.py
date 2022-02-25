@@ -182,8 +182,17 @@ class ProcessorBasicPhysics(pepper.Processor):
         # Check if sample has alpha_s variations
         # FIXME: might be that other PDF sets have a different length,
         # but these are the most common.
-        has_as_unc = len(pdfs[0]) == 33 or len(pdfs[0]) == 103
+        if len(data) == 0:
+            has_as_unc = False
+        else:
+            has_as_unc = len(pdfs[0]) == 33 or len(pdfs[0]) == 103
+            # Workaround for "order of scale and pdf weights not consistent"
+            # See https://twiki.cern.ch/twiki/bin/view/CMS/MCKnownIssues
+            if ak.mean(pdfs[0]) < 0.6:  # approximate, see if factor 2 needed
+                pdfs = ak.without_parameters(pdfs)
+                pdfs = ak.concatenate([pdfs[:, 0:1], pdfs[:, 1:] * 2], axis=1)
         n_offset = -2 if has_as_unc else None
+
         if split_pdf_uncs:
             # Just output variations - user
             # will need to combine these for limit setting
@@ -195,8 +204,9 @@ class ProcessorBasicPhysics(pepper.Processor):
             )
         else:
             if pdf_type == "hessian":
-                eigen_vals = np.reshape(ak.to_numpy(pdfs[:, 1:n_offset]),
-                                        (len(pdfs), -1, 2))
+                eigen_vals = ak.to_numpy(pdfs[:, 1:n_offset])
+                eigen_vals = eigen_vals.reshape(
+                    (eigen_vals.shape[0], eigen_vals.shape[1] // 2, 2))
                 central, eigenvals = ak.broadcast_arrays(
                     pdfs[:, 0, None, None], eigen_vals)
                 var_up = ak.max((eigen_vals - central), axis=2)
