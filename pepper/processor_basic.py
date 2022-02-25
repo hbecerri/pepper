@@ -568,7 +568,10 @@ class ProcessorBasicPhysics(pepper.Processor):
                         behavior=data.behavior)
 
         # Sort leptons by pt
-        lepton = lepton[ak.argsort(lepton["pt"], ascending=False)]
+        # Also workaround for awkward bug using ak.values_astype
+        # https://github.com/scikit-hep/awkward-1.0/issues/1288
+        lepton = lepton[
+            ak.values_astype(ak.argsort(lepton["pt"], ascending=False), int)]
         return lepton
 
     def compute_lepton_sf(self, data):
@@ -955,7 +958,9 @@ class ProcessorBasicPhysics(pepper.Processor):
         n = np.zeros(len(data))
         # This assumes leptons are ordered by pt highest first
         for i, pt_min in enumerate(self.config["lep_pt_min"]):
-            mask = ak.num(data["Lepton"]) > i
+            # flatten to workaround awkward bug
+            # https://github.com/scikit-hep/awkward-1.0/issues/1305
+            mask = ak.flatten(ak.num(data["Lepton"]) > i, axis=None)
             n[mask] += np.asarray(
                 pt_min < data["Lepton"].pt[mask, i]).astype(int)
         return n >= self.config["lep_pt_num_satisfied"]
