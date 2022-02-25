@@ -41,10 +41,11 @@ class Processor(pepper.ProcessorTTbarLL):
         alphaj_axis = coffea.hist.Bin("alpha", r"$\alpha$ (rad)", 100, 0, 0.2)
         alphaj = coffea.hist.Hist("Counts", alphaj_axis)
         energyfl_axis = coffea.hist.Bin(
-            "energyf", r"$E_{\mathrm{gen}} / E_{\mathrm{reco}}", 200, 0.5, 1.5)
+            "energyf", r"$E_{\mathrm{gen}} / E_{\mathrm{reco}}$", 200, 0.5,
+            1.5)
         energyfl = coffea.hist.Hist("Counts", energyfl_axis)
         energyfj_axis = coffea.hist.Bin(
-            "energyf", r"$E_{\mathrm{gen}} / E_{\mathrm{reco}}", 200, 0, 3)
+            "energyf", r"$E_{\mathrm{gen}} / E_{\mathrm{reco}}$", 200, 0, 3)
         energyfj = coffea.hist.Hist("Counts", energyfj_axis)
         return coffea.processor.dict_accumulator(
             {"mlb": mlb, "mw": mw, "mt": mt, "alphal": alphal,
