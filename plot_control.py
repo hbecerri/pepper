@@ -126,13 +126,13 @@ def plot(data_hist, pred_hist, sys, namebase, colors={}, log=False,
     ax2.set_ylabel("Data / Pred.")
     ax2.set_ylim(0.75, 1.25)
     fig.subplots_adjust(hspace=0)
+    ax1.autoscale(axis="y")
     if cmsyear is not None:
         year = "".join(c for c in cmsyear if c.isdigit())
         ax1 = hep.cms.label(
             ax=ax1, llabel="Work in progress", year=year,
             lumi=LUMIS[cmsyear])
     if log:
-        ax1.autoscale(axis="y")
         ax1.set_yscale("log")
     plt.tight_layout()
     fig.savefig(namebase + ext)
