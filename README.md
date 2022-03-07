@@ -12,10 +12,9 @@ Pepper can be installed as a python package as follows:
 git clone <repository url> pepper
 cd pepper
 source example/environment.sh
-python3 -m pip install . --user
+python3 -m pip install --upgrade --upgrade-strategy eager --editable .
 ```
-Use the option `-e` to make the installed package editable.
-Now, `pepper` can be imported as any other python package from any location.
+This will update all dependencies to the latest version. Now `pepper` can be imported as any other python package from any location. Because of the `--editable` option, if you edit files inside your cloned pepper directory, the changes will be in effect already the next time you `import pepper`.
 
 
 
