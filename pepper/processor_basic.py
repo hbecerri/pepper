@@ -807,6 +807,7 @@ class ProcessorBasicPhysics(pepper.Processor):
         if "jetfac" in ak.fields(data):
             jets["pt"] = jets["pt"] * data["jetfac"][is_good_jet]
             jets["mass"] = jets["mass"] * data["jetfac"][is_good_jet]
+            jets = jets[ak.argsort(jets["pt"], ascending=False)]
 
         # Evaluate b-tagging
         tagger, wp = self.config["btag"].split(":")
