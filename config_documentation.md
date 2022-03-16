@@ -27,6 +27,7 @@ Inside the string values of a configuration variable the following placeholders 
 - `crosssection_uncertainty`: Optional, path to a JSON file. This file contains an object of arrays. This indicated the uncertainty as a factor of each MC data set. The name of the data set is given by the keys. The arrays contain two elements, a string naming the cross section uncertainty and a float giving the factor. Two cross section uncertainties with the same name are assumed to be fully correlated. Instead of a float, the factor can also be `Null` to assume no cross section uncertainty. This does not affect data sets that are part of `dataset_for_systematics`. If an MC data set is not named here, zero uncertainty will be assumed.
 - `pdf_types`: Optional, object where the keys are the LHA IDs of the PDF sets used by these data sets, and the values describe the type of these PDF sets - Options are `"Hessian"` for hessian sets, and `"MC_Gaussian"` and `"MC"` for MC replica data sets, where `"MC_Gaussian"` calculates the standard deviation of these sets, and `"MC"` takes the weights from the ordered distribution closest to the bounds of the 1 sigma region, i.e., 16% and 84%. Pepper's example configuration should cover most run 2 data sets, but new sets may be added with time.
 - `split_pdf_uncs`: Optional, bool. Just output the full set of pdf variations, rather than trying to compute the combined uncertainty in pepper. NB: for NLO samples, one should output the full set of variations and calculate the combined uncertainty on the histogram for most accurate results.
+- `DY_datasets`: Optional, list. List of MC datasets for calculating and applying DY SFs. If not specified, will use all MC datasets starting "DY".
 
 ## Scale factors, weights and other inputs
 These determine various calibrations and weightings. In case they are optional and are not present, the corresponding procedure will be skipped.
@@ -132,5 +133,4 @@ Data pickers are arrays, specifying to use something from the `data` array of th
 
 ### DY Scale factors
 - `fast_dy_sfs`: Optional, bool. Specifies if DYprocessor should run over just DY and observed data; not relevant for other processors.
-- `bin_dy_sfs`: Optional, data picker defining a variable in which DY SFs should be binned. Used by both DYprocessor when producing these SFs, and the standard Processor when applying them. If omitted or null, inclusive SFs will be produced.
-- `dy_sf_bin_edges`: Optional, list of ints. List of bin edges to use when producing DY SFs. must be defined if bin_dy_sfs is not null.
+- `bin_dy_sfs`: Optional, data picker defining a variable in which DY SFs are binned, used by the Processor when applying them.

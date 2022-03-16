@@ -134,6 +134,12 @@ class Processor(pepper.ProcessorBasicPhysics):
         if "trigger_sfs" not in config:
             logger.warning("No trigger scale factors specified")
 
+    def is_dy_dataset(self, key):
+        if "DY_datasets" in self.config:
+            return key in self.config["DY_datasets"]
+        else:
+            return key.startswith("DY")
+
     def process_selection(self, selector, dsname, is_mc, filler):
         era = self.get_era(selector.data, is_mc)
         if dsname.startswith("TTTo"):
@@ -301,7 +307,7 @@ class Processor(pepper.ProcessorBasicPhysics):
         return central
 
     def apply_dy_sfs(self, dsname, data):
-        if dsname.startswith("DY"):
+        if self.is_dy_dataset(dsname):
             channel = ak.where(data["is_ee"], 0, ak.where(data["is_em"], 1, 2))
             if ("bin_dy_sfs" in self.config and
                     self.config["bin_dy_sfs"] is not None):
