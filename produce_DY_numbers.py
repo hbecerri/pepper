@@ -1,11 +1,7 @@
-import json
 import logging
-import os
-from functools import partial
 
 import numpy as np
 import awkward as ak
-import coffea
 
 import pepper
 
@@ -13,88 +9,34 @@ import pepper
 logger = logging.getLogger("pepper")
 
 
-class DYOutputFiller(pepper.OutputFiller):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.output["cutflow_errs"] = coffea.processor.dict_accumulator()
-
-    def fill_cutflows(self, data, systematics, cut, done_steps, cats):
-        if systematics is not None:
-            weight = systematics["weight"]
-        else:
-            weight = ak.Array(np.ones(len(data)))
-            if hasattr(data.layout, "bytemask"):
-                weight = weight.mask[~ak.is_none(data)]
-        logger.info("Filling cutflow. Current event count: "
-                    + str(ak.sum(weight)))
-        channels = cats.get("channel", [])
-        self.fill_accumulator(self.output["cutflows"], cut, data, weight,
-                              channels)
-        if systematics is not None:
-            weight = systematics["weight"] ** 2
-        else:
-            weight = ak.Array(np.ones(len(data)))
-        self.fill_accumulator(self.output["cutflow_errs"], cut, data, weight,
-                              channels)
-
-    def fill_accumulator(self, accumulator, cut, data, weight, channels):
-        if "all" not in accumulator:
-            accumulator["all"] = coffea.processor.defaultdict_accumulator(
-                partial(coffea.processor.defaultdict_accumulator, int))
-        if cut not in accumulator["all"][self.dsname]:
-            accumulator["all"][self.dsname][cut] = ak.sum(weight)
-        for ch in channels:
-            if ch not in accumulator:
-                accumulator[ch] = coffea.processor.defaultdict_accumulator(
-                    partial(coffea.processor.defaultdict_accumulator, int))
-            if cut not in accumulator[ch][self.dsname]:
-                accumulator[ch][self.dsname][cut] = ak.sum(weight[data[ch]])
-
-
 class DYprocessor(pepper.ProcessorTTbarLL):
-    @property
-    def accumulator(self):
-        self._accumulator = coffea.processor.dict_accumulator({
-            "hists": coffea.processor.dict_accumulator(),
-            "cutflows": coffea.processor.dict_accumulator(),
-            "cutflow_errs": coffea.processor.dict_accumulator()
-        })
-        return self._accumulator
+    def __init__(self, config, eventdir):
+        """Create a DY Processor
+
+        Arguments:
+        config -- A Config instance, defining the configuration to use
+        eventdir -- Destination directory, where the event HDF5s are saved.
+                    Every chunk will be saved in its own file. If `None`,
+                    nothing will be saved.
+        """
+        if "hists" not in config or len(config["hists"]) == 0:
+            config["hists"] = {"DY_dummy_hist": pepper.HistDefinition(
+                {"bins": [{"name": "pt", "label": "MET", "n_or_arr": 1,
+                           "lo": 0, "hi": 1000, "unit": "GeV"}],
+                 "fill": {"pt": ["MET", "pt"]}})}
+        super().__init__(config, eventdir)
 
     def preprocess(self, datasets):
-        if "fast_dy_sfs" in self.config and self.config["fast_dy_sfs"]:
+        if "fast_dy_sfs" in self.config and not self.config["fast_dy_sfs"]:
+            return datasets
+        else:
             # Only process DY MC samples and observed data
             processed = {}
             for key, value in datasets.items():
-                if key in self.config["exp_datasets"] or key.startswith("DY"):
+                if (key in self.config["exp_datasets"] or
+                        self.is_dy_dataset(key)):
                     processed[key] = value
             return processed
-        else:
-            return datasets
-
-    def setup_outputfiller(self, dsname, is_mc):
-        sys_enabled = self.config["compute_systematics"]
-
-        if dsname in self.config["dataset_for_systematics"]:
-            dsname_in_hist = self.config["dataset_for_systematics"][dsname][0]
-            sys_overwrite = self.config["dataset_for_systematics"][dsname][1]
-        else:
-            dsname_in_hist = dsname
-            sys_overwrite = None
-
-        if "cuts_to_histogram" in self.config:
-            cuts_to_histogram = self.config["cuts_to_histogram"]
-        else:
-            cuts_to_histogram = None
-
-        hists = self._get_hists_from_config(
-            self.config, "hists", "hists_to_do")
-        filler = DYOutputFiller(
-            hists, is_mc, dsname, dsname_in_hist, sys_enabled,
-            sys_overwrite=sys_overwrite, copy_nominal=self._get_copy_nominal(),
-            cuts_to_histogram=cuts_to_histogram)
-
-        return filler
 
     def z_window(self, data):
         # Don't apply Z window cut, as we'll add columns inside and
@@ -105,34 +47,11 @@ class DYprocessor(pepper.ProcessorTTbarLL):
         m_min = self.config["z_boson_window_start"]
         m_max = self.config["z_boson_window_end"]
         Z_window = (data["mll"] >= m_min) & (data["mll"] <= m_max)
-        channel = {"ee": data["is_ee"],
-                   "em": data["is_em"],
-                   "mm": data["is_mm"]}
-        Z_w = {"in": Z_window, "out": ~Z_window}
-        btags = {"0b": (ak.sum(data["Jet"]["btagged"], axis=1) == 0),
-                 "1b": (ak.sum(data["Jet"]["btagged"], axis=1) > 0)}
-        if ("bin_dy_sfs" in self.config and
-                self.config["bin_dy_sfs"] is not None):
-            bin_axis = pepper.hist_defns.DataPicker(self.config["bin_dy_sfs"])
-            edges = self.config["dy_sf_bin_edges"]
-            bins = {str(edges[i]) + "_to_" + str(edges[i+1]):
-                    (bin_axis >= edges[i]) & (bin_axis < edges[i+1])
-                    for i in range(len(edges) - 1)}
-        else:
-            bin_axis = None
-        new_chs = {}
-        for ch in channel.items():
-            for Zw in Z_w.items():
-                for btag in btags.items():
-                    if bin_axis is not None:
-                        for _bin in bins.items():
-                            key = (ch[0] + "_" + Zw[0] + "_" + btag[0]
-                                   + "_" + _bin[0])
-                            new_chs[key] = ch[1] & Zw[1] & btag[1] & _bin[1]
-                    else:
-                        new_chs[ch[0] + "_" + Zw[0] + "_" + btag[0]] = (
-                                ch[1] & Zw[1] & btag[1])
-        selector.set_cat("channel", new_chs.keys())
+        new_chs = {"in_Z_win": Z_window, "out_Z_win": ~Z_window,
+                   "0b": (ak.sum(data["Jet"]["btagged"], axis=1) == 0),
+                   "1b": (ak.sum(data["Jet"]["btagged"], axis=1) > 0)}
+        selector.set_cat("in_Z_window", {"in_Z_win", "out_Z_win"})
+        selector.set_cat("btags", {"0b", "1b"})
         return new_chs
 
     def btag_cut(self, is_mc, data):
@@ -142,18 +61,9 @@ class DYprocessor(pepper.ProcessorTTbarLL):
         # Don't apply old DY SFs if these are still in config
         return np.full(len(data), True)
 
-    @staticmethod
-    def _prepare_cutflows(output):
-        return output["cutflows"]
-
-    def save_output(self, output, dest):
-        with open(os.path.join(dest, "cutflow_errs.json"), "w") as f:
-            json.dump(output["cutflow_errs"], f, indent=4)
-        super().save_output(output, dest)
-
 
 if __name__ == "__main__":
     from pepper import runproc
     runproc.run_processor(
-        DYprocessor, "Run the DY processor to get the "
-        "numbers needed for DY SF calculation")
+        DYprocessor, "Run the DY processor to fill the histogram "
+        "needed for DY SF calculation")

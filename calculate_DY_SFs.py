@@ -1,32 +1,29 @@
-import numpy as np
-import hjson
 import logging
 import argparse
-import os
+import itertools
 
+import hjson
+import numpy as np
 import sympy
+import coffea.util
 
 
 logger = logging.getLogger(__name__)
 
 
 class SFEquations():
-    def __init__(self, config):
+    def __init__(self, config, bins):
         self.config = config
-        self.regions = ["in_0b", "out_0b", "in_1b"]
-        self.bins = config["bins"]
-        if config["bins"] is None:
+        self.Z_win_regs = ["in", "out"]
+        self.btags = ["0b", "1b"]
+        if bins is None:
             self.bins = [""]
         else:
-            self.bins = [
-                "_" + str(config["bins"][i]) + "_" + str(config["bins"][i+1])
-                for i in range(len(config["bins"]) - 1)]
-        chs = ["ee_", "em_", "mm_"]
-        self.symbols = [ch + reg + b for ch in chs
-                        for reg in self.regions for b in self.bins]
+            self.bins = bins
+        self.chs = ["ee", "em", "mm"]
         Nee_inc = ""
         Nmm_inc = ""
-        for reg in self.regions:
+        for reg in ["in_0b", "out_0b", "in_1b"]:
             for b in self.bins:
                 Nee_inc += " + Nee_" + reg + b
                 Nmm_inc += " + Nmm_" + reg + b
@@ -66,14 +63,53 @@ class SFEquations():
                               * Rmm_0b_MC / Rmm_0b_data)
             self.em_SFs[b] = (self.ee_SFs[b] * self.mm_SFs[b]) ** 0.5
 
-    def evaluate(self, values, cut):
+    def get_subs(self, n, hist, bins=False, err=False):
+        if err:
+            err_n = "_err"
+            err_idx = 1
+        else:
+            err_n = ""
+            err_idx = 0
+        ret_dict = {}
+        for ch, Zinout, btag in itertools.product(
+                self.chs, self.Z_win_regs, self.btags):
+            h = hist.integrate("channel", "is_" + ch)
+            h = h.integrate("in_Z_window", Zinout + "_Z_win")
+            h = h.integrate("btags", btag)
+            if () in h.values():
+                vals = h.values(True)[()][err_idx]
+            else:
+                print(f"Warning! {ch}, {Zinout}, {btag} not found in hist, "
+                      f"assuming zero events")
+                if bins:
+                    vals = np.zeros(len(bins))
+                else:
+                    vals = 0
+            if bins:
+                for i, b in enumerate(self.bins):
+                    ret_dict[f"{n}{ch}_{Zinout}_{btag}{b}{err_n}"] = vals[i]
+            else:
+                ret_dict[n + ch + "_" + Zinout + "_" + btag + err_n] = vals
+        return ret_dict
+
+    def get_dy_datasets(self):
+        if "DY_datasets" in self.config:
+            return self.config["DY_datasets"]
+        else:
+            return [k for k in self.config["mc_datasets"]
+                    if k.startswith("DY")]
+
+    def evaluate(self, hist):
         ret_vals = [[], [], []]
-        subs = {"N" + sym: sum([values[sym][ds][cut]
-                                for ds in self.config["Data"]])
-                for sym in self.symbols}
-        subs.update({"Z" + sym: sum([values[sym][ds][cut]
-                                     for ds in self.config["DY_MC"]])
-                     for sym in self.symbols})
+        data_hist = hist.integrate("dataset",
+                                   list(self.config["exp_datasets"].keys()))
+        dy_hist = hist.integrate("dataset", self.get_dy_datasets())
+        if self.bins != [""]:
+            subs = self.get_subs("N", data_hist, True)
+            subs.update(self.get_subs("Z", dy_hist, True))
+        else:
+            subs = self.get_subs("N", data_hist)
+            subs.update(self.get_subs("Z", dy_hist))
         for b in self.bins:
             ret_vals[0].append(sympy.lambdify(list(subs.keys()),
                                               self.ee_SFs[b])(**subs))
@@ -82,6 +118,11 @@ class SFEquations():
             ret_vals[2].append(sympy.lambdify(list(subs.keys()),
                                               self.mm_SFs[b])(**subs))
         return ret_vals
+
+    def get_err(self, sfs, n, ch, z_inout, btag, b):
+        return (sympy.diff(sfs, n + ch + "_" + z_inout + "_" + btag + b) ** 2
+                * sympy.symbols(
+                    n + ch + "_" + z_inout + "_" + btag + b + "_err"))
 
     def calculate_errs(self):
         self.ee_SF_errs = {b: 0 for b in self.bins}
@@ -92,27 +133,29 @@ class SFEquations():
                      (self.mm_SF_errs, self.mm_SFs)]
         for b in self.bins:
             for err_dict, SFs in err_dicts:
-                for sym in self.symbols:
-                    err_dict[b] += ((sympy.diff(SFs[b], "N" + sym)) ** 2
-                                    * sympy.symbols("N" + sym+"_err"))
-                    err_dict[b] += ((sympy.diff(SFs[b], "Z" + sym)) ** 2
-                                    * sympy.symbols("Z" + sym+"_err"))
+                for ch, Zinout, btag, diff_b in itertools.product(
+                        self.chs, self.Z_win_regs, self.btags, self.bins):
+                    err_dict[b] += self.get_err(
+                        SFs[b], "N", ch, Zinout, btag, diff_b)
+                    err_dict[b] += self.get_err(
+                        SFs[b], "Z", ch, Zinout, btag, diff_b)
                 err_dict[b] = err_dict[b] ** 0.5
 
-    def evaluate_errs(self, values, errs, cut):
+    def evaluate_errs(self, values):
         ret_vals = [[], [], []]
-        subs = {"N" + sym: sum([values[sym][ds][cut]
-                                for ds in self.config["Data"]])
-                for sym in self.symbols}
-        subs.update({"Z" + sym: sum([values[sym][ds][cut]
-                                     for ds in self.config["DY_MC"]])
-                     for sym in self.symbols})
-        subs.update({"N" + sym + "_err":
-                     sum([errs[sym][ds][cut] for ds in self.config["Data"]])
-                     for sym in self.symbols})
-        subs.update({"Z" + sym + "_err":
-                     sum([errs[sym][ds][cut] for ds in self.config["DY_MC"]])
-                     for sym in self.symbols})
+        data_hist = hist.integrate("dataset",
+                                   list(self.config["exp_datasets"].keys()))
+        dy_hist = hist.integrate("dataset", self.get_dy_datasets())
+        if self.bins != [""]:
+            subs = self.get_subs("N", data_hist, True)
+            subs.update(self.get_subs("Z", dy_hist, True))
+            subs.update(self.get_subs("N", data_hist, True, True))
+            subs.update(self.get_subs("Z", dy_hist, True, True))
+        else:
+            subs = self.get_subs("N", data_hist)
+            subs.update(self.get_subs("Z", dy_hist))
+            subs.update(self.get_subs("N", data_hist, err=True))
+            subs.update(self.get_subs("Z", dy_hist, err=True))
         for b in self.bins:
             ret_vals[0].append(sympy.lambdify(
                 list(subs.keys()), self.ee_SF_errs[b])(**subs))
@@ -123,82 +166,73 @@ class SFEquations():
         return ret_vals
 
 
-class MultiInputOptArg(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        if values:
-            setattr(namespace, self.dest, values)
-        else:
-            setattr(namespace, self.dest, self.const)
-
-
-parser = argparse.ArgumentParser(description="Calculate DY scale factors from "
-                                 "DY yields produced by produce_DY_numbers.py")
+parser = argparse.ArgumentParser(
+    description="Calculate DY scale factors from DY yields produced by "
+    "produce_DY_numbers.py. (Currently only works for 1d histograms)")
+parser.add_argument("config", help="JSON configuration file (same as used "
+                    "by produce_DY_numbers.py)")
 parser.add_argument(
-    "config", help="Path to a config containing labels for which datsets "
-    "correspond to DY, and which to data, as well as information about the "
-    "binning to use, which can be either 'null' or a list of the bin edges")
-parser.add_argument("cutflows", help="Path to a output directory from "
-                    "produce_DY_numbers.py, containing the cutflows for "
-                    "this calculation")
+    "hist", help="Path to a histogram filled by produce_DY_numbers.py, "
+    "containing the cutflows for this calculation, e.g. after the jet cut")
 parser.add_argument("output", help="Path to the output file")
 parser.add_argument(
-    "-c", "--cutname", default="Jet pt req", help="Cut for which scale "
-    "factors should be calculated- default 'Jet pt req'")
+    "-v", "--variation", help="Histogram for an alternate working point at "
+    "which to calculate scale factors to  estimate systematic error, e.g. "
+    "after the reco cut")
 parser.add_argument(
-    "-v", "--variation", action=MultiInputOptArg, nargs="*", const=["Reco"],
-    help="Alternative working point at which to calculate scale factors to "
-    "estimate systematic error. May give either one argument (which will "
-    "be interpreted as another cut in the same cutflow), or two, specifying "
-    "a different cutflow file, and a cut in that cutflow. Default: 'Reco'")
+    "-i", "--integrate", action="store_true", help="Integrate this histogram "
+    "(including overflow bins) to get inclusive SF")
 args = parser.parse_args()
 
 with open(args.config, "r") as f:
     config = hjson.load(f)
-with open(os.path.join(args.cutflows, "cutflows.json"), "r") as f:
-    cutflow = hjson.load(f)
-with open(os.path.join(args.cutflows, "cutflow_errs.json"), "r") as f:
-    errors = hjson.load(f)
 
-if config["bins"] is None:
+hist = coffea.util.load(args.hist)
+
+# ToDo: get this from hist
+if args.integrate:
     bins = {"channel": [0, 1, 2, 3]}
+    bin_names = None
+    hist = hist.project("dataset", "channel", "in_Z_window", "btags",
+                        overflow="allnan")
 else:
-    bin_edges = [int(k.split("_")[0]) for k in config["rebin"].keys()]
-    bins = {"axis": config["bins"], "channel": [0, 1, 2, 3]}
+    if len(hist.dense_axes()) != 1:
+        raise NotImplementedError("Can only compute 1d SFs!")
+    edges = hist.dense_axes()[0].edges()
+    bins = {"axis": list(edges), "channel": [0, 1, 2, 3]}
+    bin_names = [str(edges[i]).replace(".", "p") + "_to_"
+                 + str(edges[i + 1]).replace(".", "p")
+                 for i in range(len(edges) - 1)]
 out_dict = {"bins": bins}
 
-sf_eq = SFEquations(config)
-sfs = sf_eq.evaluate(cutflow, args.cutname)
+sf_eq = SFEquations(config, bin_names)
+sfs = sf_eq.evaluate(hist)
 sf_eq.calculate_errs()
-stat_errs = sf_eq.evaluate_errs(cutflow, errors, args.cutname)
+stat_errs = sf_eq.evaluate_errs(hist)
 
 if args.variation:
-    if len(args.variation) > 2:
-        raise ValueError("Too many arguments supplied to variation (max 2)")
-    elif len(args.variation) == 2:
-        with open(args.variation[0], "r") as f:
-            var_cutflow = hjson.load(f)
-        cutname = args.variation[1]
-    else:
-        var_cutflow = cutflow
-        cutname = args.variation[0]
-    var_sfs = sf_eq.evaluate(var_cutflow, cutname)
-    sys_errs = [[np.abs(sfs[ch_i][met_i] - var_sfs[ch_i][met_i])
-                 for met_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
+    var_hist = coffea.util.load(args.variation)
+    if args.integrate:
+        var_hist = var_hist.project("dataset", "channel", "in_Z_window",
+                                    "btags", overflow="allnan")
+    var_sfs = sf_eq.evaluate(var_hist)
+    sys_errs = [[np.abs(sfs[ch_i][bin_i] - var_sfs[ch_i][bin_i])
+                 for bin_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
     tot_errs = [
-        [np.sqrt(sys_errs[ch_i][met_i] ** 2 + stat_errs[ch_i][met_i] ** 2)
-         for met_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
+        [np.sqrt(sys_errs[ch_i][bin_i] ** 2 + stat_errs[ch_i][bin_i] ** 2)
+         for bin_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
 else:
     tot_errs = stat_errs
 
 out_dict["factors"] = sfs
 out_dict["factors_up"] = [
-    [sfs[ch_i][met_i] + tot_errs[ch_i][met_i]
-     for met_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
+    [sfs[ch_i][bin_i] + tot_errs[ch_i][bin_i]
+     for bin_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
 out_dict["factors_down"] = [
-    [sfs[ch_i][met_i] - tot_errs[ch_i][met_i]
-     for met_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
+    [sfs[ch_i][bin_i] - tot_errs[ch_i][bin_i]
+     for bin_i in range(len(sfs[ch_i]))] for ch_i in range(3)]
 
-if config["bins"] is None:
+if args.integrate:
     out_dict["factors"] = [sf[0] for sf in out_dict["factors"]]
     out_dict["factors_up"] = [sf[0] for sf in out_dict["factors_up"]]
     out_dict["factors_down"] = [sf[0] for sf in out_dict["factors_down"]]
