@@ -1,7 +1,5 @@
 import os
 import pepper
-import coffea
-import coffea.util
 import hist as hi
 import uproot
 
@@ -26,17 +24,17 @@ class Processor(pepper.Processor):
                 "data_pu_hist_down does not have the same axes as "
                 "data_pu_hist.")
 
-        axisname = datahist.axes[0].name
+        self.axisname = datahist.axes[0].name
         hist_config = {
             "bins": [
                 {
-                    "name": axisname,
+                    "name": self.axisname,
                     "label": ("True mean number interactions per bunch "
                               "crossing")
                 }
             ],
             "fill": {
-                axisname: [
+                self.axisname: [
                     "Pileup",
                     "nTrueInt"
                 ]
@@ -86,12 +84,14 @@ class Processor(pepper.Processor):
         return datahist, datahistup, datahistdown
 
     @staticmethod
-    def _save_hists(hist, datahist, datahistup, datahistdown, filename):
-        hist = hist.to_hist()
+    def _save_hists(hist, datahist, datahistup, datahistdown, filename,
+                    sum_datasets):
+        datasets = ["all_datasets"] if sum_datasets else hist.axes["dataset"]
 
         with uproot.recreate(filename) as f:
-            for dataset in hist.axes["dataset"]:
-                denom = hist[dataset, :].values().copy()
+            for dataset in datasets:
+                axpos = sum if sum_datasets else dataset
+                denom = hist[{"dataset": axpos}].values().copy()
                 # Set bins that are zero in MC to 0 in data to get norm right
                 is_nonzero = denom != 0
                 # Avoid division by zero warning
@@ -109,22 +109,24 @@ class Processor(pepper.Processor):
     def save_output(self, output, dest):
         datahist, datahistup, datahistdown = self.load_input_hists()
 
-        mchist = output["hists"][("Before cuts", "pileup")]
+        mchist = None
+        for dataset, hists in output["hists"].items():
+            if mchist is None:
+                mchist = hists[("Before cuts", "pileup")].copy()
+            else:
+                mchist += hists[("Before cuts", "pileup")]
         # Set underflow and 0 pileup bin to 0, which might be != 0 only for
         # buggy reasons in MC
-        for idn in mchist.identifiers("dataset"):
-            mchist._sumw[(idn,)][:2] = 0
+        axidx = [ax.name for ax in mchist.axes].index(self.axisname)
+        slic = (slice(None),) * axidx + (slice(None, 2),)
+        mchist.view(flow=True)[slic].fill(0)
 
-        new_ds_axis = coffea.hist.Cat("dataset", "Dataset")
-        mchist_allds = mchist.group(
-            mchist.axis("dataset"), new_ds_axis,
-            {"all_datasets": [i.name for i in mchist.identifiers("dataset")]})
-        self._save_hists(
-            mchist_allds, datahist, datahistup, datahistdown,
-            os.path.join(dest, "pileup.root"))
         self._save_hists(
             mchist, datahist, datahistup, datahistdown,
-            os.path.join(dest, "pileup_perdataset.root"))
+            os.path.join(dest, "pileup.root"), True)
+        self._save_hists(
+            mchist, datahist, datahistup, datahistdown,
+            os.path.join(dest, "pileup_perdataset.root"), False)
 
 
 if __name__ == "__main__":
