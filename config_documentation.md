@@ -63,7 +63,7 @@ These determine various calibrations and weightings. In case they are optional a
 - `hists`: Path to a JSON file containing the histogram definitions as object. The keys decide the name of the histogram. For its elements, see the Histogram Definition subparagraph.
 - `cuts_to_histogram`: Optional, array of strings. If this is present, histograms will only be created for cuts whose names are in this array.
 - `datasets_to_group`: Optional, object of strings. If a data set name is present as a key inside this object, its value will be used as name instead inside the histograms.
-- `histogram_format`: Optional, either `"coffea"` or `"root"`. This decides the format which will be used for saving the histograms. Defaults to `"coffea"`.
+- `histogram_format`: Optional, either `"hist"`, `"coffea"` or `"root"`. This decides the format which will be used for saving the histograms. Defaults to `"hist"`.
 ### Histogram definition
 Elements of the `hists` object are objects themselves. They have these keys:
 - `bins`: Optional, array of objects, each defining a binned axis. The object keys and its values agree with the parameters of `coffea.hist.Bin`, except for the optional `"unit"` parameter. If `"unit"` is present, it should be a string to be automatically appended to the axis label to indicate the unit. It may also be used in the `label`.

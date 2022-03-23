@@ -136,7 +136,7 @@ class HistDefinition:
             if size is None:
                 size = len(data)
             elif size != len(data):
-                raise ValueError("Got inconsistant filling size ({size} and"
+                raise ValueError(f"Got inconsistant filling size ({size} and"
                                  f"{len(data)} for {key})")
             if mask is None:
                 mask = ak.Array(np.full(size, True))
@@ -157,27 +157,44 @@ class HistDefinition:
             if jagged_example is not None and data.ndim == 1:
                 data = ak.broadcast_arrays(data, jagged_example)[0]
             prepared[key] = np.asarray(ak.flatten(data[mask], axis=None))
+        # Workaround for boost histogram not adding category bin when no events
+        if len(next(iter(prepared))) == 0:
+            prepared = {key: np.nan for key in prepared.keys()}
+            prepared["weight"] = 0
         return prepared
 
-    def __call__(self, data, categorizations, dsname, is_mc, weight):
+    def create_hist(self, categorizations, has_systematic=False):
         axes = self.axes.copy()
         for cat in categorizations.keys():
             axes.append(coffea.hist.Cat(cat, cat))
-        categorizations = {name: {cat: [cat] for cat in cats}
-                           for name, cats in categorizations.items()}
-        categorizations.update(self.cat_fills)
+        if has_systematic:
+            axes.insert(0, coffea.hist.Cat("sys", "Systematic"))
         hist = coffea.hist.Hist(self.label, self.dataset_axis, *axes)
+        hist._init_sumw2()
+        return hist.to_hist()
+
+    def __call__(
+            self, data, categorizations, dsname, is_mc, weight):
+        has_systematic = self.weight is None and isinstance(weight, dict)
+        hist = self.create_hist(categorizations, has_systematic)
 
         fill_vals = {name: DataPicker(method)(data)
                      for name, method in self.bin_fills.items()}
-        if self.weight is not None:
-            fill_vals["weight"] = DataPicker(self.weight)(data)
-        elif weight is not None:
-            fill_vals["weight"] = weight
         if any(val is None for val in fill_vals.values()):
             none_keys = [k for k, v in fill_vals.items() if v is None]
             raise HistFillError(f"No fill for axes: {', '.join(none_keys)}")
 
+        if self.weight is not None:
+            weight = DataPicker(self.weight)(data)
+            if weight is None:
+                raise HistFillError(
+                    "Weight specified in hist config not available")
+        if not isinstance(weight, dict):
+            weight = {None: weight}
+
+        categorizations = {name: {cat: [cat] for cat in cats}
+                           for name, cats in categorizations.items()}
+        categorizations.update(self.cat_fills)
         cat_present = defaultdict(dict)
         for name, val in categorizations.items():
             for cat, method in val.items():
@@ -185,29 +202,35 @@ class HistDefinition:
         for name, val in cat_present.items():
             if any(mask is None for mask in val.values()):
                 cat_present[name] = {"All": np.full(len(data), True)}
-        if len(cat_present) == 0:
-            prepared = self._prepare_fills(fill_vals)
+        non_array_fills = {"dataset": dsname}
+        for weightname, w in weight.items():
+            if weightname is not None:
+                non_array_fills["sys"] = weightname
+            if w is not None:
+                fill_vals["weight"] = w
+            if len(cat_present) == 0:
+                prepared = self._prepare_fills(fill_vals)
 
-            if all(val is not None for val in prepared.values()):
-                hist.fill(dataset=dsname, **prepared)
-        else:
-            cat_combinations = None
-            for name, val in cat_present.items():
-                if cat_combinations is None:
-                    cat_combinations = {((name, cat), ): mask
-                                        for cat, mask in val.items()}
-                else:
-                    new_cc = {}
-                    for cat, mask in val.items():
-                        for key, _mask in cat_combinations.items():
-                            key += ((name, cat),)
-                            new_cc[key] = mask & _mask
-                    cat_combinations = new_cc
-            for combination, mask in cat_combinations.items():
-                prepared = self._prepare_fills(fill_vals, mask)
-                combination = {key: val for key, val in combination}
                 if all(val is not None for val in prepared.values()):
-                    hist.fill(dataset=dsname, **combination, **prepared)
+                    hist.fill(**non_array_fills, **prepared)
+            else:
+                cat_combinations = None
+                for name, val in cat_present.items():
+                    if cat_combinations is None:
+                        cat_combinations = {((name, cat), ): mask
+                                            for cat, mask in val.items()}
+                    else:
+                        new_cc = {}
+                        for cat, mask in val.items():
+                            for key, _mask in cat_combinations.items():
+                                key += ((name, cat),)
+                                new_cc[key] = mask & _mask
+                        cat_combinations = new_cc
+                for combination, mask in cat_combinations.items():
+                    prepared = self._prepare_fills(fill_vals, mask)
+                    combination = {key: val for key, val in combination}
+                    if all(val is not None for val in prepared.values()):
+                        hist.fill(**non_array_fills, **combination, **prepared)
 
         return hist
 

@@ -11,6 +11,9 @@ from time import time
 import abc
 import uuid
 from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor
+import concurrent.futures
+from tqdm import tqdm
 
 import pepper
 from pepper import Selector, OutputFiller, HDF5File
@@ -87,7 +90,8 @@ class Processor(coffea.processor.ProcessorABC):
     def preprocess(self, datasets):
         return datasets
 
-    def postprocess(self, accumulator):
+    @staticmethod
+    def postprocess(accumulator):
         return accumulator
 
     def _open_output(self, dsname, filetype):
@@ -230,27 +234,6 @@ class Processor(coffea.processor.ProcessorABC):
         meta = data.metadata
         return meta["filename"], meta["entrystart"], meta["entrystop"]
 
-    def _get_copy_nominal(self):
-        # Construct a dict of datasets for which we are not processing the
-        # relevant dedicated systematic datasets, and so the nominal histograms
-        # need to be copied
-        copy_nominal = {}
-        for sysdataset, syst in self.config["dataset_for_systematics"].items():
-            replaced, sysname = syst
-            if sysname not in copy_nominal:
-                copy_nominal[sysname] = []
-                # Copy all normal mc datasets
-                for dataset in self.config["mc_datasets"].keys():
-                    if dataset in self.config["dataset_for_systematics"]:
-                        continue
-                    copy_nominal[sysname].append(dataset)
-            try:
-                # Remove the ones that get replaced by a dedicated dataset
-                copy_nominal[sysname].remove(replaced)
-            except ValueError:
-                pass
-        return copy_nominal
-
     def process(self, data):
         starttime = time()
         dsname = data.metadata["dataset"]
@@ -295,8 +278,7 @@ class Processor(coffea.processor.ProcessorABC):
             self.config, "hists", "hists_to_do")
         filler = OutputFiller(
             hists, is_mc, dsname, dsname_in_hist, sys_enabled,
-            sys_overwrite=sys_overwrite, copy_nominal=self._get_copy_nominal(),
-            cuts_to_histogram=cuts_to_histogram)
+            sys_overwrite=sys_overwrite, cuts_to_histogram=cuts_to_histogram)
 
         return filler
 
@@ -366,6 +348,105 @@ class Processor(coffea.processor.ProcessorABC):
                     output[dataset]["all"][cut] += value
         return output
 
+    @staticmethod
+    def _save_hist_hists(key, histdict, dest, cuts):
+        hist_sum = None
+        for dataset, hist in histdict.items():
+            if hist_sum is None:
+                hist_sum = hist.copy()
+            else:
+                hist_sum += hist
+        cutnum = cuts.index(key[0])
+        fname = "Cut {:03} {}.coffea".format(cutnum, "_".join(key))
+        fname = fname.replace("/", "")
+        coffea.util.save(hist_sum, os.path.join(dest, fname))
+        return {key: fname}
+
+    @staticmethod
+    def _save_coffea_hists(key, histdict, dest, cuts):
+        hists = {}
+        for dataset, hist in histdict.items():
+            if "sys" in [ax.name for ax in hist.axes]:
+                for sysname in hist.axes["sys"]:
+                    cofhist = pepper.misc.hist2coffeahist(
+                        hist[{"sys": sysname}])
+                    new_key = key if sysname == "nominal" else key + (sysname,)
+                    if new_key in hists:
+                        hists[new_key].add(cofhist)
+                    else:
+                        hists[new_key] = cofhist
+            else:
+                cofhist = pepper.misc.hist2coffeahist(hist)
+                if key in hists:
+                    hists[key].add(cofhist)
+                else:
+                    hists[key] = cofhist
+        cutnum = cuts.index(key[0])
+        fnames = {}
+        for new_key, hist in hists.items():
+            fname = "Cut {:03} {}.coffea".format(cutnum, "_".join(new_key))
+            fname = fname.replace("/", "")
+            coffea.util.save(hist, os.path.join(dest, fname))
+            fnames[new_key] = fname
+        return fnames
+
+    @staticmethod
+    def _save_root_hists(key, histdict, dest):
+        fnames = {}
+        for dataset, hist in histdict.items():
+            if "sys" in [ax.name for ax in hist.axes]:
+                sysnames = hist.axes["sys"]
+            else:
+                sysnames = [None]
+            for sysname in sysnames:
+                if sysname is not None:
+                    histsys = hist[{"sys": sysname}]
+                else:
+                    histsys = hist
+                histsplits = pepper.misc.hist_split_strcat(histsys)
+                if sysname is None or sysname == "nominal":
+                    fullkey = key
+                else:
+                    fullkey = key + (sysname,)
+                fname = '_'.join(fullkey).replace('/', '_') + ".root"
+                with uproot.recreate(os.path.join(dest, fname)) as f:
+                    for catkey, histsplit in histsplits.items():
+                        catkey = (dataset,) + catkey
+                        catkey = "_".join(catkey).replace("/", "_")
+                        f[catkey] = histsplit
+                fnames[fullkey] = fname
+        return fnames
+
+    @classmethod
+    def save_histograms(cls, format, output, dest, threads=10):
+        cuts = cls._get_cuts(output)
+        hists = defaultdict(dict)
+        for dataset, hists_per_ds in output["hists"].items():
+            for key, hist in hists_per_ds.items():
+                hists[key][dataset] = hist
+        with ProcessPoolExecutor(max_workers=threads) as executor:
+            futures = []
+            if format == "hist":
+                for key, histdict in hists.items():
+                    futures.append(executor.submit(
+                        cls._save_hist_hists, key, histdict, dest, cuts))
+            elif format == "coffea":
+                for key, histdict in hists.items():
+                    futures.append(executor.submit(
+                        cls._save_coffea_hists, key, histdict, dest, cuts))
+            elif format == "root":
+                for key, histdict in hists.items():
+                    futures.append(executor.submit(
+                        cls._save_root_hists, key, histdict, dest))
+
+            hist_names = {}
+            for future in tqdm(concurrent.futures.as_completed(futures),
+                               desc="Saving histograms", total=len(futures)):
+                hist_names.update(future.result())
+        with open(os.path.join(dest, "hists.json"), "w") as f:
+            json.dump([[tuple(k) for k in hist_names.keys()],
+                       list(hist_names.values())], f, indent=4)
+
     def save_output(self, output, dest):
         # Save cutflows
         with open(os.path.join(dest, "cutflows.json"), "w") as f:
@@ -374,48 +455,11 @@ class Processor(coffea.processor.ProcessorABC):
         if "histogram_format" in self.config:
             hform = self.config["histogram_format"].lower()
         else:
-            hform = "coffea"
-        if hform not in ["coffea", "root"]:
+            hform = "hist"
+        if hform not in ["coffea", "root", "hist"]:
             logger.warning(
-                f"Invalid histogram format: {hform}. Saving as coffea")
-            hform = "coffea"
-
-        hists = output["hists"]
-        os.makedirs(os.path.join(dest, "hists"), exist_ok=True)
-        if hform == "coffea":
-            # Save histograms with a hist.json describing the hist files
-            jsonname = "hists.json"
-            hists_forjson = {}
-            cuts = self._get_cuts(output)
-            for key, hist in hists.items():
-                if hist.values() == {}:
-                    continue
-                cutnum = cuts.index(key[0])
-                fname = "Cut {:03} {}.coffea".format(cutnum, "_".join(key))
-                fname = fname.replace("/", "")
-                coffea.util.save(hist, os.path.join(dest, "hists", fname))
-                hists_forjson[key] = fname
-            with open(os.path.join(dest, "hists", jsonname), "a+") as f:
-                try:
-                    hists_injson = {tuple(k): v for k, v in zip(*json.load(f))}
-                except json.decoder.JSONDecodeError:
-                    hists_injson = {}
-            hists_injson.update(hists_forjson)
-            with open(os.path.join(dest, "hists", jsonname), "w") as f:
-                json.dump([[tuple(k) for k in hists_injson.keys()],
-                           list(hists_injson.values())], f, indent=4)
-        elif hform == "root":
-            for cut, hist in output["hists"].items():
-                fname = '_'.join(cut).replace('/', '_') + ".root"
-                with uproot.recreate(os.path.join(dest, "hists", fname)) as f:
-                    for key in hist.values().keys():
-                        hist_integrated = hist
-                        for sparse_axis, keypart in zip(hist.sparse_axes(),
-                                                        key):
-                            hist_integrated = hist_integrated.integrate(
-                                sparse_axis, keypart)
-                        if len(key) == 0:
-                            key = "hist"
-                        else:
-                            key = "_".join(key).replace("/", "_")
-                        f[key] = hist_integrated.to_hist()
+                f"Invalid histogram format: {hform}. Saving as hist")
+            hform = "hist"
+        hist_dest = os.path.join(dest, "hists")
+        os.makedirs(hist_dest, exist_ok=True)
+        self.save_histograms(hform, output, hist_dest)

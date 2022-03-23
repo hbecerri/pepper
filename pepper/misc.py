@@ -5,6 +5,7 @@ import gc
 import json
 from collections import namedtuple
 from collections.abc import Mapping
+from itertools import product
 from functools import wraps, partial
 from concurrent.futures import ThreadPoolExecutor
 import warnings
@@ -83,6 +84,18 @@ def get_event_files(eventdir, eventext, datasets):
     return out
 
 
+def hist_split_strcat(hist):
+    ret = {}
+    cats = {}
+    for ax in hist.axes:
+        if isinstance(ax, hi.axis.StrCategory):
+            cats[ax.name] = tuple(ax)
+    for idx in product(*cats.values()):
+        hist_idx = {ax: pos for ax, pos in zip(cats.keys(), idx)}
+        ret[idx] = hist[hist_idx]
+    return ret
+
+
 def coffeahist2hist(hist):
     warnings.warn(
         "coffeahist2hist is deprecated, use coffea.hist.Hist.to_hist instead",
@@ -94,7 +107,7 @@ def coffeahist2hist(hist):
         if isinstance(axis, coffea.hist.Cat):
             identifiers = [idn.name for idn in axis.identifiers()]
             axes.append(hi.axis.StrCategory(identifiers, name=axis.name,
-                                            label=axis.label))
+                                            label=axis.label, growth=True))
             cat_pos.append(i)
         elif isinstance(axis, coffea.hist.Bin):
             edges = axis.edges()
@@ -124,6 +137,44 @@ def coffeahist2hist(hist):
         sumw2 = sumw2[(np.s_[:-1],) * sumw2.ndim]
 
         ret[tuple(idx)] = np.stack([sumw, sumw2], axis=-1)
+    return ret
+
+
+def hist2coffeahist(hist, strip=False):
+    """Converts a hist.Hist to a coffea.hist.Hist.
+    For backwards compatibility with old scripts using coffea histograms
+    """
+    axes = []
+    cats = {}
+    for axis in hist.axes:
+        if isinstance(axis, hi.axis.StrCategory):
+            cofaxis = coffea.hist.Cat(axis.name, axis.label)
+            for cat in axis:
+                # Add all identifiers to the coffea axis
+                cofaxis.index(cat)
+            axes.append(cofaxis)
+            cats[axis.name] = tuple(axis)
+        elif isinstance(axis, hi.axis.Regular):
+            axes.append(coffea.hist.Bin(axis.name, axis.label,
+                                        axis.size, axis[0][0], axis[-1][-1]))
+        elif isinstance(axis, hi.axis.Variable):
+            axes.append(coffea.hist.Bin(axis.name, axis.label, axis.edges))
+    ret = coffea.hist.Hist(hist.label, *axes)
+    if hist.variances() is not None:
+        ret._init_sumw2()
+
+    pad_slice = (slice(1, None),) * (hist.ndim - len(cats))
+    for sparse_idx in product(*cats.values()):
+        cof_idx = tuple(coffea.hist.StringBin(i) for i in sparse_idx)
+        hist_idx = {ax: pos for ax, pos in zip(cats.keys(), sparse_idx)}
+        values = hist[hist_idx].values(flow=True)
+        variances = hist[hist_idx].variances(flow=True)
+        if strip and np.all(values == 0) and (
+                variances is None or np.all(variances == 0)):
+            continue
+        ret._sumw[cof_idx] = np.pad(values, 1)[pad_slice]
+        if variances is not None:
+            ret._sumw2[cof_idx] = np.pad(variances, 1)[pad_slice]
     return ret
 
 

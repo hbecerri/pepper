@@ -22,8 +22,7 @@ class DummyOutputFiller:
 
 class OutputFiller:
     def __init__(self, hist_dict, is_mc, dsname, dsname_in_hist, sys_enabled,
-                 sys_overwrite=None, copy_nominal=None,
-                 cuts_to_histogram=None):
+                 sys_overwrite=None, cuts_to_histogram=None):
         self.output = {
             "hists": {},
             # Cutflows should keep order of cuts. Due to how Coffea accumulates
@@ -40,10 +39,7 @@ class OutputFiller:
         self.sys_enabled = sys_enabled
         self.sys_overwrite = sys_overwrite
         self.cuts_to_histogram = cuts_to_histogram
-        if copy_nominal is None:
-            self.copy_nominal = {}
-        else:
-            self.copy_nominal = copy_nominal
+        self.done_hists = set()
 
     def fill_cutflows(self, data, systematics, cut, done_steps, cats):
         if self.sys_overwrite is not None:
@@ -83,60 +79,71 @@ class OutputFiller:
                         f"({num_rows} rows, {num_masked} masked)")
         accumulator[self.dsname][cut] = hist
 
+    def _add_hist(self, cut, histname, sysname, dsname, hist):
+        acc = self.output["hists"]
+        # Split histograms by data set name. Summing histograms of the same
+        # data set is generally much faster than summing across data sets
+        # because normally the category axes for one data set are always
+        # the same. Thus not summing across data sets will increase speed
+        # significantly.
+        if dsname not in acc:
+            acc[dsname] = {}
+        if (cut, histname) in acc[dsname]:
+            acc[dsname][(cut, histname)] += hist
+        else:
+            acc[dsname][(cut, histname)] = hist
+        self.done_hists.add((cut, histname, sysname))
+
     def fill_hists(self, data, systematics, cut, done_steps, cats):
         if self.cuts_to_histogram is not None:
             if cut not in self.cuts_to_histogram:
                 return
-        accumulator = self.output["hists"]
         do_systematics = self.sys_enabled and systematics is not None
-        if systematics is not None:
+        if do_systematics and self.sys_overwrite is None:
+            weight = {}
+            for syscol in ak.fields(systematics):
+                if syscol == "weight":
+                    sysname = "nominal"
+                    sysweight = systematics["weight"]
+                else:
+                    sysname = syscol
+                    sysweight = systematics["weight"] * systematics[syscol]
+                weight[sysname] = sysweight
+        elif systematics is not None:
             weight = systematics["weight"]
+        elif self.sys_enabled:
+            weight = {"nominal": None}
         else:
             weight = None
         for histname, fill_func in self.hist_dict.items():
             if (fill_func.step_requirement is not None
                     and fill_func.step_requirement not in done_steps):
                 continue
-            if self.sys_overwrite is not None:
-                sysname = self.sys_overwrite
-                # But only if we want to compute systematics
-                if do_systematics:
-                    if (cut, histname, sysname) in accumulator:
-                        continue
-                    try:
+            try:
+                if self.sys_overwrite is not None:
+                    sysname = self.sys_overwrite
+                    # But only if we want to compute systematics
+                    if do_systematics:
+                        if (cut, histname, sysname) in self.done_hists:
+                            continue
+
                         sys_hist = fill_func(
                             data=data, categorizations=cats,
                             dsname=self.dsname_in_hist, is_mc=self.is_mc,
-                            weight=weight)
-                    except pepper.hist_defns.HistFillError:
+                            weight={sysname: weight})
+                        self._add_hist(cut, histname, sysname, self.dsname,
+                                       sys_hist)
+                else:
+                    if (cut, histname, None) in self.done_hists:
                         continue
-                    accumulator[(cut, histname, sysname)] = sys_hist
-            else:
-                if (cut, histname) in accumulator:
-                    continue
-                try:
-                    accumulator[(cut, histname)] = fill_func(
+                    hist = fill_func(
                         data=data, categorizations=cats,
                         dsname=self.dsname_in_hist, is_mc=self.is_mc,
                         weight=weight)
-                except pepper.hist_defns.HistFillError:
-                    continue
-
-                if do_systematics:
-                    for syscol in ak.fields(systematics):
-                        if syscol == "weight":
-                            continue
-                        sysweight = weight * systematics[syscol]
-                        hist = fill_func(
-                            data=data, categorizations=cats,
-                            dsname=self.dsname_in_hist, is_mc=self.is_mc,
-                            weight=sysweight)
-                        accumulator[(cut, histname, syscol)] = hist
-                    for sys, affected_datasets in self.copy_nominal.items():
-                        if self.dsname not in affected_datasets:
-                            continue
-                        accumulator[(cut, histname, sys)] =\
-                            accumulator[(cut, histname)].copy()
+                    self._add_hist(cut, histname, None, self.dsname, hist)
+            except pepper.hist_defns.HistFillError:
+                # Ignore if fill is missing in data
+                continue
 
     def get_callbacks(self):
         return [self.fill_cutflows, self.fill_hists]
