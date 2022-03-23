@@ -35,7 +35,7 @@ def calculate_sf(data_hist, mc_hist):
 
 parser = ArgumentParser(
     description="Calculate SFs for ttbar dileptonic triggers using the output "
-    "of produce_triggerSF_numbers.py by cross-trigger method. Systematic "
+    "of ttbarll_trigger_sf_produce.py by cross-trigger method. Systematic "
     "uncertainties are implemented following AN2019_008 (ttH trigger SFs)")
 parser.add_argument("config", help="Json configuration file containing names "
                     "of MET trigger datasets")

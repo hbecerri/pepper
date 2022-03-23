@@ -168,11 +168,11 @@ class SFEquations():
 
 parser = argparse.ArgumentParser(
     description="Calculate DY scale factors from DY yields produced by "
-    "produce_DY_numbers.py. (Currently only works for 1d histograms)")
+    "ttbarll_dy_sf_produce.py. (Currently only works for 1d histograms)")
 parser.add_argument("config", help="JSON configuration file (same as used "
-                    "by produce_DY_numbers.py)")
+                    "by ttbarll_dy_sf_produce.py)")
 parser.add_argument(
-    "hist", help="Path to a histogram filled by produce_DY_numbers.py, "
+    "hist", help="Path to a histogram filled by ttbarll_dy_sf_produce.py, "
     "containing the cutflows for this calculation, e.g. after the jet cut")
 parser.add_argument("output", help="Path to the output file")
 parser.add_argument(

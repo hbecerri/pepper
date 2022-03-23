@@ -9,4 +9,4 @@ if __name__ == "__main__":
         "Select events from nanoAODs using the TTbarLL processor."
         "This will save cutflows, histograms and, if wished, per-event data. "
         "Histograms are saved in a Coffea format and are ready to be plotted "
-        "by plot_control.py")
+        "by for example plot_control.py")
