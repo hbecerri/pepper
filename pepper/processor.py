@@ -411,7 +411,6 @@ class Processor(coffea.processor.ProcessorABC):
                 fname = '_'.join(fullkey).replace('/', '_') + ".root"
                 with uproot.recreate(os.path.join(dest, fname)) as f:
                     for catkey, histsplit in histsplits.items():
-                        catkey = (dataset,) + catkey
                         catkey = "_".join(catkey).replace("/", "_")
                         f[catkey] = histsplit
                 fnames[fullkey] = fname
