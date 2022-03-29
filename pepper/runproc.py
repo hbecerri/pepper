@@ -282,11 +282,11 @@ def run_processor(processor_class=None, description=None, mconly=False):
         pass
     userdata = executor.state["userdata"]
     if "chunksize" in userdata:
-        if userdata["chunksize"] != args.chunksize:
+        if (userdata["chunksize"] is not None
+                and userdata["chunksize"] != args.chunksize):
             sys.exit(
                 f"'{args.statedata}' got different chunksize: "
                 f"{userdata['chunksize']}. Delete it or change --chunksize")
-    userdata["chunksize"] = args.chunksize
 
     maxchunks = 1 if args.debug else None
     if args.chunksize is not None:
@@ -295,6 +295,7 @@ def run_processor(processor_class=None, description=None, mconly=False):
         chunksize = 10000
     else:
         chunksize = 500000
+    userdata["chunksize"] = args.chunksize
 
     runner = coffea.processor.Runner(
         executor, pre_executor, chunksize=chunksize, maxchunks=maxchunks,
