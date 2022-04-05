@@ -107,7 +107,8 @@ else:
     futures = set()
     for d in dirs:
         futures.add(process_dir(os.path.join(sample_dir, d), args.delete))
-    for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures)):
+    for future in tqdm(concurrent.futures.as_completed(futures),
+                       total=len(futures)):
         dir, result = future.result()
         results[dir] = result
 
