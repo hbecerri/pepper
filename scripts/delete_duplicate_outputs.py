@@ -4,6 +4,7 @@ from tqdm import tqdm
 
 import parsl
 from parsl import python_app
+import concurrent.futures
 
 import pepper
 
@@ -35,7 +36,7 @@ def process_dir(dir, delete=False):
                 os.rename(in_file, in_file + ".duplicate")
             duplicate_files.append(os.path.relpath(in_file, dir))
         processed_chunks.add(identifier)
-    return duplicate_files, corrupted_files
+    return dir, (duplicate_files, corrupted_files)
 
 
 parser = ArgumentParser(
@@ -91,7 +92,8 @@ dirs = next(os.walk(sample_dir))[1][args.offset:]
 results = {}
 if args.condor is None:
     for d in tqdm(dirs):
-        results[d] = process_dir(os.path.join(sample_dir, d), args.delete)
+        dir, result = process_dir(os.path.join(sample_dir, d), args.delete)
+        results[dir] = result
 else:
     process_dir = python_app(process_dir)
 
@@ -102,11 +104,12 @@ else:
         retries=args.retries)
     parsl.load(parsl_config)
 
-    futures = {}
+    futures = set()
     for d in dirs:
-        futures[d] = process_dir(os.path.join(sample_dir, d), args.delete)
-    for d, future in tqdm(futures.items()):
-        results[d] = future.result()
+        futures.add(process_dir(os.path.join(sample_dir, d), args.delete))
+    for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures)):
+        dir, result = future.result()
+        results[dir] = result
 
 print("Duplicate or corrupted files: ")
 have_moved = False
