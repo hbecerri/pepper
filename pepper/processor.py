@@ -393,6 +393,7 @@ class Processor(coffea.processor.ProcessorABC):
     @staticmethod
     def _save_root_hists(key, histdict, dest):
         fnames = {}
+        outputs = defaultdict(list)
         for dataset, hist in histdict.items():
             if "sys" in [ax.name for ax in hist.axes]:
                 sysnames = hist.axes["sys"]
@@ -403,17 +404,20 @@ class Processor(coffea.processor.ProcessorABC):
                     histsys = hist[{"sys": sysname}]
                 else:
                     histsys = hist
-                histsplits = pepper.misc.hist_split_strcat(histsys)
                 if sysname is None or sysname == "nominal":
                     fullkey = key
                 else:
                     fullkey = key + (sysname,)
                 fname = '_'.join(fullkey).replace('/', '_') + ".root"
-                with uproot.recreate(os.path.join(dest, fname)) as f:
-                    for catkey, histsplit in histsplits.items():
-                        catkey = "_".join(catkey).replace("/", "_")
-                        f[catkey] = histsplit
+                outputs[fname].append(histsys)
                 fnames[fullkey] = fname
+        for fname, contents in outputs.items():
+            with uproot.recreate(os.path.join(dest, fname)) as f:
+                for histsys in contents:
+                    histsplits = pepper.misc.hist_split_strcat(histsys)
+                    for catkey, hist in histsplits.items():
+                        catkey = "_".join(catkey).replace("/", "_")
+                        f[catkey] = hist
         return fnames
 
     @classmethod
