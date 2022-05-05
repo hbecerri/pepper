@@ -158,7 +158,7 @@ class HistDefinition:
                 data = ak.broadcast_arrays(data, jagged_example)[0]
             prepared[key] = np.asarray(ak.flatten(data[mask], axis=None))
         # Workaround for boost histogram not adding category bin when no events
-        if len(next(iter(prepared))) == 0:
+        if len(next(iter(prepared.values()))) == 0:
             prepared = {key: np.nan for key in prepared.keys()}
             prepared["weight"] = 0
         return prepared
