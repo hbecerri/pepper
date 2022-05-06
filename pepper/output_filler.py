@@ -89,7 +89,11 @@ class OutputFiller:
         if dsname not in acc:
             acc[dsname] = {}
         if (cut, histname) in acc[dsname]:
-            acc[dsname][(cut, histname)] += hist
+            try:
+                acc[dsname][(cut, histname)] += hist
+            except ValueError:
+                logger.debug(f"Not adding sys {sysname} to hist {histname}"
+                             f" for cut {cut} due to incompatible axes")
         else:
             acc[dsname][(cut, histname)] = hist
         self.done_hists.add((cut, histname, sysname))
