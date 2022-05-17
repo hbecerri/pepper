@@ -99,7 +99,7 @@ class ResumableExecutor(abc.ABC, coffea.processor.executor.ExecutorBase):
                 and self.remove_state_at_end
                 and os.path.exists(self.state_file_name)):
             os.remove(self.state_file_name)
-        return res
+        return res, 0
 
     def _track_done_items(self, gen):
         for item, result in gen:
