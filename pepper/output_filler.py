@@ -91,9 +91,14 @@ class OutputFiller:
         if (cut, histname) in acc[dsname]:
             try:
                 acc[dsname][(cut, histname)] += hist
-            except ValueError:
-                logger.debug(f"Not adding sys {sysname} to hist {histname}"
-                             f" for cut {cut} due to incompatible axes")
+            except ValueError as err:
+                raise ValueError(
+                    f"Error adding sys {sysname} to hist {histname} for cut"
+                    f" {cut} due to incompatible axes. This most likely"
+                    f" caused by setting a new column after setting a new "
+                    f" channel and a new systematic, consider setting "
+                    f"'no_callback=True' on all new columns set before the"
+                    f" next cut") from err
         else:
             acc[dsname][(cut, histname)] = hist
         self.done_hists.add((cut, histname, sysname))
