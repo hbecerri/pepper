@@ -179,13 +179,12 @@ class ProcessorBasicPhysics(pepper.Processor):
         for LHA_ID, _type in self.config["pdf_types"].items():
             if LHA_ID in pdfs.__doc__:
                 pdf_type = _type.lower()
-        # Check if sample has alpha_s variations
-        # FIXME: might be that other PDF sets have a different length,
-        # but these are the most common.
+        # Check if sample has alpha_s variations - currently assuming number of
+        # regular variations is a multiple of 10
         if len(data) == 0:
             has_as_unc = False
         else:
-            has_as_unc = len(pdfs[0]) == 33 or len(pdfs[0]) == 103
+            has_as_unc = (len(pdfs[0]) % 10) > 1
             # Workaround for "order of scale and pdf weights not consistent"
             # See https://twiki.cern.ch/twiki/bin/view/CMS/MCKnownIssues
             if ak.mean(pdfs[0]) < 0.6:  # approximate, see if factor 2 needed
@@ -197,13 +196,38 @@ class ProcessorBasicPhysics(pepper.Processor):
             # Just output variations - user
             # will need to combine these for limit setting
             num_variation = len(pdfs[0]) + (n_offset or 0)
-            selector.set_systematic(
-                "PDF",
-                *[pdfs[:, i] for i in range(1, num_variation)],
-                scheme="numeric",
-            )
+            if pdf_type == "true_hessian" or pdf_type == "hessian":
+                # First element is central value - adjust all other
+                # elements relative to this
+                selector.set_systematic(
+                    "PDF", *[pdfs[:, i] - pdfs[:, 0] + 1
+                             for i in range(1, num_variation)],
+                    scheme="numeric")
+                if has_as_unc:
+                    selector.set_systematic(
+                        "PDFalphas",
+                        pdfs[:, -1] - pdfs[:, 0] + 1,
+                        pdfs[:, -2] - pdfs[:, 0] + 1)
+            elif pdf_type.startswith("mc"):
+                selector.set_systematic(
+                    "PDF",
+                    *[pdfs[:, i] for i in range(num_variation)],
+                    scheme="numeric")
+                if has_as_unc:
+                    selector.set_systematic(
+                        "PDFalphas", pdfs[:, -1], pdfs[:, -2])
+            elif pdf_type is None:
+                raise pepper.config.ConfigError(
+                    "PDF LHA Id not included in config. PDF docstring is: "
+                    + pdfs.__doc__)
+            else:
+                raise pepper.config.ConfigError(
+                    f"PDF type {pdf_type} not recognised. Valid options "
+                    "are 'True_Hessian', 'Hessian', 'MC' and 'MC_Gaussian'")
         else:
-            if pdf_type == "hessian":
+            if pdf_type == "true_hessian":
+                # Treatment of true hessian uncertainties, for e.g. CTEQ
+                # or HERA sets
                 eigen_vals = ak.to_numpy(pdfs[:, 1:n_offset])
                 eigen_vals = eigen_vals.reshape(
                     (eigen_vals.shape[0], eigen_vals.shape[1] // 2, 2))
@@ -215,21 +239,23 @@ class ProcessorBasicPhysics(pepper.Processor):
                 var_down = ak.max((central - eigen_vals), axis=2)
                 var_down = ak.where(var_down > 0, var_down, 0)
                 var_down = np.sqrt(ak.sum(var_down ** 2, axis=1))
-                selector.set_systematic("PDF", 1 + var_up, 1 - var_down)
+                unc = None
+            if pdf_type == "hessian":
+                # Treatment of pseudo hessian uncertainties, for e.g. NNPDF
+                # or pdf4LHC sets
+                eigen_vals = ak.to_numpy(pdfs[:, 1:n_offset])
+                variations = eigen_vals - pdfs[:, 0, None]
+                unc = np.sqrt(ak.sum(variations ** 2, axis=1))
             elif pdf_type == "mc":
                 # ak.sort produces an error here. Work-around:
                 variations = np.sort(ak.to_numpy(pdfs[:, 1:n_offset]))
                 nvar = ak.num(variations)[0]
-                tot_unc = (
-                    variations[:, int(round(0.841344746*nvar))]
-                    - variations[:, int(round(0.158655254*nvar))]) / 2
-                selector.set_systematic("PDF", 1 + tot_unc, 1 - tot_unc)
+                unc = (variations[:, int(round(0.841344746*nvar))]
+                       - variations[:, int(round(0.158655254*nvar))]) / 2
             elif pdf_type == "mc_gaussian":
                 mean = ak.mean(pdfs[:, 1:n_offset], axis=1)
-                tot_unc = np.sqrt((ak.sum(pdfs[:, 1:n_offset] - mean) ** 2)
-                                  / (ak.num(pdfs)[0]
-                                     - (3 if n_offset else 1)))
-                selector.set_systematic("PDF", 1 + tot_unc, 1 - tot_unc)
+                unc = np.sqrt((ak.sum(pdfs[:, 1:n_offset] - mean) ** 2)
+                              / (ak.num(pdfs)[0] - (3 if n_offset else 1)))
             elif pdf_type is None:
                 raise pepper.config.ConfigError(
                     "PDF LHA Id not included in config. PDF docstring is: "
@@ -237,11 +263,25 @@ class ProcessorBasicPhysics(pepper.Processor):
             else:
                 raise pepper.config.ConfigError(
                     f"PDF type {pdf_type} not recognised. Valid options "
-                    "are 'Hessian', 'MC' and 'MC_Gaussian'")
-        # Add PDF alpha_s uncertainties
-        if has_as_unc:
-            unc = (pdfs[:, -1] - pdfs[:, -2]) / 2
-            selector.set_systematic("PDFalphas", 1 + unc, 1 - unc)
+                    "are 'True_Hessian', 'Hessian', 'MC' and 'MC_Gaussian'")
+
+            # Add PDF alpha_s uncertainties
+            if has_as_unc:
+                if ("combine_alpha_s" in self.config and
+                        self.config["combine_alpha_s"]):
+                    alpha_s_unc = (pdfs[:, -1] - pdfs[:, -2]) / 2
+                    if unc is not None:
+                        unc = np.sqrt(unc ** 2 + alpha_s_unc ** 2)
+                    else:
+                        var_up = np.sqrt(var_up ** 2 + alpha_s_unc ** 2)
+                        var_down = np.sqrt(var_down ** 2 + alpha_s_unc ** 2)
+                else:
+                    selector.set_systematic(
+                        "PDFalphas", pdfs[:, -1], pdfs[:, -2])
+            if unc is not None:
+                selector.set_systematic("PDF", 1 + unc, 1 - unc)
+            else:
+                selector.set_systematic("PDF", 1 + var_up, 1 - var_down)
 
     def add_generator_uncertainies(self, dsname, selector):
         """Add MC generator uncertainties: ME, PS and PDF"""
