@@ -124,33 +124,39 @@ class ProcessorBasicPhysics(pepper.Processor):
         data = selector.data
         if dsname + "_LHEScaleSumw" in self.config["mc_lumifactors"]:
             norm = self.config["mc_lumifactors"][dsname + "_LHEScaleSumw"]
-            # Workaround for https://github.com/cms-nanoAOD/cmssw/issues/537
             if len(norm) == 44:
-                selector.set_systematic(
-                    "MEren",
-                    data["LHEScaleWeight"][:, 34] * norm[34],
-                    data["LHEScaleWeight"][:, 5] * norm[5])
-                selector.set_systematic(
-                    "MEfac",
-                    data["LHEScaleWeight"][:, 24] * norm[24],
-                    data["LHEScaleWeight"][:, 15] * norm[15])
+                # See https://github.com/cms-nanoAOD/cmssw/issues/537
+                idx = [34, 5, 24, 15]
+            elif len(norm) == 9:
+                # This appears to be the standard case for most data sets
+                idx = [7, 1, 5, 3]
+            elif len(norm) == 8:
+                # Same as length 9, just missing the nominal weight at index 4
+                idx = [6, 1, 4, 3]
             else:
-                selector.set_systematic(
-                    "MEren",
-                    data["LHEScaleWeight"][:, 7] * norm[7],
-                    data["LHEScaleWeight"][:, 1] * norm[1])
-                selector.set_systematic(
-                    "MEfac",
-                    data["LHEScaleWeight"][:, 5] * norm[5],
-                    data["LHEScaleWeight"][:, 3] * norm[3],
-                )
+                raise RuntimeError(
+                    "Unexpected length of the norm for LHEScaleWeight: "
+                    f"{len(norm)}")
+            selector.set_systematic(
+                "MEren",
+                data["LHEScaleWeight"][:, idx[0]] * abs(norm[idx[0]]),
+                data["LHEScaleWeight"][:, idx[1]] * abs(norm[idx[1]]))
+            selector.set_systematic(
+                "MEfac",
+                data["LHEScaleWeight"][:, idx[2]] * abs(norm[idx[2]]),
+                data["LHEScaleWeight"][:, idx[3]] * abs(norm[idx[3]]))
 
     def add_ps_uncertainties(self, selector, data):
         """Parton shower scale uncertainties"""
         psweight = data["PSWeight"]
-        if len(psweight) > 0 and ak.num(psweight)[0] != 1:
+        if len(psweight) == 0:
+            return
+        num_weights = ak.num(psweight)[0]
+        if num_weights == 1:
             # NanoAOD containts one 1.0 per event in PSWeight if there are no
             # PS weights available, otherwise all counts > 1.
+            return
+        if num_weights == 4:
             if self.config["year"].startswith("ul"):
                 # Workaround for PSWeight number changed their order in
                 # NanoAODv8, meaning non-UL is unaffected
@@ -163,6 +169,10 @@ class ProcessorBasicPhysics(pepper.Processor):
                     "PSisr", psweight[:, 2], psweight[:, 0])
                 selector.set_systematic(
                     "PSfsr", psweight[:, 3], psweight[:, 1])
+        else:
+            raise RuntimeError(
+                "Unexpected length of the PSWeight: "
+                f"{num_weights}")
 
     def add_pdf_uncertainties(self, selector, data):
         """Add PDF uncertainties, using the methods described here:
