@@ -144,6 +144,8 @@ def hist2coffeahist(hist, strip=False):
     """Converts a hist.Hist to a coffea.hist.Hist.
     For backwards compatibility with old scripts using coffea histograms
     """
+    import coffea.hist
+
     axes = []
     cats = {}
     for axis in hist.axes:
@@ -176,6 +178,25 @@ def hist2coffeahist(hist, strip=False):
         if variances is not None:
             ret._sumw2[cof_idx] = np.pad(variances, 1)[pad_slice]
     return ret
+
+
+def get_hist_cat_values(hist):
+    """Return a map from the different categories of a hist histogram
+    to the values (in the same way hist.values does for a coffea hist).
+    Will hopefully be superseded in the near future by a dedicated hist
+    function."""
+    axs = [ax for ax in hist.axes if isinstance(ax, hi.axis.StrCategory)]
+    if len(axs) == 0:
+        return {(): hist.values()}
+    cat_combs = None
+    for ax in axs:
+        if cat_combs is None:
+            cat_combs = [((ax.name, cat),) for cat in ax]
+        else:
+            cat_combs = [cc + ((ax.name, cat),)
+                         for cat in ax for cc in cat_combs]
+    return {tuple([c[1] for c in cc]): hist[{c[0]: c[1] for c in cc}].values()
+            for cc in cat_combs}
 
 
 def hist_divide(num, denom):

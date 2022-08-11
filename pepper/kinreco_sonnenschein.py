@@ -1,20 +1,12 @@
 import numpy as np
 import uproot
-import coffea
 import awkward as ak
 
 from pepper.misc import chunked_calls
 
 
 def _maybe_sample(s, size, rng):
-    if isinstance(s, coffea.hist.Hist):
-        if s.dim() != 1 or s.dense_dim() != 1:
-            raise ValueError("histogram has invalid dimensions")
-        values = s.values()[()]
-        centers = s.axes()[0].centers()
-        p = values / values.sum()
-        s = rng.choice(centers, size, p=p)
-    elif isinstance(s, uproot.model.Model) and s.classname.startswith("TH1"):
+    if isinstance(s, uproot.model.Model) and s.classname.startswith("TH1"):
         values, edges = s.to_numpy()
         centers = (edges[1:] + edges[:-1]) / 2
         p = values / values.sum()

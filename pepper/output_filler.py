@@ -1,7 +1,7 @@
 import logging
 import numpy as np
 import awkward as ak
-import coffea.hist
+import hist as hi
 from coffea.processor import dict_accumulator
 import itertools
 from collections import defaultdict
@@ -57,8 +57,9 @@ class OutputFiller:
         # Skip cats that are missing in data
         cats = {k: v for k, v in cats.items()
                 if all(field in data_fields for field in v)}
-        axes = [coffea.hist.Cat(cat, cat) for cat in cats.keys()]
-        hist = coffea.hist.Hist("Counts", *axes)
+        axes = [hi.axis.StrCategory([], name=cat, label=cat, growth=True)
+                for cat in cats.keys()]
+        hist = hi.Hist(hi.axis.Integer(0, 1), *axes, storage="Weight")
         if len(cats) > 0:
             for cat_position in itertools.product(*list(cats.values())):
                 masks = []
@@ -68,10 +69,10 @@ class OutputFiller:
                 count = ak.sum(weight[mask])
                 args = {name: pos
                         for name, pos in zip(cats.keys(), cat_position)}
-                hist.fill(**args, weight=count)
+                hist.fill(0, **args, weight=count)
         else:
-            hist.fill(weight=ak.sum(weight))
-        count = hist.project().values()[()]
+            hist.fill(0, weight=ak.sum(weight))
+        count = hist.values().sum()
         if logger.getEffectiveLevel() <= logging.INFO:
             num_rows = len(data)
             num_masked = ak.sum(ak.is_none(data))

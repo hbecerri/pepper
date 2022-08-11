@@ -196,9 +196,9 @@ class HighThroughputExecutor(parsl.executors.HighThroughputExecutor):
         job_id = self.provider.submit(launch_cmd, 1)
         executor_logger.debug("Launched block {}->{}".format(block_id, job_id))
         if not job_id:
-            raise(ScalingFailed(
+            raise ScalingFailed(
                 self.provider.label,
-                "Attempts to provision nodes via provider has failed"))
+                "Attempts to provision nodes via provider has failed")
         return job_id
 
     def _get_launch_command(self, block_id: str) -> str:
