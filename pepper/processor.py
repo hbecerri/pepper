@@ -330,13 +330,13 @@ class Processor(coffea.processor.ProcessorABC):
         return cuts
 
     @staticmethod
-    def _prepare_cutflows(output):
-        cutflows = output["cutflows"]
+    def _prepare_cutflows(proc_output):
+        cutflows = proc_output["cutflows"]
         output = {}
         for dataset, cf1 in cutflows.items():
             output[dataset] = {"all": defaultdict(float)}
             for cut, cf2 in cf1.items():
-                cf = cf2.values()
+                cf = pepper.misc.get_hist_cat_values(cf2)
                 for cat_position, value in cf.items():
                     output_for_cat = output[dataset]
                     for cat_coordinate in cat_position:
@@ -344,8 +344,8 @@ class Processor(coffea.processor.ProcessorABC):
                             output_for_cat[cat_coordinate] = {}
                         output_for_cat = output_for_cat[cat_coordinate]
                     if len(cat_position) > 0:
-                        output_for_cat[cut] = float(value)
-                    output[dataset]["all"][cut] += value
+                        output_for_cat[cut] = value.sum()
+                    output[dataset]["all"][cut] += value.sum()
         return output
 
     @staticmethod

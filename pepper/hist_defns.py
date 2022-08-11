@@ -1,4 +1,4 @@
-import coffea.hist
+import hist as hi
 import awkward as ak
 import numpy as np
 from collections import defaultdict
@@ -73,7 +73,8 @@ class HistFillError(ValueError):
 class HistDefinition:
     def __init__(self, config):
         self._label = config.get("label", None)
-        self.dataset_axis = coffea.hist.Cat("dataset", "Dataset name")
+        self.dataset_axis = hi.axis.StrCategory(
+            [], name="dataset", label="Dataset name", growth=True)
         bins = []
         if "bins" in config:
             for bin_config in config["bins"]:
@@ -81,11 +82,26 @@ class HistDefinition:
                 if unit is not None:
                     bin_config["label"] = \
                         bin_config.get("label", "") + f" ({unit})"
-                bin = coffea.hist.Bin(**bin_config)
+                if "lo" in bin_config:
+                    if (bin_config["n_or_arr"] ==
+                            bin_config["hi"] - bin_config["lo"]):
+                        bin_config.pop("n_or_arr")
+                        bin = hi.axis.Integer(bin_config.pop("lo"),
+                                              bin_config.pop("hi"),
+                                              **bin_config)
+                    else:
+                        bin = hi.axis.Regular(bin_config.pop("n_or_arr"),
+                                              bin_config.pop("lo"),
+                                              bin_config.pop("hi"),
+                                              **bin_config)
+                else:
+                    bin = hi.axis.Variable(bin_config.pop("n_or_arr"),
+                                           **bin_config)
                 bin.unit = unit
                 bins.append(bin)
         if "cats" in config:
-            cats = [coffea.hist.Cat(**kwargs) for kwargs in config["cats"]]
+            cats = [hi.axis.StrCategory([], growth=True, **kwargs)
+                    for kwargs in config["cats"]]
         else:
             cats = []
         self.axes = bins + cats
@@ -96,9 +112,9 @@ class HistDefinition:
         else:
             self.weight = None
         for axisname, method in config["fill"].items():
-            if axisname in bins:
+            if axisname in [b.name for b in bins]:
                 self.bin_fills[axisname] = method
-            elif axisname in cats:
+            elif axisname in [c.name for c in cats]:
                 self.cat_fills[axisname] = method
             else:
                 raise HistDefinitionError(
@@ -159,19 +175,21 @@ class HistDefinition:
             prepared[key] = np.asarray(ak.flatten(data[mask], axis=None))
         # Workaround for boost histogram not adding category bin when no events
         if len(next(iter(prepared.values()))) == 0:
-            prepared = {key: np.nan for key in prepared.keys()}
+            prepared = {key: 0 for key in prepared.keys()}
             prepared["weight"] = 0
         return prepared
 
     def create_hist(self, categorizations, has_systematic=False):
         axes = self.axes.copy()
         for cat in categorizations.keys():
-            axes.append(coffea.hist.Cat(cat, cat))
+            axes.append(
+                hi.axis.StrCategory([], name=cat, label=cat, growth=True))
         if has_systematic:
-            axes.insert(0, coffea.hist.Cat("sys", "Systematic"))
-        hist = coffea.hist.Hist(self.label, self.dataset_axis, *axes)
-        hist._init_sumw2()
-        return hist.to_hist()
+            axes.insert(0, hi.axis.StrCategory(
+                [], name="sys", label="Systematic", growth=True))
+        hist = hi.Hist(self.dataset_axis, *axes, storage="Weight")
+        hist.label = self.label
+        return hist
 
     def __call__(
             self, data, categorizations, dsname, is_mc, weight):
@@ -239,11 +257,13 @@ class HistDefinition:
         # Make this a property so that if the axes change, label is updated
         if self._label is not None:
             return self._label
-        bins = [ax for ax in self.axes if isinstance(ax, coffea.hist.Bin)]
-        if len(bins) == 1 and bins[0]._uniform:
+        bins = [ax for ax in self.axes if (isinstance(ax, hi.axis.Regular)
+                or isinstance(ax, hi.axis.Variable)
+                or isinstance(ax, hi.axis.Integer))]
+        if len(bins) == 1 and not isinstance(bins[0], hi.axis.Variable):
             # This is a 1d, fixed-bin-width histogram.
-            edges = bins[0].edges()
-            width = (edges[-1] - edges[0]) / (bins[0].size - 3)
+            edges = bins[0].edges
+            width = (edges[-1] - edges[0]) / bins[0].size
             unit = bins[0].unit
             if unit is None:
                 unit = "unit" if width == 1 else "units"
