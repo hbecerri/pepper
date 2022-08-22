@@ -55,7 +55,17 @@ class DYprocessor(pepper.ProcessorTTbarLL):
         return new_chs
 
     def btag_cut(self, is_mc, data):
-        return np.full(len(data), True)
+        if is_mc and (
+                "btag_sf" in self.config and len(self.config["btag_sf"]) != 0):
+            num_btagged = ak.sum(data["Jet"]["btagged"], axis=1)
+            accept = np.asarray(
+                num_btagged >= self.config["num_atleast_btagged"])
+            ret = np.full(len(data), 1, dtype=float)
+            weight, systematics = self.compute_weight_btag(data[accept])
+            ret[accept] *= np.asarray(weight)
+            return ret
+        else:
+            return np.full(len(data), True)
 
     def apply_dy_sfs(self, dsname, data):
         # Don't apply old DY SFs if these are still in config
