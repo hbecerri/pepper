@@ -2,7 +2,6 @@ import logging
 import numpy as np
 import awkward as ak
 import hist as hi
-from coffea.processor import dict_accumulator
 import itertools
 from collections import defaultdict
 
@@ -27,7 +26,7 @@ class OutputFiller:
             "hists": {},
             # Cutflows should keep order of cuts. Due to how Coffea accumulates
             # currently for this a dict_accumulator is needed.
-            "cutflows": defaultdict(dict_accumulator)
+            "cutflows": defaultdict(dict)
         }
         if hist_dict is None:
             self.hist_dict = {}
