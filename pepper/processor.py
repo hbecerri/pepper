@@ -2,7 +2,7 @@ import os
 import numpy as np
 import awkward as ak
 import uproot
-import coffea
+import coffea.processor
 from coffea.nanoevents import NanoAODSchema
 import h5py
 import json
