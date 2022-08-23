@@ -4,6 +4,8 @@ import awkward as ak
 import hist as hi
 import itertools
 from collections import defaultdict
+from collections.abc import MutableMapping
+import copy
 
 import pepper
 
@@ -19,14 +21,32 @@ class DummyOutputFiller:
         return []
 
 
+class AddableDict(dict):
+    # Workaround for Coffea shuffling dict keys when accumulating
+    def __add__(self, other):
+        if not isinstance(other, MutableMapping):
+            raise ValueError("Cannot add object of incompatible type to dict: "
+                             f"{type(other)}")
+        out = copy.copy(self)
+        out.clear()
+        lhs, rhs = set(self), set(other)
+        for key in self:
+            if key in rhs:
+                out[key] = self[key] + other[key]
+            else:
+                out[key] = copy.deepcopy(self[key])
+        for key in other:
+            if key not in lhs:
+                out[key] = copy.deepcopy(other[key])
+        return out
+
+
 class OutputFiller:
     def __init__(self, hist_dict, is_mc, dsname, dsname_in_hist, sys_enabled,
                  sys_overwrite=None, cuts_to_histogram=None):
         self.output = {
             "hists": {},
-            # Cutflows should keep order of cuts. Due to how Coffea accumulates
-            # currently for this a dict_accumulator is needed.
-            "cutflows": defaultdict(dict)
+            "cutflows": defaultdict(AddableDict)
         }
         if hist_dict is None:
             self.hist_dict = {}
