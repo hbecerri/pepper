@@ -319,7 +319,9 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
                   "--hb_period={heartbeat_period} "
                   "{address_probe_timeout_string} "
                   "--hb_threshold={heartbeat_threshold} "
-                  "--cpu-affinity {cpu_affinity} ")
+                  "--cpu-affinity {cpu_affinity} "
+                  "--available-accelerators {accelerators} "
+                  "--start-method {start_method}")
     parsl_executor = pepper.parsl_high_throughput.HighThroughputExecutor(
         label="HTCondor",
         launch_cmd=launch_cmd,

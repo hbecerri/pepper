@@ -138,8 +138,8 @@ class HighThroughputExecutor(parsl.executors.HighThroughputExecutor):
         self.interchange_result_port = None
         self.allow_scalein = allow_scalein
 
-    def _start_local_queue_process(self):
-        super()._start_local_queue_process()
+    def _start_local_interchange_process(self):
+        super()._start_local_interchange_process()
         self.interchange_task_port = self.worker_task_port
         self.interchange_result_port = self.worker_result_port
         self.worker_task_port = "{worker_task_port}"
