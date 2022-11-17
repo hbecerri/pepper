@@ -1056,16 +1056,32 @@ class ProcessorBasicPhysics(pepper.Processor):
         for i, weighter in enumerate(self.config["btag_sf"]):
             central = weighter(wp, flav, eta, pt, discr, "central", efficiency)
             if not never_sys and self.config["compute_systematics"]:
-                if ("split_btag_year_corr" in self.config and
+                if "btag_splitting_scheme" in self.config:
+                    scheme = self.config["btag_splitting_scheme"].lower()
+                elif ("split_btag_year_corr" in self.config and
                         self.config["split_btag_year_corr"]):
-                    unc_splits = {"corr": "_correlated",
-                                  "uncorr": "_uncorrelated"}
+                    scheme = "years"
                 else:
-                    unc_splits = {"": ""}
-                for name, split in unc_splits.items():
+                    scheme = None
+                if scheme is None:
+                    light_unc_splits = heavy_unc_splits = {"": ""}
+                elif scheme == "years":
+                    light_unc_splits = heavy_unc_splits = \
+                        {"corr": "_correlated", "uncorr": "_uncorrelated"}
+                elif scheme == "sources":
+                    heavy_unc_splits = {name: f"_{name}"
+                                        for name in weighter.sources}
+                    light_unc_splits = {"corr": "_correlated",
+                                        "uncorr": "_uncorrelated"}
+                else:
+                    raise ValueError(
+                        f"Invalid btag uncertainty scheme {scheme}")
+
+                for name, split in heavy_unc_splits.items():
                     systematics[f"btagsf{i}" + name] = self.compute_btag_sys(
                         central, "heavy up" + split, "heavy down" + split,
                         weighter, wp, flav, eta, pt, discr, efficiency)
+                for name, split in light_unc_splits.items():
                     systematics[f"btagsf{i}light" + name] = \
                         self.compute_btag_sys(
                             central, "light up" + split, "light down" + split,
