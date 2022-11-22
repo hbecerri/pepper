@@ -354,12 +354,13 @@ def sonnenschein(lep, antilep, b, antib, met, mwp=80.3, mwm=80.3, mt=172.5,
     # vectors with zeros if there is no solution
     sum_weights = ak.where(ak.num(weights) > 0, ak.sum(weights, axis=1), 1.)
     has_solution = ak.any(has_solution, axis=1, keepdims=True)
-    t = ak.with_name(
-        ak.sum(t * weights, axis=1, keepdims=True)[has_solution],
-        "LorentzVector") / sum_weights
-    at = ak.with_name(
-        ak.sum(at * weights, axis=1, keepdims=True)[has_solution],
-        "LorentzVector") / sum_weights
+
+    t = ak.zip(
+        {f: ak.sum(t[f] * weights, axis=1, keepdims=True) for f in t.fields},
+        with_name="LorentzVector")[has_solution] / sum_weights
+    at = ak.zip(
+        {f: ak.sum(at[f] * weights, axis=1, keepdims=True) for f in at.fields},
+        with_name="LorentzVector")[has_solution] / sum_weights
 
     # Top mass got changed by the averaging. Set to input mass again
     t["t"] = np.sqrt(mt ** 2 + t.rho2)
