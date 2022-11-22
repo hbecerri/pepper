@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Load LCG 100
+# Load LCG
 source /cvmfs/sft.cern.ch/lcg/views/setupViews.sh LCG_102 x86_64-centos7-gcc11-opt
 # Make sure python libs installed in the user directory are prefered over system-wide ones
 export PYTHONPATH=`python3 -c 'import site; print(site.getusersitepackages())'`:$PYTHONPATH
