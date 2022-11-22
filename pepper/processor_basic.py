@@ -1100,9 +1100,11 @@ class ProcessorBasicPhysics(pepper.Processor):
         elif dsname in self.config["dataset_for_systematics"]:
             name = self.config["dataset_for_systematics"][dsname][1]
             if name in available:
+                sys = systematics[name]
                 varied_sf = self.compute_weight_btag(data, name, True)
                 selector.set_systematic("weight", sys / central * varied_sf)
         elif variation.name in available:
+            sys = systematics[name]
             varied_sf = self.compute_weight_btag(data, variation.name, True)
             selector.set_systematic("weight", sys / central * varied_sf)
 
