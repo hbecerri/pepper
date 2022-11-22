@@ -5,23 +5,34 @@ from argparse import ArgumentParser
 import json
 from collections import defaultdict
 import awkward as ak
-import uproot
-from itertools import chain
 from tqdm import tqdm
+import parsl
+from parsl import python_app
+import concurrent.futures
 
 import pepper
 
 
-def update_counts(f, counts, process_name, geskey, lhesskey, lhepdfskey):
-    runs = f["Runs"]
-    gen_event_sumw = runs[geskey].array()[0]
-    lhe_scale_sumw = runs[lhesskey].array()[0]
-    has_lhe = len(lhe_scale_sumw) != 0
-    if has_lhe:
-        lhe_scale_sumw = lhe_scale_sumw * gen_event_sumw
-        if lhepdfskey is not None:
-            lhe_pdf_sumw = runs[lhepdfskey].array()[0] * gen_event_sumw
+def get_counts(path, geskey, lhesskey, lhepdfskey):
+    import awkward as ak
+    import uproot
+    with uproot.open(path) as f:
+        runs = f["Runs"]
+        gen_event_sumw = runs[geskey].array()[0]
+        lhe_scale_sumw = runs[lhesskey].array()[0]
+        lhe_pdf_sumw = ak.Array([])
+        has_lhe = len(lhe_scale_sumw) != 0
+        if has_lhe:
+            lhe_scale_sumw = lhe_scale_sumw * gen_event_sumw
+            if lhepdfskey is not None:
+                lhe_pdf_sumw = runs[lhepdfskey].array()[0] * gen_event_sumw
+    return path, gen_event_sumw, lhe_scale_sumw, lhe_pdf_sumw
 
+
+def add_counts(counts, datasets, lhepdfskey, result):
+    path, gen_event_sumw, lhe_scale_sumw, lhe_pdf_sumw = result
+    process_name = datasets[path]
+    has_lhe = len(lhe_scale_sumw) != 0
     counts[process_name] += gen_event_sumw
     if has_lhe:
         counts[process_name + "_LHEScaleSumw"] =\
@@ -29,7 +40,6 @@ def update_counts(f, counts, process_name, geskey, lhesskey, lhepdfskey):
         if lhepdfskey is not None:
             counts[process_name + "_LHEPdfSumw"] =\
                 counts[process_name + "_LHEPdfSumw"] + lhe_pdf_sumw
-    return counts
 
 
 parser = ArgumentParser(description="Compute factors from luminosity and "
@@ -46,7 +56,37 @@ parser.add_argument(
 parser.add_argument(
     "-p", "--pdfsumw", action="store_true", help="Add PdfSumw to the output "
     "file")
+parser.add_argument(
+    "-c", "--condor", type=int, metavar="simul_jobs",
+    help="Number of HTCondor jobs to launch")
+parser.add_argument(
+    "-r", "--retries", type=int, help="Number of times to retry if there is "
+    "exception in an HTCondor job. If not given, retry infinitely."
+)
+parser.add_argument(
+    "-i", "--condorinit",
+    help="Shell script that will be sourced by an HTCondor job after "
+    "starting. This can be used to setup environment variables, if using "
+    "for example CMSSW. If not provided, the local content of the "
+    "environment variable PEPPER_CONDOR_ENV will be used as path to the "
+    "script instead.")
+parser.add_argument(
+    "--condorsubmit",
+    help="Text file containing additional parameters to put into the "
+    "HTCondor job submission file that is used for condor_submit"
+)
 args = parser.parse_args()
+
+if args.condorinit is not None:
+    with open(args.condorinit) as f:
+        condorinit = f.read()
+else:
+    condorinit = None
+if args.condorsubmit is not None:
+    with open(args.condorsubmit) as f:
+        condorsubmit = f.read()
+else:
+    condorsubmit = None
 
 if args.skip and os.path.exists(args.out):
     with open(args.out) as f:
@@ -54,32 +94,47 @@ if args.skip and os.path.exists(args.out):
 else:
     factors = {}
 
+lhepdfskey = "LHEPdfSumw" if args.pdfsumw else None
+
 config = pepper.ConfigBasicPhysics(args.config)
 lumi = config["luminosity"]
 crosssections = config["crosssections"]
 store, datasets = config[["store", "mc_datasets"]]
 datasets = {k: v for k, v in datasets.items()
             if v is not None and k not in factors}
-datasets = pepper.datasets.expand_datasetdict(datasets, store)[0]
+procs, datasets = pepper.datasets.expand_datasetdict(datasets, store)
 if "dataset_for_systematics" in config:
     dsforsys = config["dataset_for_systematics"]
 else:
     dsforsys = {}
-counts = defaultdict(int)
-num_files = len(list(chain(*datasets.values())))
-i = 0
-for process_name, proc_datasets in tqdm(datasets.items(), desc="Total"):
+for process_name in procs.keys():
     if process_name not in crosssections and process_name not in dsforsys:
-        print(f"Could not find crosssection for {process_name}")
-        continue
-    for path in tqdm(proc_datasets, desc="Per dataset"):
-        with uproot.open(path) as f:
-            counts = update_counts(
-                f, counts, process_name, "genEventSumw", "LHEScaleSumw",
-                "LHEPdfSumw" if args.pdfsumw else None)
-        i += 1
-    print("\033[F\033[F")  # Workaround for tqdm adding a new line
-print("")
+        raise ValueError(f"Could not find crosssection for {process_name}")
+
+counts = defaultdict(int)
+
+if args.condor is None:
+    for filepath, process_name in tqdm(datasets.items()):
+        result = get_counts(filepath, "genEventSumw", "LHEScaleSumw",
+                            lhepdfskey)
+        add_counts(counts, datasets, lhepdfskey, result)
+else:
+    get_counts = python_app(get_counts)
+    parsl_config = pepper.misc.get_parsl_config(
+        args.condor,
+        condor_submit=condorsubmit,
+        condor_init=condorinit,
+        retries=args.retries)
+    parsl.load(parsl_config)
+
+    futures = set()
+    for filepath, process_name in datasets.items():
+        futures.add(get_counts(filepath, "genEventSumw", "LHEScaleSumw",
+                               lhepdfskey))
+    for future in tqdm(concurrent.futures.as_completed(futures),
+                       total=len(futures)):
+        add_counts(counts, datasets, lhepdfskey, future.result())
+
 for key in counts.keys():
     if key.endswith("_LHEScaleSumw") or key.endswith("_LHEPdfSumw"):
         dsname = key.rsplit("_", 1)[0]
