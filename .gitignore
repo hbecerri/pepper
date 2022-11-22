@@ -15,3 +15,6 @@ hists
 data
 
 *.buildconfig
+
+#pip:
+pepper.egg-info
