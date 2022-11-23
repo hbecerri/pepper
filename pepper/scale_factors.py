@@ -240,11 +240,6 @@ class BTagWeighter:
         else:
             raise TypeError(f"Expected str for method, got {method}")
 
-        if method == "fixedwp" and meastype == "iterativefit":
-            raise ValueError(
-                f"Meastype cannot be {meastype} when using fixedWP method"
-            )
-
         tagger = tagger.lower()
 
         if sf_filename.endswith(".csv"):
@@ -274,6 +269,13 @@ class BTagWeighter:
                     "iterativefit with json format is not implemented")
 
         self.method = method
+        if meastype == "mujets":
+            self.sources = ["jes", "pileup", "statistic", "type3"]
+        elif meastype == "comb":
+            self.sources = ["isr", "fsr", "hdamp", "jes", "jer", "pileup",
+                            "qcdscale", "statistic", "topmass", "type3"]
+        else:
+            self.sources = ["correlated", "uncorrelated"]
         self.wps = BTAG_WP_CUTS[tagger][year]
         self.ignore_missing = ignore_missing
 
@@ -355,23 +357,16 @@ class BTagWeighter:
             raise ValueError("Invalid value for wp. Expected 'loose', "
                              "'medium' or 'tight'")
         wp = wp.upper()
-        possible_variations = (
-            "central", "light up", "light down", "heavy up", "heavy down",
-            "light up_correlated", "light up_uncorrelated",
-            "light down_correlated", "light down_uncorrelated",
-            "heavy up_correlated", "heavy up_uncorrelated",
-            "heavy down_correlated", "heavy down_uncorrelated")
-        if variation not in possible_variations:
-            raise ValueError(
-                "variation must be one of: " + ", ".join(possible_variations))
         light_vari = "central"
         heavy_vari = "central"
         if variation != "central":
             vari_type, direction = variation.split(" ")
             if vari_type == "light":
                 light_vari = direction
-            else:
+            elif vari_type == "heavy":
                 heavy_vari = direction
+            else:
+                raise ValueError(f"Unknown variation type: {vari_type}")
         abseta = abs(eta)
         sf = onedimeval(evaluate_two_flavor, jf, abseta, pt)
 
