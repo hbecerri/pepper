@@ -31,7 +31,8 @@ To control which environment is employed on the HTCondor node, the parameter `--
 When running on HTCondor, the local process, that has started also the jobs, needs to be kept open until everything has finished. In order to not accidentally kill the process by an unstable connection or similar, it is recommended to run it inside a `byobu`, `tmux` or `screen` session, or to prepend the command `nohup`.
 
 ### XRootD usage
-Pepper is able to access data sets from remote servers using XRootD. You should specify `"file_mode": "local+xrootd"` and `"xrootddomain": "xrootd-cms.infn.it"` in your config to enable it. There are three requirements to get it working (also in conjunction with HTCondor):
+Pepper is able to access data sets from remote servers using XRootD. You should specify `"file_mode": "local+xrootd"` and `"xrootddomain": "xrootd-cms.infn.it"` in your config to enable it. There are four requirements to get it working (also in conjunction with HTCondor):
+ - xrootd must be installed. You can check with `python3 -m pip show xrootd`
  - The CMS Grid environment needs to be sourced (also inside the HTCondor job). This is done by the [example environment script](example/environment.sh).
  - The environment variable `X509_USER_PROXY` needs to be set to a file path accessible by Condor (/tmp/ is not). As above this is also needed inside the Condor job and is cone by the script.
  - A VOMS proxy needs to be created at the path pointed to by `X509_USER_PROXY`. To do this please once run: `voms-proxy-init --voms cms --out $X509_USER_PROXY`.
