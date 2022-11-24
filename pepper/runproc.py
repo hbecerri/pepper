@@ -160,9 +160,18 @@ def run_processor(processor_class=None, description=None, mconly=False):
         Processor = processor_class
 
     config = Processor.config_class(args.config)
-    store = config["store"]
-    if not os.path.exists(store):
+    store = config["store"] if "store" in config else None
+    if store is not None and not os.path.exists(store):
         raise pepper.config.ConfigError("store directory does not exist")
+
+    if "file_mode" in config and "xrootd" in config["file_mode"] and (
+            "X509_USER_PROXY" not in os.environ
+            or not os.path.exists(os.environ["X509_USER_PROXY"])):
+        raise RuntimeError(
+            "xrootd usage requested but environment variable "
+            "X509_USER_PROXY does not point to a proxy certificate. "
+            "Please set X509_USER_PROXY and run voms-proxy-init --voms "
+            "cms --out $X509_USER_PROXY")
 
     datasets = {}
     if args.file is None:
@@ -299,7 +308,8 @@ def run_processor(processor_class=None, description=None, mconly=False):
 
     runner = coffea.processor.Runner(
         executor, pre_executor, chunksize=chunksize, maxchunks=maxchunks,
-        align_clusters=not args.force_chunksize, schema=processor.schema_class)
+        align_clusters=not args.force_chunksize, schema=processor.schema_class,
+        xrootdtimeout=pepper.misc.XROOTDTIMEOUT)
     output = runner(datasets, "Events", processor)
     processor.save_output(output, args.output)
 

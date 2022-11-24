@@ -2,6 +2,8 @@
     "year": "2018",
     "datadir": "data/2018",
     "store": "/pnfs/desy.de/cms/tier2/store",
+    "file_mode": "local+xrootd",
+    "xrootddomain": "xrootd-cms.infn.it",
     "rng_seed_file": "$CONFDIR/seed.txt",
     "blinding_denom": null,
     "compute_systematics": false,
