@@ -16,6 +16,7 @@ import pepper
 def get_counts(path, geskey, lhesskey, lhepdfskey):
     import awkward as ak
     import uproot
+    import pepper
     with uproot.open(path, timeout=pepper.misc.XROOTDTIMEOUT) as f:
         runs = f["Runs"]
         gen_event_sumw = runs[geskey].array()[0]
