@@ -53,7 +53,7 @@ args = parser.parse_args()
 
 config = pepper.ConfigBasicPhysics(args.config)
 config["file_mode"] = "local"
-datasets = config.get_datasets(dstype="mc")
+datasets = config.get_datasets()
 paths = []
 for dsname, dspaths in datasets.items():
     paths.extend(dspaths)
