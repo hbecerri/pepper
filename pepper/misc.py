@@ -20,6 +20,9 @@ import parsl.addresses
 import pepper.parsl_high_throughput
 
 
+XROOTDTIMEOUT = 300  # 5 minutes, should be enough if one site isn't replying
+
+
 def normalize_trigger_path(path):
     # Remove HLT and L1 prefixes
     if path.startswith("HLT_"):

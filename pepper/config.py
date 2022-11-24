@@ -52,6 +52,7 @@ class Config(MutableMapping):
             "$STOREDIR": "store",
         }
         self.behaviors = {
+            "bad_file_paths": self._get_maybe_external,
             "hists": self._get_hists
         }
 
@@ -158,7 +159,8 @@ class Config(MutableMapping):
         state["_config_loaded"] = None
         return state
 
-    def get_datasets(self, include=None, exclude=None, dstype="any"):
+    def get_datasets(self, include=None, exclude=None, dstype="any",
+                     return_inverse=False):
         """Helper method to access mc_datasets and exp_datasets more easily.
 
         Arguments:
@@ -167,9 +169,11 @@ class Config(MutableMapping):
         dstype -- Either 'any', 'mc' or 'data'. 'mc' restrcits the result to be
                   from mc_datasets, while 'data' restricts to exp_datasets.
                   'any' does not impose restrictions.
+        return_inverse -- Additionally return a mapping of path to dataset name
 
         Returns a dict mapping dataset names to lists of full paths to the
-        dataset's files.
+        dataset's files. If return_inverse is true, also return the inverse
+        mapping.
         """
         if dstype not in ("any", "mc", "data"):
             raise ValueError("dstype must be either 'any', 'mc' or 'data'")
@@ -189,10 +193,21 @@ class Config(MutableMapping):
                     or (exclude is not None and dataset in exclude)):
                 del datasets[dataset]
         requested_datasets = datasets.keys()
-        datasets, paths2dsname =\
-            pepper.datasets.expand_datasetdict(datasets, self["store"])
+
+        mode = self["file_mode"] if "file_mode" in self else "local"
+        store = self["store"] if "store" in self else None
+        xrootddomain = self["xrootddomain"] if "xrootddomain" in self else None
+        skippaths = (set(self["bad_file_paths"]) if "bad_file_paths" in self
+                     else set())
+        logger.debug("Finding files for data sets")
+        datasets, paths2dsname = pepper.datasets.expand_datasetdict(
+            datasets, store=store, mode=mode, xrootddomain=xrootddomain,
+            skippaths=skippaths)
         missing_datasets = requested_datasets - datasets.keys()
         if len(missing_datasets) > 0:
             raise ConfigError("Could not find files for: "
                               + ", ".join(missing_datasets))
-        return datasets
+        if not return_inverse:
+            return datasets
+        else:
+            return datasets, paths2dsname

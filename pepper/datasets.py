@@ -4,13 +4,18 @@ import os
 from glob import glob
 import logging
 from collections import defaultdict
+import urllib.request
+import ssl
+import json
 
 
 logger = logging.getLogger(__name__)
+__cernrootcert = None
 
 
-def dataset_to_paths(dataset, store, ext=".root"):
-    """Get the paths of the files belonging to a dataset
+def dataset_to_lfn_local(dataset, store, ext=".root"):
+    """Get the logical file names of the files belonging to a dataset by
+    checking the directory contents of the path pointed to by `store`.
 
     Parameters:
     dataset -- name of the dataset
@@ -33,10 +38,118 @@ def dataset_to_paths(dataset, store, ext=".root"):
     else:
         raise ValueError("Unknown tier in dataset, must be NANOAOD, "
                          f"NANOAODSIM or USER: {dataset}")
-    return [os.path.normpath(p) for p in glob(pat)]
+    return set(["/store/" + os.path.relpath(p, store) for p in glob(pat)])
 
 
-def read_paths(source, store, ext=".root"):
+def lfn_to_local_path(lfn, store):
+    len_store = 7  # = len("/store/")
+    return os.path.normpath(os.path.join(store, lfn[len_store:]))
+
+
+def _get_cernca_rootcert():
+    global __cernrootcert
+    CERNCAPATH = "/cvmfs/grid.cern.ch/etc/grid-security/certificates"
+    CERNCAURL = ("https://cafiles.cern.ch/cafiles/certificates/CERN%20Root%20C"
+                 "ertification%20Authority%202.crt")
+
+    if os.path.exists(CERNCAPATH):
+        verify_locations = {"capath": CERNCAPATH}
+    else:
+        if __cernrootcert is None:
+            logger.debug("Downloading CERN Root Certification certificate")
+            with urllib.request.urlopen(CERNCAURL) as f:
+                dercert = f.read()
+            __cernrootcert = ssl.DER_cert_to_PEM_cert(dercert)
+        verify_locations = {"cadata": __cernrootcert}
+
+    return verify_locations
+
+
+def _get_cert_vomsproxy():
+    if "X509_USER_KEY" in os.environ and "X509_USER_CERT" in os.environ:
+        return {"certfile": os.environ["X509_USER_CERT"],
+                "keyfile": os.environ["X509_USER_KEY"]}
+    path = os.environ.get("X509_USER_PROXY", f"/tmp/x509up_u{os.getuid()}")
+    if not os.path.exists(path):
+        raise RuntimeError(
+            f"Could not find certificate file from VOMS proxy at '{path}'. "
+            "Did you run voms-proxy-init?")
+    return {"certfile": path}
+
+
+def dataset_to_lfn_dbs(dataset):
+    """Get the URLs of the files for a dataset for xrootd using DBS. Either
+    needs the environment variables X509_USER_KEY and X509_USER_CERT set to
+    user's grid certificate paths or have the VOMS proxy initialized. If the
+    proxy certificate file isn't at its usual location (/tmp/x509up_uNNN), it
+    can be set via the environment variable X509_USER_PROXY."""
+
+    DBSURL = "https://cmsweb.cern.ch/dbs/prod/global/DBSReader/files?dataset="
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.load_verify_locations(**_get_cernca_rootcert())
+    context.load_cert_chain(**_get_cert_vomsproxy())
+    with urllib.request.urlopen(DBSURL + dataset, context=context) as f:
+        dbs_reply = f.read()
+    dbs_files = json.loads(dbs_reply.decode())
+    return set([file["logical_file_name"] for file in dbs_files])
+
+
+def lfn_to_xrootd_path(lfn, xrootddomain):
+    return f"root://{xrootddomain}/" + lfn
+
+
+def dataset_to_paths(dataset, store=None, ext=".root", mode="local",
+                     xrootddomain=None, skippaths=set()):
+    """Get the path and URLs of the files belonging to a dataset.
+
+    Parameters:
+    dataset -- name of the dataset
+    store -- Path to the store directory, e.g. /pnfs/desy.de/cms/tier2/store/
+    ext -- File extension the files have
+    mode -- See expand_datasetdict
+    xrootddomain -- See expand_datasetdict
+    skippaths -- See expand_datasetdict
+
+    Returns a list of paths as strings
+    """
+    if mode == "local" or mode == "local+xrootd":
+        if store is None:
+            raise ValueError("Must provide store in local mode")
+        local_lfns = dataset_to_lfn_local(dataset, store, ext)
+    if mode == "xrootd" or mode == "local+xrootd":
+        if xrootddomain is None:
+            raise ValueError("Must prodive xrootddomain (also known as "
+                             "redirector) in xrootd mode")
+        dbs_lfns = dataset_to_lfn_dbs(dataset)
+    paths = []
+    if mode == "local":
+        for p in sorted(local_lfns):
+            path = lfn_to_local_path(p, store)
+            if path not in skippaths:
+                paths.append(path)
+    elif mode == "xrootd":
+        for p in sorted(dbs_lfns):
+            path = lfn_to_xrootd_path(p, xrootddomain)
+            if path not in skippaths:
+                paths.append(path)
+    elif mode == "local+xrootd":
+        paths = []
+        for lfn in sorted(dbs_lfns | local_lfns):
+            path = None
+            if lfn in local_lfns:
+                path = lfn_to_local_path(lfn, store)
+            if path is None or path in skippaths:
+                path = lfn_to_xrootd_path(lfn, xrootddomain)
+            if path not in skippaths:
+                paths.append(path)
+        return paths
+    else:
+        raise ValueError(f"Invalid mode {mode}")
+    return paths
+
+
+def read_paths(source, store=None, ext=".root", mode="local",
+               xrootddomain=None, skippaths=set()):
     """Get all paths to files of a dataset, which can be interpreted from a
     source
 
@@ -46,17 +159,22 @@ def read_paths(source, store, ext=".root"):
               it will be considered as a glob pattern.
     store -- Path to the store directory, e.g. /pnfs/desy.de/cms/tier2/store/
     ext -- File extension the files have
+    mode -- See expand_datasetdict
+    xrootddomain -- See expand_datasetdict
+    skippaths -- See expand_datasetdict
 
     Returns a list of paths as strings
     """
     paths = []
     if source.endswith(ext):
         paths = glob(source)
+        paths = [path for path in paths if path not in skippaths]
     elif (source.count("/") == 3
             and (source.endswith("NANOAOD")
                  or source.endswith("NANOAODSIM")
                  or source.endswith("USER"))):
-        paths.extend(dataset_to_paths(source, store, ext))
+        paths.extend(dataset_to_paths(
+            source, store, ext, mode, xrootddomain, skippaths))
     else:
         with open(source) as f:
             for line in f:
@@ -65,8 +183,11 @@ def read_paths(source, store, ext=".root"):
                     continue
                 if line.startswith(store):
                     paths_from_line = glob(line)
+                    paths = [path for path in paths_from_line
+                             if path not in skippaths]
                 else:
-                    paths_from_line = dataset_to_paths(line, store, ext)
+                    paths_from_line = dataset_to_paths(
+                        line, store, ext, mode, xrootddomain, skippaths)
                 num_files = len(paths_from_line)
                 if num_files == 0:
                     logger.warning("No files found for \"{}\"".format(line))
@@ -77,17 +198,28 @@ def read_paths(source, store, ext=".root"):
     return paths
 
 
-def expand_datasetdict(datasets, store, ignore_path=None, ext=".root"):
+def expand_datasetdict(datasets, store=None, ignore_path=None, ext=".root",
+                       mode="local", xrootddomain=None, skippaths=set()):
     """Interpred a dict of dataset names or paths
 
     Parameters:
     datasets -- A dict whose values are lists of glob patterns, dataset names
                 or files containing any of the afore mentioned
     store -- Path to the store directory, e.g. /pnfs/desy.de/cms/tier2/store/
-    ignore_path -- Callable of the form file path -> bool. If it evaluates to
-                   not True, the file path is skipped for the output. If None,
+    ignore_path -- Callable of the form file path -> bool. If it evaluates not
+                   to True, the file path is skipped for the output. If None,
                    no files are skipped
     ext -- File extension the files have
+    mode -- One of 'local', 'xrootd', 'local+xrootd'. If datasets contain
+            dataset names, this defines how to handle them. With 'local' they
+            will evaluate to local file paths. If 'xrootd' they will evaluate
+            to xrootd URLs. If 'local+xrootd' only files that are not present
+            locally are returned with an xrootd URL, otherwise local file paths
+            are returned.
+    xrootddomain -- Redirector for xrootd. Usually xrootd-cms.infn.it
+    skippaths -- Set of path that should be ignored. If mode is 'local+xrootd'
+                 and a local path is within the set, the xrootd path will be
+                 returned instead (if it exists).
 
     Returns a tuple of two dicts. The first one is a dict mapping the keys of
     `datasets` to lists of paths for the corresponding files. The second one is
@@ -97,7 +229,8 @@ def expand_datasetdict(datasets, store, ignore_path=None, ext=".root"):
     datasetpaths = defaultdict(list)
     for key in datasets.keys():
         paths = list(dict.fromkeys([
-            a for b in datasets[key] for a in read_paths(b, store, ext)]))
+            a for b in datasets[key] for a in read_paths(
+                b, store, ext, mode, xrootddomain, skippaths)]))
         if ignore_path:
             processed_paths = []
             for path in paths:

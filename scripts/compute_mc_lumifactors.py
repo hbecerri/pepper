@@ -16,7 +16,7 @@ import pepper
 def get_counts(path, geskey, lhesskey, lhepdfskey):
     import awkward as ak
     import uproot
-    with uproot.open(path) as f:
+    with uproot.open(path, timeout=pepper.misc.XROOTDTIMEOUT) as f:
         runs = f["Runs"]
         gen_event_sumw = runs[geskey].array()[0]
         lhe_scale_sumw = runs[lhesskey].array()[0]
@@ -99,10 +99,8 @@ lhepdfskey = "LHEPdfSumw" if args.pdfsumw else None
 config = pepper.ConfigBasicPhysics(args.config)
 lumi = config["luminosity"]
 crosssections = config["crosssections"]
-store, datasets = config[["store", "mc_datasets"]]
-datasets = {k: v for k, v in datasets.items()
-            if v is not None and k not in factors}
-procs, datasets = pepper.datasets.expand_datasetdict(datasets, store)
+procs, datasets = config.get_datasets(
+    dstype="mc", return_inverse=True, exclude=factors.keys())
 if "dataset_for_systematics" in config:
     dsforsys = config["dataset_for_systematics"]
 else:
