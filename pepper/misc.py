@@ -162,7 +162,8 @@ def hist2coffeahist(hist, strip=False):
         elif isinstance(axis, hi.axis.Regular):
             axes.append(coffea.hist.Bin(axis.name, axis.label,
                                         axis.size, axis[0][0], axis[-1][-1]))
-        elif isinstance(axis, hi.axis.Variable):
+        elif isinstance(axis, hi.axis.Variable) \
+                or isinstance(axis, hi.axis.Integer):
             axes.append(coffea.hist.Bin(axis.name, axis.label, axis.edges))
     ret = coffea.hist.Hist(hist.label, *axes)
     if hist.variances() is not None:
