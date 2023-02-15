@@ -711,7 +711,10 @@ class ProcessorBasicPhysics(pepper.Processor):
         if area is None:
             area = data["Jet"].area
         if rho is None:
-            rho = data["fixedGridRhoFastjetAll"]
+            if "Rho" in data.fields:
+                rho = data["Rho"]["fixedGridRhoFastjetAll"]
+            else:
+                rho = data["fixedGridRhoFastjetAll"]
         if raw_factor is None:
             raw_factor = 1 - data["Jet"]["rawFactor"]
         if is_mc:
@@ -770,10 +773,14 @@ class ProcessorBasicPhysics(pepper.Processor):
         counts = ak.num(pt)
         if ak.sum(counts) == 0:
             return ak.unflatten([], counts)
+        if "Rho" in data.fields:
+            rho = data["Rho"]["fixedGridRhoFastjetAll"]
+        else:
+            rho = data["fixedGridRhoFastjetAll"]
         jer = self.config["jet_resolution"].getResolution(
-            JetPt=pt, JetEta=eta, Rho=data["fixedGridRhoFastjetAll"])
+            JetPt=pt, JetEta=eta, Rho=rho)
         jersf = self.config["jet_ressf"].getScaleFactor(
-            JetPt=pt, JetEta=eta, Rho=data["fixedGridRhoFastjetAll"])
+            JetPt=pt, JetEta=eta, Rho=rho)
         jersmear = jer * rng.normal(size=len(jer))
         if variation == "central":
             jersf = jersf[:, :, 0]
