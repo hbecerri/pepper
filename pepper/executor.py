@@ -5,18 +5,30 @@ from typing import Optional
 from copy import deepcopy
 from functools import partial
 import time
+import logging
 import parsl
 from parsl.app.app import python_app
+import uproot
 from coffea.processor.parsl.timeout import timeout
 import coffea.processor
 import coffea.util
+from coffea.processor import set_accumulator
 from coffea.processor.executor import (
-    _compression_wrapper, _decompress, _futures_handler)
+    _compression_wrapper, _decompress, _futures_handler, UprootMissTreeError,
+    FileMeta)
 from coffea.processor.accumulator import (add as accum_add, iadd as accum_iadd)
+from coffea.processor import ProcessorABC
+from coffea.nanoevents import NanoEventsFactory
+import cloudpickle
+import uuid
+import lz4.frame as lz4f
 from tqdm import tqdm
+import pepper
 
 
-STATEFILE_VERSION = 2
+STATEFILE_VERSION = 3
+
+logger = logging.getLogger(__name__)
 
 
 class StateFileError(Exception):
@@ -196,3 +208,131 @@ class ParslExecutor(ResumableExecutor):
             gen.close()
 
         return accumulator
+
+
+class Runner(coffea.processor.Runner):
+    @staticmethod
+    def resolve_lfn(lfn, store, xrootddomain, skippaths):
+        if lfn.startswith("cmslfn://"):
+            filepaths = pepper.datasets.resolve_lfn(lfn, store, xrootddomain)
+        else:
+            filepaths = [lfn]
+        if skippaths is not None:
+            filepaths = [p for p in filepaths if p not in skippaths]
+
+        return filepaths
+
+    @staticmethod
+    def metadata_fetcher(xrootdtimeout, align_clusters, item):
+        filepaths = Runner.resolve_lfn(
+            item.filename, item.metadata["store_path"],
+            item.metadata["xrootddomain"], item.metadata["skippaths"])
+        for filepath in filepaths:
+            try:
+                with uproot.open(
+                        {filepath: None}, timeout=xrootdtimeout) as file:
+                    try:
+                        tree = file[item.treename]
+                    except uproot.exceptions.KeyInFileError as e:
+                        raise UprootMissTreeError(str(e)) from e
+
+                    metadata = {}
+                    if item.metadata:
+                        metadata.update(item.metadata)
+                    metadata.update({
+                        "numentries": tree.num_entries,
+                        "uuid": file.file.fUUID})
+                    if align_clusters:
+                        metadata["clusters"] = tree.common_entry_offsets()
+                    out = set_accumulator(
+                        [FileMeta(
+                            item.dataset, item.filename, item.treename,
+                            metadata)]
+                    )
+            except OSError as e:
+                logger.warning(
+                    "Got error while opening, continuing with alternative "
+                    f"file location: {e}")
+                continue
+            break
+        else:
+            raise OSError(
+                "None of the file paths found for the following file could be "
+                f"opened: {item.filename}")
+
+        return out
+
+    @staticmethod
+    def _work_function(
+        format,
+        xrootdtimeout,
+        mmap,
+        schema,
+        cache_function,
+        use_dataframes,
+        savemetrics,
+        item,
+        processor_instance,
+    ):
+        if not isinstance(processor_instance, ProcessorABC):
+            processor_instance = cloudpickle.loads(
+                lz4f.decompress(processor_instance))
+        # The ResumableExecutor might have loaded and old state, thus giving
+        # old metadata possibly before the user changed the config.
+        # Instead obtain the metadata from the processor_instance
+        metadata = processor_instance.pepperitemmetadata
+
+        filepaths = Runner.resolve_lfn(
+            item.filename, metadata["store_path"],
+            metadata["xrootddomain"], metadata["skippaths"])
+
+        for filepath in filepaths:
+            try:
+                filecontext = uproot.open(
+                    {filepath: None},
+                    timeout=xrootdtimeout,
+                    file_handler=uproot.MemmapSource
+                    if mmap
+                    else uproot.MultithreadedFileSource,
+                )
+            except OSError as e:
+                logger.warning(
+                    "Got error while opening, continuing with alternative "
+                    f"file location: {e}")
+                continue
+            break
+        else:
+            raise OSError(
+                "None of the file paths found for the following file could be "
+                f"opened: {item.filename}")
+
+        metadata = {
+            "dataset": item.dataset,
+            "filename": filepath,
+            "treename": item.treename,
+            "entrystart": item.entrystart,
+            "entrystop": item.entrystop,
+            "fileuuid": str(uuid.UUID(bytes=item.fileuuid))
+            if len(item.fileuuid) > 0
+            else "",
+        }
+        if item.usermeta is not None:
+            metadata.update(item.usermeta)
+
+        materialized = []
+        with filecontext as file:
+            factory = NanoEventsFactory.from_root(
+                file=file,
+                treepath=item.treename,
+                entry_start=item.entrystart,
+                entry_stop=item.entrystop,
+                persistent_cache=cache_function(),
+                schemaclass=schema,
+                metadata=metadata,
+                access_log=materialized,
+            )
+            events = factory.events()
+
+            out = processor_instance.process(events)
+
+        return {"out": out}

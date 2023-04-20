@@ -98,83 +98,83 @@ def lfn_to_xrootd_path(lfn, xrootddomain):
     return f"root://{xrootddomain}/" + lfn
 
 
-def dataset_to_paths(dataset, store=None, ext=".root", mode="local",
-                     xrootddomain=None, skippaths=set()):
-    """Get the path and URLs of the files belonging to a dataset.
+def resolve_lfn(lfn, store=None, xrootddomain=None):
+    """Get paths and URLs for a file given a specific logical file name (LFN).
+
+    Parameters:
+    lfn -- LFN of the file, normally starts with "/store/". This function
+           ccepts the additional prefix "cmslfn://store/".
+    store -- See expand_datasetdict
+    xrootddomain -- See expand_datasetdict
+
+    Returns a list of valid paths and URLs for the given LFN.
+    """
+    pfns = []
+    if lfn.startswith("cmslfn://"):
+        lfn = lfn.split("cmslfn:/", 1)[1]
+    if store is not None:
+        path = lfn_to_local_path(lfn, store)
+        if os.path.exists(path):
+            pfns.append(path)
+    if xrootddomain is not None:
+        import XRootD.client
+        # Same as xrdfs <xrootddomain> locate -h <lfn>
+        client = XRootD.client.FileSystem("root://" + xrootddomain)
+        # The flag PrefName (to get domain names instead of IP addresses) does
+        # not exist in the Python bidings. However, MAKEPATH has the same value
+        locations = client.locate(lfn, XRootD.client.flags.OpenFlags.MAKEPATH)
+        domains = [r.address for r in locations[1]]
+        pfns.extend(f"root://{d}/{lfn}" for d in domains)
+    return pfns
+
+
+def dataset_to_lfns(dataset, store=None, ext=".root", mode="local"):
+    """Get the logical file names (LFN) of the files belonging to a dataset.
 
     Parameters:
     dataset -- name of the dataset
-    store -- Path to the store directory, e.g. /pnfs/desy.de/cms/tier2/store/
-    ext -- File extension the files have
+    store -- See expand_datasetdict
+    ext -- See expand_datasetdict
     mode -- See expand_datasetdict
-    xrootddomain -- See expand_datasetdict
-    skippaths -- See expand_datasetdict
 
-    Returns a list of paths as strings
+    Returns a list of LFNs as strings
     """
+
+    if mode not in ("local", "xrootd", "local+xrootd"):
+        raise ValueError(f"Invalid mode {mode}")
+    lfns = set()
     if mode == "local" or mode == "local+xrootd":
         if store is None:
             raise ValueError("Must provide store in local mode")
-        local_lfns = dataset_to_lfn_local(dataset, store, ext)
+        lfns |= set(dataset_to_lfn_local(dataset, store, ext))
     if mode == "xrootd" or mode == "local+xrootd":
-        if xrootddomain is None:
-            raise ValueError("Must prodive xrootddomain (also known as "
-                             "redirector) in xrootd mode")
-        dbs_lfns = dataset_to_lfn_dbs(dataset)
-    paths = []
-    if mode == "local":
-        for p in sorted(local_lfns):
-            path = lfn_to_local_path(p, store)
-            if path not in skippaths:
-                paths.append(path)
-    elif mode == "xrootd":
-        for p in sorted(dbs_lfns):
-            path = lfn_to_xrootd_path(p, xrootddomain)
-            if path not in skippaths:
-                paths.append(path)
-    elif mode == "local+xrootd":
-        paths = []
-        for lfn in sorted(dbs_lfns | local_lfns):
-            path = None
-            if lfn in local_lfns:
-                path = lfn_to_local_path(lfn, store)
-            if path is None or path in skippaths:
-                path = lfn_to_xrootd_path(lfn, xrootddomain)
-            if path not in skippaths:
-                paths.append(path)
-        return paths
-    else:
-        raise ValueError(f"Invalid mode {mode}")
-    return paths
+        lfns |= set(dataset_to_lfn_dbs(dataset))
+    lfns = ["cmslfn:/" + lfn for lfn in sorted(lfns)]
+    return lfns
 
 
-def read_paths(source, store=None, ext=".root", mode="local",
-               xrootddomain=None, skippaths=set()):
-    """Get all paths to files of a dataset, which can be interpreted from a
+def read_paths(source, store=None, ext=".root", mode="local"):
+    """Get all file names of a dataset, which can be interpreted from a
     source
 
     Parameters:
     source -- A glob pattern, dataset name or a path to a text file containing
               any of the afore mentioned (one per line). If it ends with ext,
               it will be considered as a glob pattern.
-    store -- Path to the store directory, e.g. /pnfs/desy.de/cms/tier2/store/
-    ext -- File extension the files have
+    store -- See expand_datasetdict
+    ext -- See expand_datasetdict
     mode -- See expand_datasetdict
-    xrootddomain -- See expand_datasetdict
-    skippaths -- See expand_datasetdict
 
     Returns a list of paths as strings
     """
     paths = []
     if source.endswith(ext):
         paths = glob(source)
-        paths = [path for path in paths if path not in skippaths]
     elif (source.count("/") == 3
             and (source.endswith("NANOAOD")
                  or source.endswith("NANOAODSIM")
                  or source.endswith("USER"))):
-        paths.extend(dataset_to_paths(
-            source, store, ext, mode, xrootddomain, skippaths))
+        paths.extend(dataset_to_lfns(source, store, ext, mode))
     else:
         with open(source) as f:
             for line in f:
@@ -183,11 +183,8 @@ def read_paths(source, store=None, ext=".root", mode="local",
                     continue
                 if line.startswith(store):
                     paths_from_line = glob(line)
-                    paths = [path for path in paths_from_line
-                             if path not in skippaths]
                 else:
-                    paths_from_line = dataset_to_paths(
-                        line, store, ext, mode, xrootddomain, skippaths)
+                    paths_from_line = dataset_to_lfns(line, store, ext, mode)
                 num_files = len(paths_from_line)
                 if num_files == 0:
                     logger.warning("No files found for \"{}\"".format(line))
@@ -199,7 +196,7 @@ def read_paths(source, store=None, ext=".root", mode="local",
 
 
 def expand_datasetdict(datasets, store=None, ignore_path=None, ext=".root",
-                       mode="local", xrootddomain=None, skippaths=set()):
+                       mode="local"):
     """Interpred a dict of dataset names or paths
 
     Parameters:
@@ -216,10 +213,6 @@ def expand_datasetdict(datasets, store=None, ignore_path=None, ext=".root",
             to xrootd URLs. If 'local+xrootd' only files that are not present
             locally are returned with an xrootd URL, otherwise local file paths
             are returned.
-    xrootddomain -- Redirector for xrootd. Usually xrootd-cms.infn.it
-    skippaths -- Set of path that should be ignored. If mode is 'local+xrootd'
-                 and a local path is within the set, the xrootd path will be
-                 returned instead (if it exists).
 
     Returns a tuple of two dicts. The first one is a dict mapping the keys of
     `datasets` to lists of paths for the corresponding files. The second one is
@@ -230,7 +223,7 @@ def expand_datasetdict(datasets, store=None, ignore_path=None, ext=".root",
     for key in datasets.keys():
         paths = list(dict.fromkeys([
             a for b in datasets[key] for a in read_paths(
-                b, store, ext, mode, xrootddomain, skippaths)]))
+                b, store, ext, mode)]))
         if ignore_path:
             processed_paths = []
             for path in paths:
@@ -241,7 +234,7 @@ def expand_datasetdict(datasets, store=None, ignore_path=None, ext=".root",
         for path in paths:
             if path in paths2dsname:
                 raise RuntimeError(
-                    f"Path {path} is found to belong to more than one "
+                    f"Path '{path}' is found to belong to more than one "
                     f"dataset: {key} and {paths2dsname[path]}")
             datasetpaths[key].append(path)
             paths2dsname[path] = key

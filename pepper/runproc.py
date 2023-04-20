@@ -4,7 +4,6 @@ import os
 import sys
 from functools import partial
 import importlib
-import coffea
 import shutil
 import parsl
 import argparse
@@ -160,7 +159,10 @@ def run_processor(processor_class=None, description=None, mconly=False):
         Processor = processor_class
 
     config = Processor.config_class(args.config)
-    store = config["store"] if "store" in config else None
+    store = None
+    if ("store" in config and "file_mode" in config
+            and "local" in config["file_mode"]):
+        store = config["store"]
     if store is not None and not os.path.exists(store):
         raise pepper.config.ConfigError("store directory does not exist")
 
@@ -306,10 +308,21 @@ def run_processor(processor_class=None, description=None, mconly=False):
         chunksize = 500000
     userdata["chunksize"] = args.chunksize
 
-    runner = coffea.processor.Runner(
+    runner = pepper.executor.Runner(
         executor, pre_executor, chunksize=chunksize, maxchunks=maxchunks,
         align_clusters=not args.force_chunksize, schema=processor.schema_class,
         xrootdtimeout=pepper.misc.XROOTDTIMEOUT)
+    xrootddomain = None
+    if "file_mode" in config and "xrootd" in config["file_mode"]:
+        xrootddomain = config["xrootddomain"]
+    bad_file_paths = None
+    if "bad_file_paths" in config:
+        bad_file_paths = config["bad_file_paths"]
+    metadata = {"store_path": store, "xrootddomain": xrootddomain,
+                "skippaths": bad_file_paths}
+    processor.pepperitemmetadata = metadata
+    datasets = {k: {"files": v, "metadata": metadata}
+                for k, v in datasets.items()}
     output = runner(datasets, "Events", processor)
     processor.save_output(output, args.output)
 

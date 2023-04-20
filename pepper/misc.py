@@ -20,7 +20,7 @@ import parsl.addresses
 import pepper.parsl_high_throughput
 
 
-XROOTDTIMEOUT = 300  # 5 minutes, should be enough if one site isn't replying
+XROOTDTIMEOUT = 10  # 10 s, no need to bother with slow sites
 
 
 def normalize_trigger_path(path):
