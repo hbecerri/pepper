@@ -4,7 +4,6 @@ import os
 import sys
 from functools import partial
 import importlib
-import shutil
 import parsl
 import argparse
 import logging
@@ -124,6 +123,11 @@ def run_processor(processor_class=None, description=None, mconly=False):
         "should not be loaded, as this can lead to bogus results. Default is "
         "'pepper_state.coffea'", default="pepper_state.coffea"
     )
+    parser.add_argument(
+        "-R", "--resume", action="store_true", help="If present and the file "
+        "pointed to by --statedata exists, load the file and resume from that "
+        "state"
+    )
     args = parser.parse_args()
 
     logger = logging.getLogger("pepper")
@@ -213,28 +217,6 @@ def run_processor(processor_class=None, description=None, mconly=False):
     if len(datasets) == 0:
         sys.exit("No datasets found")
 
-    if args.eventdir is not None:
-        # Check for non-empty subdirectories and remove them if wanted
-        nonempty = []
-        for dsname in datasets.keys():
-            try:
-                next(os.scandir(os.path.join(args.eventdir, dsname)))
-            except (FileNotFoundError, StopIteration):
-                pass
-            else:
-                nonempty.append(dsname)
-        if len(nonempty) != 0:
-            print(
-                "Non-empty output directories: {}".format(", ".join(nonempty)))
-            while True:
-                answer = input("Delete? y/n ")
-                if answer == "y":
-                    for dsname in nonempty:
-                        shutil.rmtree(os.path.join(args.eventdir, dsname))
-                    break
-                elif answer == "n":
-                    break
-
     # Create histdir and in case of errors, raise them now (before processing)
     os.makedirs(args.output, exist_ok=True)
 
@@ -242,16 +224,12 @@ def run_processor(processor_class=None, description=None, mconly=False):
         print("--metadata and --statedate can not be the same")
         sys.exit(1)
     if os.path.exists(args.statedata) and os.path.getsize(args.statedata) > 0:
+        if not args.resume:
+            print("Found old processor state file. Please either delete "
+                  f"'{args.statedata}' or specify --resume/-R")
+            sys.exit(1)
         mtime = datetime.fromtimestamp(os.stat(args.statedata).st_mtime)
-        while True:
-            answer = input(
-                f"Found old processor state from {mtime}. Load? y/n ")
-            if answer == "n":
-                print(f"Please delete/rename the old file {args.statedata} or "
-                      "use --statedata")
-                sys.exit(1)
-            elif answer == "y":
-                break
+        print(f"Loading old processor state made on {mtime}")
 
     processor = Processor(config, args.eventdir)
     datasets = processor.preprocess(datasets)
@@ -279,7 +257,6 @@ def run_processor(processor_class=None, description=None, mconly=False):
             condor_init=condorinit,
             workers_per_job=args.condorworkers,
             logdir=logdir)
-        parsl.load(parsl_config)
     else:
         if args.condorinit is not None or args.condorsubmit is not None:
             print(
@@ -312,6 +289,9 @@ def run_processor(processor_class=None, description=None, mconly=False):
     else:
         chunksize = 500000
     userdata["chunksize"] = args.chunksize
+
+    if args.condor is not None:
+        parsl.load(parsl_config)
 
     runner = pepper.executor.Runner(
         executor, pre_executor, chunksize=chunksize, maxchunks=maxchunks,
