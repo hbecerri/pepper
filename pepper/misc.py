@@ -354,13 +354,16 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
         provider=provider,
         worker_debug=False,
     )
-    parsl_config = parsl.config.Config(
+    config = dict(
         executors=[parsl_executor],
         strategy="htex_auto_scale",
         # Set retries to a large number to retry infinitely
         retries=retries,
         retry_handler=retry_handler
     )
+    if logdir is not None:
+        config["run_dir"] = os.path.join(logdir, "parsl_runinfo")
+    parsl_config = parsl.config.Config(**config)
     return parsl_config
 
 
