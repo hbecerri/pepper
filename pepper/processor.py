@@ -46,6 +46,7 @@ class Processor(coffea.processor.ProcessorABC):
             self.eventdir = None
 
         self.rng_seed = self._load_rng_seed()
+        self.loglevel = logging.getLogger("pepper").level
 
     @staticmethod
     def _check_config_integrity(config):
@@ -235,6 +236,29 @@ class Processor(coffea.processor.ProcessorABC):
         return meta["filename"], meta["entrystart"], meta["entrystop"]
 
     def process(self, data):
+        try:
+            jobad = pepper.misc.get_htcondor_jobad()
+        except OSError:
+            pass
+        else:
+            pepper_logger = logging.getLogger("pepper")
+            if not getattr(pepper_logger, "is_on_condor", False):
+                pepper_logger.addHandler(logging.StreamHandler())
+                pepper_logger.setLevel(self.loglevel)
+                pepper_logger.is_on_condor = True
+
+                jname, jid, jtime = jobad["GlobalJobId"].split("#", 2)
+                logger.debug(f"Running on machine {jobad['RemoteHost']} for "
+                             f"job {jid}")
+
+        try:
+            return self._process_inner(data)
+        except Exception as e:
+            if getattr(pepper_logger, "is_on_condor", False):
+                logger.exception(e)
+            raise
+
+    def _process_inner(self, data):
         starttime = time()
         dsname = data.metadata["dataset"]
         filename = data.metadata["filename"]
