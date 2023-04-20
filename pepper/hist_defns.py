@@ -99,11 +99,13 @@ class HistDefinition:
                                            **bin_config)
                 bin.unit = unit
                 bins.append(bin)
+        cats = []
         if "cats" in config:
-            cats = [hi.axis.StrCategory([], growth=True, **kwargs)
-                    for kwargs in config["cats"]]
-        else:
-            cats = []
+            for kwargs in config["cats"]:
+                default_key = kwargs.pop("default_key", None)
+                cat = hi.axis.StrCategory([], growth=True, **kwargs)
+                cat.default_key = default_key
+                cats.append(cat)
         self.axes = bins + cats
         self.bin_fills = {}
         self.cat_fills = {}
@@ -219,7 +221,14 @@ class HistDefinition:
                 cat_present[name][cat] = DataPicker(method)(data)
         for name, val in cat_present.items():
             if any(mask is None for mask in val.values()):
-                cat_present[name] = {"All": np.full(len(data), True)}
+                ax = next(ax for ax in self.axes if ax.name == name)
+                if ax.default_key is None:
+                    none_keys = [k for k, v in val.items() if v is None]
+                    raise HistFillError(
+                        f"No fill for axes: {', '.join(none_keys)}")
+                else:
+                    key = ax.default_key
+                    cat_present[name] = {key: np.full(len(data), True)}
         non_array_fills = {"dataset": dsname}
         for weightname, w in weight.items():
             if weightname is not None:
