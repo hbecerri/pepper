@@ -252,9 +252,19 @@ def hist_counts(hist):
     return next(iter(values.values()))
 
 
+def get_enumerated_dir(parentdir):
+    """Get a path to a newly made directory within parentdir. """
+    i = 0
+    while os.path.exists(os.path.join(parentdir, str(i).zfill(3))):
+        i += 1
+    path = os.path.join(parentdir, str(i).zfill(3))
+    os.makedirs(path)
+    return path
+
+
 def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
                      hostname=None, *, condor_submit=None, condor_init=None,
-                     workers_per_job=1):
+                     workers_per_job=1, logdir=None):
     """Get a parsl HTCondor config for a host.
 
     Arguments:
@@ -271,6 +281,7 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
                    PEPPER_CONDOR_ENV and its contents instead. If
                    PEPPER_CONDOR_ENV is also not set, no futher environment
                    will be set up.
+    logdir -- Directory where to store stdout and stderr logs
     workers_per_job -- Number of workers (processes) the job on Condor will
                        simultaneously run.
     """
@@ -295,6 +306,14 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
                     f"runtime on unknown host {hostname}")
     if memory is not None:
         condor_config += f"RequestMemory = {memory}\n"
+    # stream_{output,error} make condor transfer logs immediately, instead of
+    # waiting for the job to finish
+    condor_config += "stream_output = True\n"
+    condor_config += "stream_error = True\n"
+    if logdir is not None:
+        condor_config += \
+            f"output = {logdir}/$(ClusterId).$(Process)_stdout.log\n"
+        condor_config += f"error = {logdir}/$(Cluster).$(Process)_stderr.log\n"
     if condor_submit is not None:
         condor_config += condor_submit
     if condor_init is None and "PEPPER_CONDOR_ENV" in os.environ:
@@ -305,7 +324,8 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
         max_blocks=num_jobs,
         parallelism=1,
         scheduler_options=condor_config,
-        worker_init=condor_init
+        worker_init=condor_init,
+        launcher=parsl.launchers.SingleNodeLauncher(debug=False),
     )
     launch_cmd = ("python3 "
                   "~/.local/bin/process_worker_pool.py "
@@ -342,6 +362,23 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
         retry_handler=retry_handler
     )
     return parsl_config
+
+
+def get_htcondor_jobad():
+    """Get the HTCondor job AD as a dict of the job currently running in.
+    If not running within a job, an OSError will be raised.
+    For details on job AD see
+    https://htcondor.readthedocs.io/en/latest/classad-attributes/job-classad-attributes.html
+    """
+    if "_CONDOR_JOB_AD" not in os.environ:
+        raise OSError("Not inside HTCondor job")
+    with open(os.environ["_CONDOR_JOB_AD"]) as f:
+        jobad = f.readlines()
+    ret = {}
+    for line in jobad:
+        k, v = line.split("=", 1)
+        ret[k.strip()] = v.strip()
+    return ret
 
 
 def chunked_calls(array_param, returns_multiple=False, chunksize=10000,

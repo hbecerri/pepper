@@ -111,6 +111,9 @@ def run_processor(processor_class=None, description=None, mconly=False):
         "increases memory usage inside the job. Default is 1."
     )
     parser.add_argument(
+        "--condorlogdir", help="Directory to store stdout and stderr logs "
+        "running on HTCondor. Default is pepper_logs", default="pepper_logs")
+    parser.add_argument(
         "--metadata", help="File to cache metadata in. This allows speeding "
         "up or skipping the preprocessing step. Default is "
         "'pepper_metadata.coffea'", default="pepper_metadata.coffea")
@@ -267,13 +270,15 @@ def run_processor(processor_class=None, description=None, mconly=False):
                 condorsubmit = f.read()
         else:
             condorsubmit = None
+        logdir = pepper.misc.get_enumerated_dir(args.condorlogdir)
         print("Spawning jobs. This can take a while")
         parsl_config = pepper.misc.get_parsl_config(
             args.condor,
             retries=args.retries,
             condor_submit=condorsubmit,
             condor_init=condorinit,
-            workers_per_job=args.condorworkers)
+            workers_per_job=args.condorworkers,
+            logdir=logdir)
         parsl.load(parsl_config)
     else:
         if args.condorinit is not None or args.condorsubmit is not None:

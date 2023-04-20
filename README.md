@@ -30,6 +30,8 @@ To control which environment is employed on the HTCondor node, the parameter `--
 
 When running on HTCondor, the local process, that has started also the jobs, needs to be kept open until everything has finished. In order to not accidentally kill the process by an unstable connection or similar, it is recommended to run it inside a `byobu`, `tmux` or `screen` session, or to prepend the command `nohup`.
 
+A directory with logs from the jobs will be present under `pepper_logs`. Directories inside `pepper_logs` are numbered, the highest number is the one of the latest run. The log level of the logs inside is controller via the `--loglevel` option. Set it to `debug` to get full logging.
+
 ### XRootD usage
 Pepper is able to access data sets from remote servers using XRootD. You should specify `"file_mode": "local+xrootd"` and `"xrootddomain": "xrootd-cms.infn.it"` in your config to enable it. There are four requirements to get it working (also in conjunction with HTCondor):
  - xrootd must be installed. You can check with `python3 -m pip show xrootd`
