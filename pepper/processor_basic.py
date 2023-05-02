@@ -825,8 +825,8 @@ class ProcessorBasicPhysics(pepper.Processor):
         """Apply some basic jet quality cuts."""
         jets = data["Jet"]
         leptons = data["Lepton"]
-        j_id, j_puId, lep_dist, eta_min, eta_max, pt_min = self.config[[
-            "good_jet_id", "good_jet_puId", "good_jet_lepton_distance",
+        j_id, lep_dist, eta_min, eta_max, pt_min = self.config[[
+            "good_jet_id", "good_jet_lepton_distance",
             "good_jet_eta_min", "good_jet_eta_max", "good_jet_pt_min"]]
         if j_id == "skip":
             has_id = True
@@ -840,6 +840,21 @@ class ProcessorBasicPhysics(pepper.Processor):
         else:
             raise pepper.config.ConfigError(
                     "Invalid good_jet_id: {}".format(j_id))
+
+        j_pt = jets.pt
+        if "jetfac" in ak.fields(data):
+            j_pt = j_pt * data["jetfac"]
+        has_lepton_close = ak.any(
+            jets.metric_table(leptons) < lep_dist, axis=2)
+
+        return (has_id
+                & (~has_lepton_close)
+                & (eta_min < jets.eta)
+                & (jets.eta < eta_max)
+                & (pt_min < j_pt))
+
+    def has_puid(self, jets):
+        j_puId = self.config["good_jet_puId"]
         if j_puId == "skip":
             has_puId = True
         elif j_puId == "cut:loose":
@@ -853,20 +868,9 @@ class ProcessorBasicPhysics(pepper.Processor):
                     "Invalid good_jet_id: {}".format(j_puId))
         # Only apply PUID if pT < 50 GeV
         has_puId = has_puId | (jets.pt >= 50)
+        return has_puId
 
-        j_pt = jets.pt
-        if "jetfac" in ak.fields(data):
-            j_pt = j_pt * data["jetfac"]
-        has_lepton_close = ak.any(
-            jets.metric_table(leptons) < lep_dist, axis=2)
-
-        return (has_id & has_puId
-                & (~has_lepton_close)
-                & (eta_min < jets.eta)
-                & (jets.eta < eta_max)
-                & (pt_min < j_pt))
-
-    def build_jet_column(self, data):
+    def build_jet_column(self, is_mc, data):
         """Build a column of jets passing the jet quality cuts,
            including a 'btag' key (containing the value of the
            chosen btag discriminator) and a 'btagged' key
@@ -894,8 +898,17 @@ class ProcessorBasicPhysics(pepper.Processor):
                 "Invalid working point \"{}\" for {} in year {}".format(
                     wp, tagger, year))
         jets["btagged"] = jets["btag"] > getattr(wptuple, wp)
-
+        jets["pass_pu_id"] = self.has_puid(jets)
+        if is_mc:
+            # A jet is considered to be a pileup jet if there is no gen jet
+            # within Delta R < 0.4
+            jets["has_gen_jet"] = ak.fill_none(
+                jets.delta_r(jets.matched_gen) < 0.4, False)
         return jets
+
+    def jets_with_puid(self, data):
+        jets = data["Jet"]
+        return jets[jets.pass_pu_id]
 
     def build_lowptjet_column(self, is_mc, junc, jer, rng, data):
         """Build a column of low-pt jets, needed to propagate jet
@@ -1048,6 +1061,36 @@ class ProcessorBasicPhysics(pepper.Processor):
     def has_jets(self, data):
         """Require events with minimum number of jets."""
         return self.config["num_jets_atleast"] <= ak.num(data["Jet"])
+
+    def compute_puid_sys(self, central, weighter, wp, eta, pt,
+                         pass_puid, has_gen_jet, sf_type):
+        up = weighter(wp, eta, pt, pass_puid, has_gen_jet, sf_type, "up")
+        down = weighter(wp, eta, pt, pass_puid, has_gen_jet, sf_type, "down")
+        return (up / central, down / central)
+
+    def jet_puid_sfs(self, data):
+        # Only apply SFs to jets for which the PU ID cut is applied,
+        # i.e. pT < 50 GeV
+        jets = data["Jet"][data["Jet"].pt < 50]
+        wp = self.config["good_jet_puId"].split(":", 1)[1]
+        pass_puid = jets["pass_pu_id"]
+        has_gen_jet = jets["has_gen_jet"]
+        eta = jets.eta
+        pt = jets.pt
+        weighter = self.config["jet_puid_sf"]
+        systematics = {}
+        weight = weighter(wp, eta, pt, pass_puid, has_gen_jet, "eff")
+        if self.config["compute_systematics"]:
+            systematics["jet_puid_eff"] = self.compute_puid_sys(
+                weight, weighter, wp, eta, pt, pass_puid, has_gen_jet, "eff")
+        if weighter.has_mis_prob:
+            central = weighter(wp, eta, pt, pass_puid, has_gen_jet, "mis")
+            weight = weight * central
+            if self.config["compute_systematics"]:
+                systematics["jet_puid_mis"] = self.compute_puid_sys(
+                    weight, weighter, wp, eta, pt, pass_puid,
+                    has_gen_jet, "mis")
+        return weight, systematics
 
     def jet_pt_requirement(self, data):
         """Require jets with minimum pT threshold."""

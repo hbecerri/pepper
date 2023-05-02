@@ -180,6 +180,64 @@
             }
         }
     },
+    "jet_pu_id_eff": {
+        # Used in the production of jet PU ID SFs
+        "bins": [
+            {
+                "name": "pt",
+                "label": "$p_{\\mathrm{T}}$",
+                "n_or_arr": [20, 25, 30, 40, 50],
+                "unit": "GeV"
+            },
+            {
+                "name": "eta",
+                "label": "$\\eta$",
+                "n_or_arr": [-5, -3, -2.75, -2.5, -1.479, 0, 1.479, 2.5, 2.75, 3, 5]
+            }
+        ],
+        "cats": [
+            {
+                "name": "has_gen_jet",
+                "label": "Has gen jet"
+            },
+            {
+                "name": "pass_pu_id",
+                "label": "passing PU id"
+            }
+        ],
+        "fill": {
+            "pt": [
+                "Jet",
+                "pt"
+            ],
+            "eta": [
+                "Jet",
+                "eta"
+            ],
+            "pass_pu_id": {
+                "yes": [
+                    "Jet",
+                    "pass_pu_id"
+                ],
+                "no": [
+                    "Jet",
+                    "pass_pu_id",
+                    {"function": "not"}
+                ]
+            },
+            "has_gen_jet": {
+                "yes": [
+                    "Jet",
+                    "has_gen_jet"
+                ],
+                "no": [
+                    "Jet",
+                    "has_gen_jet",
+                    {"function": "not"}
+                ]
+            }
+        }
+    },
     "trigger_sf_constructor": {
         # Used by produce_triggerSF_numbers.py
         "bins": [
