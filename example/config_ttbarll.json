@@ -61,6 +61,10 @@
     ],
     "btag_method": "fixedwp",
     "btag_ignoremissing": false,
+    "jet_puid_sf": [
+        "$DATADIR/scale_factors/2018_jmar.json",
+        "$DATADIR/scale_factors/jet_puid_effs.root"
+    ],
     "reapply_jec": false,
     "jet_correction_mc": [
         "$DATADIR/scale_factors/Autumn18_V19_MC_L1FastJet_AK4PFchs.txt",

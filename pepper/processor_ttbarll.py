@@ -70,6 +70,9 @@ class Processor(pepper.ProcessorBasicPhysics):
         if "muon_rochester" not in config:
             logger.warning("No Rochster corrections for muons specified")
 
+        if "jet_puid_sf" not in config:
+            logger.warning("No jet PU ID SFs specified")
+
         if ("reco_algorithm" in config and "reco_info_file" not in config):
             raise pepper.config.ConfigError(
                 "Need reco_info_file for kinematic reconstruction")
@@ -230,7 +233,10 @@ class Processor(pepper.ProcessorBasicPhysics):
             self.compute_jet_factors, is_mc, reapply_jec, variation.junc,
             variation.jer, selector.rng))
         selector.set_column("OrigJet", selector.data["Jet"])
-        selector.set_column("Jet", self.build_jet_column)
+        selector.set_column("Jet", partial(self.build_jet_column, is_mc))
+        if "jet_puid_sf" in self.config and is_mc:
+            selector.add_cut("Jet PU id SFs", self.jet_puid_sfs)
+        selector.set_column("Jet", self.jets_with_puid)
         smear_met = "smear_met" in self.config and self.config["smear_met"]
         selector.set_column(
             "MET", partial(self.build_met_column, is_mc, variation.junc,

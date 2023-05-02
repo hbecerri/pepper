@@ -7,9 +7,14 @@ from coffea.btag_tools import BTagScaleFactor
 import awkward as ak
 import correctionlib
 from collections import namedtuple
+from functools import partial
 import warnings
+import logging
 
 from pepper.misc import onedimeval
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_evaluator(filename, fileform=None, filetype=None):
@@ -498,6 +503,67 @@ class BTagWeighter:
     @property
     def available_efficiencies(self):
         return set(self.eff_evaluator.keys())
+
+
+class JetPuIdWeighter:
+    def __init__(self, sf_filename, eff_filename=None):
+        self.sf_evaluator = correctionlib.CorrectionSet.from_file(sf_filename)
+        if "PUJetID_mis" in [k for k in self.sf_evaluator.keys()]:
+            self.has_mis_prob = True
+        else:
+            # Mistagging probabilties are not currently provided in UL,
+            # recommendation from the POG is to just not consider mistags
+            self.has_mis_prob = False
+        if eff_filename is not None:
+            self.eff_evaluator = get_evaluator(eff_filename)
+        else:
+            self.eff_evaluator = None
+
+    def __call__(self, wp, eta, pt, pass_puid, has_gen_jet,
+                 sf_type="eff", variation="nom"):
+        if sf_type == "eff":
+            eta = eta[has_gen_jet]
+            pt = pt[has_gen_jet]
+            pass_puid = pass_puid[has_gen_jet]
+        elif sf_type == "mis":
+            if not self.has_mis_prob:
+                raise ValueError(
+                    "Cannot compute SFs for mistagged PU jets as these are "
+                    "not provided in this PU ID SF file")
+            eta = eta[~has_gen_jet]
+            pt = pt[~has_gen_jet]
+            pass_puid = pass_puid[~has_gen_jet]
+        wp = wp.lower()
+        if wp == "loose":
+            wp = "L"
+        elif wp == "medium":
+            wp = "M"
+        elif wp == "tight":
+            wp = "T"
+        else:
+            raise ValueError("Invalid value for wp. Expected 'loose', "
+                             "'medium' or 'tight'")
+
+        def sf_evaluate(var, eta, pt):
+            return self.sf_evaluator["PUJetID_" + sf_type].evaluate(
+                eta, pt, var, wp)
+
+        sf = onedimeval(partial(sf_evaluate, variation), eta, pt)
+        if self.eff_evaluator is not None:
+            eff = self.eff_evaluator[sf_type](pt, eta)
+        else:
+            try:
+                eff = onedimeval(partial(sf_evaluate, "MCEff"), eta, pt)
+            except IndexError:
+                raise KeyError("No MC efficiencies in this Jet PU ID SF "
+                               "file, please provide separate ones")
+
+        sfeff = sf * eff
+        p_mc = ak.prod(eff[pass_puid], axis=1) * ak.prod(
+            (1 - eff)[~pass_puid], axis=1)
+        p_data = ak.prod(sfeff[pass_puid], axis=1) * ak.prod(
+            (1 - sfeff)[~pass_puid], axis=1)
+        return p_data/p_mc
 
 
 class PileupWeighter:

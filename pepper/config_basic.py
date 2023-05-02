@@ -14,6 +14,7 @@ from pepper.scale_factors import (
     get_evaluator,
     ScaleFactors,
     MuonScaleFactor,
+    JetPuIdWeighter
 )
 
 
@@ -40,6 +41,7 @@ class ConfigBasicPhysics(pepper.Config):
                 "muon_sf": self._get_muonscalefactor,
                 "muon_rochester": self._get_rochester_corr,
                 "btag_sf": self._get_btag_sf,
+                "jet_puid_sf": self._get_puid_sf,
                 "jet_correction_mc": self._get_jet_correction,
                 "jet_correction_data": self._get_jet_correction,
                 "jet_uncertainty": partial(
@@ -132,6 +134,13 @@ class ConfigBasicPhysics(pepper.Config):
                 method=method, ignore_missing=ignore_missing)
             weighters.append(btagweighter)
         return weighters
+
+    def _get_puid_sf(self, value):
+        if not isinstance(value, list) or len(value) > 2:
+            raise pepper.config.ConfigError(
+                "jet_puid_sf should be a list of either the SFs, or "
+                "SFs, efficiency")
+        return JetPuIdWeighter(*[self._get_path(path) for path in value])
 
     def _get_btag_corr(self, value):
         # Dump content of hjson file to dict
