@@ -15,6 +15,9 @@ parser.add_argument(
 parser.add_argument(
     "format", choices=["hist", "root", "coffea"],
     help="Histogram output format")
+parser.add_argument(
+    "-t", "--threads", type=int, default=10,
+    help="Number of simultaneous threads to use. Defaults to 10.")
 parser.add_argument("outputdir", help="Output directory for the histograms")
 args = parser.parse_args()
 
@@ -23,4 +26,5 @@ os.makedirs(args.outputdir, exist_ok=True)
 state = coffea.util.load(args.statedata)
 output = state["accumulator"]["out"]
 pepper.Processor.postprocess(output)
-pepper.Processor.save_histograms(args.format, output, args.outputdir)
+pepper.Processor.save_histograms(args.format, output, args.outputdir,
+                                 threads=args.threads)
