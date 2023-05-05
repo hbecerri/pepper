@@ -236,12 +236,12 @@ class Processor(coffea.processor.ProcessorABC):
         return meta["filename"], meta["entrystart"], meta["entrystop"]
 
     def process(self, data):
+        pepper_logger = logging.getLogger("pepper")
         try:
             jobad = pepper.misc.get_htcondor_jobad()
         except OSError:
             pass
         else:
-            pepper_logger = logging.getLogger("pepper")
             if not getattr(pepper_logger, "is_on_condor", False):
                 pepper_logger.addHandler(logging.StreamHandler())
                 pepper_logger.setLevel(self.loglevel)
