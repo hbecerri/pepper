@@ -522,9 +522,10 @@ class VirtualArrayCopier:
     """Create a shallow copy of the an awkward Array such as NanoEvents
     while trying to not make virtual subarrays load their contents.
     """
-    def __init__(self, array):
+    def __init__(self, array, attrs=[]):
         self.data = {f: array[f] for f in ak.fields(array)}
         self.behavior = array.behavior
+        self.attrs = {attr: getattr(array, attr) for attr in attrs}
 
     def __setitem__(self, key, value):
         self.data[key] = value
@@ -538,6 +539,8 @@ class VirtualArrayCopier:
     def get(self):
         array = ak.Array(self.data)
         array.behavior = self.behavior
+        for attr, value in self.attrs.items():
+            setattr(array, attr, value)
         return array
 
     def wrap_with_copy(self, func):
