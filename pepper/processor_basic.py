@@ -1243,30 +1243,30 @@ class ProcessorBasicPhysics(pepper.Processor):
         b = data["recob"][:, 0]
         antib = data["recob"][:, 1]
         met = data["MET"]
-
-        with uproot.open(self.config["reco_info_file"]) as f:
+        if reco_alg == "sonnenschein":
             if self.config["reco_num_smear"] is None:
                 energyfl = energyfj = 1
                 alphal = alphaj = 0
                 num_smear = 1
                 mlb = None
             else:
-                energyfl = f["energyfl"]
-                energyfj = f["energyfj"]
-                alphal = f["alphal"]
-                alphaj = f["alphaj"]
-                mlb = f["mlb"]
+                with uproot.open(self.config["reco_info_file"]) as f:
+                    energyfl = f["energyfl"]
+                    energyfj = f["energyfj"]
+                    alphal = f["alphal"]
+                    alphaj = f["alphaj"]
+                    mlb = f["mlb"]
                 num_smear = self.config["reco_num_smear"]
-            if reco_alg == "sonnenschein":
-                if isinstance(self.config["reco_w_mass"], (int, float)):
-                    mw = self.config["reco_w_mass"]
-                else:
+            if isinstance(self.config["reco_w_mass"], (int, float)):
+                mw = self.config["reco_w_mass"]
+            else:
+                with uproot.open(self.config["reco_info_file"]) as f:
                     mw = f[self.config["reco_w_mass"]]
-                if isinstance(self.config["reco_t_mass"], (int, float)):
-                    mt = self.config["reco_t_mass"]
-                else:
+            if isinstance(self.config["reco_t_mass"], (int, float)):
+                mt = self.config["reco_t_mass"]
+            else:
+                with uproot.open(self.config["reco_info_file"]) as f:
                     mt = f[self.config["reco_t_mass"]]
-        if reco_alg == "sonnenschein":
             top, antitop = sonnenschein(
                 lep, antilep, b, antib, met, mwp=mw, mwm=mw, mt=mt, mat=mt,
                 energyfl=energyfl, energyfj=energyfj, alphal=alphal,
