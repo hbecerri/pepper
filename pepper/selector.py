@@ -380,8 +380,7 @@ class Selector:
         if mask is not None:
             column = self._mask(column, mask)
         if lazy:
-            data_copier = pepper.misc.VirtualArrayCopier(
-                self.data, attrs=["metadata"])
+            data_copier = pepper.misc.VirtualArrayCopier(self.data)
             data_copier[column_name] = column
             self.data = data_copier.get()
         else:
