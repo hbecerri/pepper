@@ -40,8 +40,10 @@ parser.add_argument(
     "when searching bad files in directories and trying to open them. "
     "Default 5.")
 parser.add_argument(
-    "--processes", "-p", type=int, default=20, help="Number of processes to "
-    "use when searching in directories. Default 20")
+    "--processes", "-p", type=int, default=10, help="Number of processes to "
+    "use when searching in directories. Too high numbers can slow down the "
+    "file system, which may cause a file to be falsely identified as bad. "
+    "Default 10")
 parser.add_argument(
     "--no_search", "-n", action="store_true", help="Disable the search in "
     "directories")
@@ -53,6 +55,7 @@ args = parser.parse_args()
 
 config = pepper.ConfigBasicPhysics(args.config)
 config["file_mode"] = "local"
+config["bad_file_paths"] = []
 datasets = config.get_datasets()
 paths = []
 for dsname, dspaths in datasets.items():

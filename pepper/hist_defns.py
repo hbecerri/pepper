@@ -173,7 +173,8 @@ class HistDefinition:
                     mask = mask & (counts == ak.num(data))
         for key, data in fill_vals.items():
             if jagged_example is not None and data.ndim == 1:
-                data = ak.broadcast_arrays(data, jagged_example)[0]
+                data = ak.broadcast_arrays(
+                    data, ak.from_regular(jagged_example))[0]
             prepared[key] = np.asarray(ak.flatten(data[mask], axis=None))
         # Workaround for boost histogram not adding category bin when no events
         if len(next(iter(prepared.values()))) == 0:
