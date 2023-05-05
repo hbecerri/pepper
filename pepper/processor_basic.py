@@ -817,8 +817,8 @@ class ProcessorBasicPhysics(pepper.Processor):
         ret = {}
         if jec or (is_mc and (junc is not None or jer is not None)):
             ret["jetfac"] = factor
-        if jer is not None:
-            ret["jerfac"] = factor
+        if is_mc and jer is not None:
+            ret["jerfac"] = jerfac
         return ret
 
     def good_jet(self, data):
