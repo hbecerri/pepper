@@ -129,8 +129,16 @@ class Config(MutableMapping):
             return self._get(key)
 
     def __contains__(self, key):
-        return key in self._overwritten or (
-            key in self._config and self._config[key] is not None)
+        return (
+            # __setitem__ and not __delitem__
+            self._overwritten.get(key) is not None
+            or (
+                # In file config and not None
+                self._config.get(key) is not None and
+                # But only if not __delitem__
+                self._overwritten.get(key, True) is not None
+            )
+        )
 
     def __setitem__(self, key, value):
         self._overwritten[key] = value
