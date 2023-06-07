@@ -466,7 +466,9 @@ class ProcessorBasicPhysics(pepper.Processor):
         return has_id
 
     def electron_cuts(self, electron, good_lep):
-        """Apply some basic electron quality cuts."""
+        """Apply some basic electron quality cuts.
+        If good_lep is True, config values prefixed with 'good_' for pt and ID
+        are used. Otherwise the ones with prefix 'additional_' are used."""
         if self.config["ele_cut_transreg"]:
             sc_eta_abs = abs(electron["eta"]
                              + electron["deltaEtaSC"])
@@ -541,7 +543,10 @@ class ProcessorBasicPhysics(pepper.Processor):
         raise ValueError("Invalid muon iso string")
 
     def muon_cuts(self, muon, good_lep):
-        """Apply some basic muon quality cuts"""
+        """Apply some basic muon quality cuts
+        If good_lep is True, config values prefixed with 'good_' for pt, ID
+        and iso are used. Otherwise the ones with prefix 'additional_' are
+        used."""
         if self.config["muon_cut_transreg"]:
             is_in_transreg = self.in_transreg(abs(muon["eta"]))
         else:
