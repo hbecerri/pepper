@@ -549,6 +549,9 @@ class JetPuIdWeighter:
                 eta, pt, var, wp)
 
         sf = onedimeval(partial(sf_evaluate, variation), eta, pt)
+        # Clip SF if greater than 5, as recommended by JetMET POG (particularly
+        # relevant for mistagging SFs)
+        sf = ak.where(sf > 5, 5, sf)
         if self.eff_evaluator is not None:
             eff = self.eff_evaluator[sf_type](pt, eta)
         else:
