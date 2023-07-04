@@ -215,3 +215,23 @@ class Config(MutableMapping):
             return datasets
         else:
             return datasets, paths2dsname
+
+    def get_paths_for_lfn(self, lfn):
+        store = None
+        xrootddomain = None
+        skippaths = self["bad_file_paths"] if "bad_file_paths" in self else\
+            None
+        filemode = self["file_mode"] if "file_mode" in self else "local"
+        if filemode == "local" or filemode == "local+xrootd":
+            store = self["store"]
+        if filemode == "xrootd" or filemode == "local+xrootd":
+            xrootddomain = self["xrootddomain"]
+
+        if lfn.startswith("cmslfn://"):
+            filepaths = pepper.datasets.resolve_lfn(lfn, store, xrootddomain)
+        else:
+            filepaths = [lfn]
+        if skippaths is not None:
+            filepaths = [p for p in filepaths if p not in skippaths]
+
+        return filepaths

@@ -13,11 +13,21 @@ import concurrent.futures
 import pepper
 
 
-def get_counts(path, geskey, lhesskey, lhepdfskey):
+def get_counts(lfn, config, geskey, lhesskey, lhepdfskey):
     import awkward as ak
     import uproot
     import pepper
-    with uproot.open(path, timeout=pepper.misc.XROOTDTIMEOUT) as f:
+    paths = config.get_paths_for_lfn(lfn)
+    for path in paths:
+        try:
+            f = uproot.open(path, timeout=pepper.misc.XROOTDTIMEOUT)
+        except OSError:
+            pass
+        else:
+            break
+    else:
+        raise OSError(f"Could not open any files for path {lfn}")
+    with f:
         runs = f["Runs"]
         gen_event_sumw = runs[geskey].array()[0]
         lhe_scale_sumw = runs[lhesskey].array()[0]
@@ -27,7 +37,7 @@ def get_counts(path, geskey, lhesskey, lhepdfskey):
             lhe_scale_sumw = lhe_scale_sumw * gen_event_sumw
             if lhepdfskey is not None:
                 lhe_pdf_sumw = runs[lhepdfskey].array()[0] * gen_event_sumw
-    return path, gen_event_sumw, lhe_scale_sumw, lhe_pdf_sumw
+    return lfn, gen_event_sumw, lhe_scale_sumw, lhe_pdf_sumw
 
 
 def add_counts(counts, datasets, lhepdfskey, result):
@@ -114,7 +124,7 @@ counts = defaultdict(int)
 
 if args.condor is None:
     for filepath, process_name in tqdm(datasets.items()):
-        result = get_counts(filepath, "genEventSumw", "LHEScaleSumw",
+        result = get_counts(filepath, config, "genEventSumw", "LHEScaleSumw",
                             lhepdfskey)
         add_counts(counts, datasets, lhepdfskey, result)
 else:
@@ -128,8 +138,8 @@ else:
 
     futures = set()
     for filepath, process_name in datasets.items():
-        futures.add(get_counts(filepath, "genEventSumw", "LHEScaleSumw",
-                               lhepdfskey))
+        futures.add(get_counts(filepath, config, "genEventSumw",
+                               "LHEScaleSumw", lhepdfskey))
     for future in tqdm(concurrent.futures.as_completed(futures),
                        total=len(futures)):
         add_counts(counts, datasets, lhepdfskey, future.result())
