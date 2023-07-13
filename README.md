@@ -13,8 +13,12 @@ git clone <repository url> pepper
 cd pepper
 source example/environment.sh
 python3 -m pip install --upgrade --upgrade-strategy eager --editable .
+# Additionally only if on CentOS7 (e.g. DESY NAF in 2023):
+python3 -m pip install "urllib3<2"
 ```
 This will update all dependencies to the latest version. Now `pepper` can be imported as any other python package from any location. Because of the `--editable` option, if you edit files inside your cloned pepper directory, the changes will be in effect already the next time you `import pepper`.
+
+__Note__: If you are on CentOS7, please run `python3 -m pip install "urllib3<2"`, as written above. CentOS7 is lacking a recent OpenSSL version, thus an older urllib3 version is required.
 
 
 
