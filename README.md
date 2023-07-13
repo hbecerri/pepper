@@ -58,6 +58,7 @@ The scripts directory of this repository contains several helper scripts to obta
  - `plot_control.py`: Create control plots from Coffea histograms
  - `plotter.py`: Create control plots from Coffea histograms
  - `produce_met_xy_nums.py`: Convert MET-xy correction numbers from the C++ headers provided centrally to json files
+ - `rucio_create_rules.py`: Creates Rucio rules for all data sets specified in a Pepper config. Once the rules are approved, the data sets will be transfered to the local site.
  - `ttbarll_dy_sf_calculate.py`: Calculate scale factors for DY reweighting from the output of ttbarll_dy_sf_produce.py
  - `ttbarll_dy_sf_produce.py`: Produce the numbers needed for DY SF calculation
  - `ttbarll_kinreco_hists_produce.py`: Generate histograms needed for top-quark kinematic reconstruction
