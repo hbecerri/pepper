@@ -167,8 +167,9 @@ def run_processor(processor_class=None, description=None, mconly=False):
 
     config = Processor.config_class(args.config)
     store = None
-    if ("store" in config and "file_mode" in config
-            and "local" in config["file_mode"]):
+    if ("store" in config
+        and ("file_mode" not in config
+             or "local" in config["file_mode"])):
         store = config["store"]
     if store is not None and not os.path.exists(store):
         raise pepper.config.ConfigError("store directory does not exist")
