@@ -28,9 +28,10 @@ def wait_and_check(path, timeout):
 
 
 parser = ArgumentParser(
-    description="Find files that exist in the store directory but are not "
-                "accessible. This is done either by searching all the "
-                "directories or by looking through text files of bad paths")
+    description="Search for NanoAOD files that exist in the store directory "
+    "but are not accessible, possibly due to technical issues. The output is "
+    "a JSON list usable the bad_file_paths config. Searching is done by "
+    "checking all NanoAOD files a config points to")
 parser.add_argument(
     "config", help="Path to the JSON config file containing the MC and "
     "experimental data set names")

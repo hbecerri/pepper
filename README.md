@@ -54,6 +54,8 @@ The scripts directory of this repository contains several helper scripts to obta
  - `delete_duplicate_outputs.py`: Check for duplication in the per event data produced by select_events.py, and move or delete any duplicates
  - `export_hists_from_state.py`: Save all histograms contained in a Pepper processor state, even if processing of all data hasn't been finished yet
  - `generate_btag_efficiencies.py`: Generate a ROOT file containing efficiency histograms needed for b-tagging scale factors
+ - `generate_jet_puid_efficiencies`: Generate a ROOT file containing efficiency histograms needed for computing jet pile-up ID scale factors
+ - `get_bad_local_files.py`: Find NanoAOD files that exist in the store directory but are not accessible, possibly due to technical issues
  - `hdf5_to_ttree.py`: Merge and convert Pepper HDF5 files to Root files containing TTrees
  - `merge_hists.py`: Caluclate weighted average of two SF histograms
  - `plot_control.py`: Create control plots from Coffea histograms
