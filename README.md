@@ -54,6 +54,7 @@ The scripts directory of this repository contains several helper scripts to obta
  - `delete_duplicate_outputs.py`: Check for duplication in the per event data produced by select_events.py, and move or delete any duplicates
  - `export_hists_from_state.py`: Save all histograms contained in a Pepper processor state, even if processing of all data hasn't been finished yet
  - `generate_btag_efficiencies.py`: Generate a ROOT file containing efficiency histograms needed for b-tagging scale factors
+ - `hdf5_to_ttree.py`: Merge and convert Pepper HDF5 files to Root files containing TTrees
  - `merge_hists.py`: Caluclate weighted average of two SF histograms
  - `plot_control.py`: Create control plots from Coffea histograms
  - `plotter.py`: Create control plots from Coffea histograms
