@@ -311,6 +311,10 @@ def run_processor(processor_class=None, description=None, mconly=False):
                 for k, v in datasets.items()}
     output = runner(datasets, "Events", processor)
     processor.save_output(output, args.output)
+    if args.eventdir is not None:
+        print("If there were errors, please make sure to run "
+              "delete_duplicate_outputs.py for the per-event output in "
+              f"{args.eventdir}")
 
     return output
 
