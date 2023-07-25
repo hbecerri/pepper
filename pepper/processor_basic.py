@@ -579,31 +579,31 @@ class ProcessorBasicPhysics(pepper.Processor):
             )
             muons["pt"] = muons["pt"] * dtSF
         else:
-            hasgen = ~np.isnan(ak.fill_none(muons.matched_gen.pt, np.nan))
             # if reco pt has corresponding gen pt
             mcSF1 = self.config["muon_rochester"].kSpreadMC(
-                muons["charge"][hasgen],
-                muons["pt"][hasgen],
-                muons["eta"][hasgen],
-                muons["phi"][hasgen],
-                muons.matched_gen.pt[hasgen],
+                muons["charge"],
+                muons["pt"],
+                muons["eta"],
+                muons["phi"],
+                muons.matched_gen.pt,
             )
             # if reco pt has no corresponding gen pt
             counts = ak.num(muons["pt"])
             mc_rand = rng.uniform(size=ak.sum(counts))
             mc_rand = ak.unflatten(mc_rand, counts)
-            if pepper.misc.akismasked(muons):
-                mc_rand = ak.mask(mc_rand, ~ak.is_none(muons["pt"]))
             mcSF2 = self.config["muon_rochester"].kSmearMC(
-                muons["charge"][~hasgen],
-                muons["pt"][~hasgen],
-                muons["eta"][~hasgen],
-                muons["phi"][~hasgen],
-                muons["nTrackerLayers"][~hasgen],
-                mc_rand[~hasgen],
+                muons["charge"],
+                muons["pt"],
+                muons["eta"],
+                muons["phi"],
+                muons["nTrackerLayers"],
+                mc_rand,
             )
             # Combine the two scale factors and scale the pt
-            mcSF = ak.concatenate([mcSF1, mcSF2], axis=1)
+            mcSF = ak.where(
+                ak.is_none(muons.matched_gen.pt, axis=1), mcSF2, mcSF1)
+            # Remove masking from layout, none of the SF are masked here
+            mcSF = ak.fill_none(mcSF, 0)
             muons["pt"] = muons["pt"] * mcSF
         return muons
 
