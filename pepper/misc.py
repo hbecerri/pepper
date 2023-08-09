@@ -273,7 +273,6 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
     memory -- Request memory in MB. If None, do not request memory
     retries -- The number of times to retry a failed task. If None, the task is
                retried until it stops failing
-    hostname -- hostname of the machine to submit from. If None, use current
     condor_submit -- String that gets appended to the Condor submit file
     condor_init -- String containing Shell commands to be executed by every job
                    upon startup to setup an envrionment. If None, try to read

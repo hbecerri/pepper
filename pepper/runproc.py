@@ -306,7 +306,9 @@ def run_processor(processor_class=None, description=None, mconly=False):
         bad_file_paths = config["bad_file_paths"]
     metadata = {"store_path": store, "xrootddomain": xrootddomain,
                 "skippaths": bad_file_paths}
+    # Give metadata for the processing step
     processor.pepperitemmetadata = metadata
+    # For the preprocessing step, add metadata also to the file meta
     datasets = {k: {"files": v, "metadata": metadata}
                 for k, v in datasets.items()}
     output = runner(datasets, "Events", processor)
