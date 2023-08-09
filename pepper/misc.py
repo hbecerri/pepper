@@ -263,7 +263,7 @@ def get_enumerated_dir(parentdir):
 
 
 def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
-                     hostname=None, *, condor_submit=None, condor_init=None,
+                     *, condor_submit=None, condor_init=None,
                      workers_per_job=1, logdir=None):
     """Get a parsl HTCondor config for a host.
 
@@ -290,8 +290,7 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
         traceback.print_exception(type(e), e, e.__traceback__)
         return 1
 
-    if hostname is None:
-        hostname = parsl.addresses.address_by_hostname()
+    hostname = parsl.addresses.address_by_hostname()
     if retries is None:
         # Actually parsl doesn't support infinite retries so set it very high
         retries = 1000000
@@ -349,7 +348,7 @@ def get_parsl_config(num_jobs, runtime=3*60*60, memory=None, retries=None,
     parsl_executor = pepper.parsl_high_throughput.HighThroughputExecutor(
         label="HTCondor",
         launch_cmd=launch_cmd,
-        address=hostname,
+        address=parsl.addresses.address_by_route(),
         max_workers=workers_per_job,
         provider=provider,
         worker_debug=False,
