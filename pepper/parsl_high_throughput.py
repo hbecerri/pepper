@@ -24,7 +24,7 @@ executor_logger = parsl.executors.high_throughput.executor.logger
 
 
 class InterchangeProxy:
-    def __init__(self, interchange_address, interchange_ports,
+    def __init__(self, interchange_address, interchange_ports, listen_address,
                  worker_port_range=(54000, 60000), poll_period=10,
                  identity=None):
         self.context = zmq.Context()
@@ -48,10 +48,10 @@ class InterchangeProxy:
         self.results_incoming.set_hwm(0)
 
         self.worker_task_port = self.task_outgoing.bind_to_random_port(
-            "tcp://*", min_port=worker_port_range[0],
+            "tcp://" + listen_address, min_port=worker_port_range[0],
             max_port=worker_port_range[1], max_tries=1000)
         self.worker_result_port = self.results_incoming.bind_to_random_port(
-            "tcp://*", min_port=worker_port_range[0],
+            "tcp://" + listen_address, min_port=worker_port_range[0],
             max_port=worker_port_range[1], max_tries=1000)
 
         self.kill_event = None
@@ -112,14 +112,17 @@ class ProxiedConnection:
 
 
 @wrap_with_logs(target="interchange")
-def interchange_starter(comm_q, *args, **kwargs):
+def interchange_starter(
+        comm_q, client_address="127.0.0.1", interchange_address=None, *args,
+        **kwargs):
     """Modified version of parsl.executors.high_throughput.interchange.starter
     This overwrites the relevant methods of the sockets, so that the Parsl
     code works without further modifications, even though the workers are not
     directly connected to the Interchange instance.
     """
+    interchange_address = "127.0.0.1"
     ic = parsl.executors.high_throughput.interchange.Interchange(
-        *args, **kwargs)
+        client_address, interchange_address, *args, **kwargs)
     ic.task_outgoing_proxy = ProxiedConnection(ic.task_outgoing)
     ic.results_incoming_proxy = ProxiedConnection(ic.results_incoming)
     comm_q.put((ic.worker_task_port, ic.worker_result_port))
@@ -156,6 +159,7 @@ class HighThroughputExecutor(parsl.executors.HighThroughputExecutor):
                 "interchange_ports": (
                     self.interchange_task_port,
                     self.interchange_result_port),
+                "listen_address": self.address,
                 "worker_port_range": self.worker_port_range,
                 "identity": f"proxy-{num}".encode(),
             },
