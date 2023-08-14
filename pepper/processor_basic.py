@@ -133,6 +133,11 @@ class ProcessorBasicPhysics(pepper.Processor):
             elif len(norm) == 8:
                 # Same as length 9, just missing the nominal weight at index 4
                 idx = [6, 1, 4, 3]
+            elif len(norm) == 18:
+                # Two sets of scale varations. From the titles in NanoAOD
+                # the exact order is not clear. Assume the right one comes
+                # first.
+                idx = [14, 2, 10, 6]
             else:
                 raise RuntimeError(
                     "Unexpected length of the norm for LHEScaleWeight: "
