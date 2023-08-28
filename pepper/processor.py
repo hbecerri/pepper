@@ -189,7 +189,9 @@ class Processor(coffea.processor.ProcessorABC):
                                   save_full_sys=True):
         out_dict = {"dsname": dsname, "identifier": str(identifier)}
         events = self._prepare_saved_columns(selector)
-        events = {f: events[f] for f in ak.fields(events)}
+        # Workaround: Use ak.packed to make sure offset arrays of virtual
+        # arrays are not given to uproot. Uproot has a bug for these.
+        events = {f: ak.packed(events[f]) for f in ak.fields(events)}
         additional = {}
         cutnames, cutflags = selector.get_cuts()
         out_dict["Cutnames"] = str(cutnames)
