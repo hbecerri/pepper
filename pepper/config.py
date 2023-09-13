@@ -187,6 +187,7 @@ class Config(MutableMapping):
             raise ValueError("dstype must be either 'any', 'mc' or 'data'")
         datasets = {s: v for s, v in self["exp_datasets"].items()
                     if v is not None}
+        print(datasets.keys())
         duplicate = set(datasets.keys()) & set(self["mc_datasets"])
         if len(duplicate) > 0:
             raise ConfigError("Got duplicate dataset names: {}".format(
@@ -211,7 +212,8 @@ class Config(MutableMapping):
         if len(missing_datasets) > 0:
             raise ConfigError("Could not find files for: "
                               + ", ".join(missing_datasets))
-        if not return_inverse:
+        if not return_inverse:               
+            print(datasets)
             return datasets
         else:
             return datasets, paths2dsname
